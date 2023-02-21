@@ -114,10 +114,11 @@ void azplatform_init()
 
     // IDE bus transfer strobes are connected to GPIOs.
     // The bus drivers are off until enabled through control register.
+    // Pull-up keeps the signals in idle state.
     //        pin             function       pup   pdown  out    state fast
-    gpio_conf(IDE_OUT_IORDY, GPIO_FUNC_SIO, false, false, true,  false, true);
-    gpio_conf(IDE_IN_DIOR,   GPIO_FUNC_SIO, false, false, false, false, true);
-    gpio_conf(IDE_IN_DIOW,   GPIO_FUNC_SIO, false, false, false, false, true);
+    gpio_conf(IDE_OUT_IORDY, GPIO_FUNC_SIO, true,  false, true,  false, true);
+    gpio_conf(IDE_IN_DIOR,   GPIO_FUNC_SIO, true,  false, false, false, true);
+    gpio_conf(IDE_IN_DIOW,   GPIO_FUNC_SIO, true,  false, false, false, true);
 
     // IDE reset signal also resets the bus buffers, to ensure they are low.
     // To re-enable after a reset, the firmware needs to pull up IDE_IN_RST
@@ -278,7 +279,11 @@ static void watchdog_callback(unsigned alarm_num)
 
             azplatform_emergency_log_save();
 
+#ifndef RP2040_DISABLE_BOOTLOADER
             azplatform_boot_to_main_firmware();
+#else
+            NVIC_SystemReset();
+#endif
         }
     }
 

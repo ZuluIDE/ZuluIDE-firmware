@@ -1,0 +1,58 @@
+; RP2040 PIO program for implementing IDE / parallel ATA bus access
+; Run "pioasm ide_phy.pio ide_phy.pio.h" to regenerate the C header from this.
+
+.define DIOW_GPIO 25
+.define DIOR_GPIO 24
+
+; Detect register writes
+; IN mapping: data pins 0-15
+; OUT mapping: data pins 0-15
+; SIDESET mapping: MUX_SEL
+; Register X: mux control register value during write transfer
+; Register Y: mux control register value after write transfer
+; RX FIFO will receive 32-bit word with address in low part and data in high part
+.program ide_reg_write
+    .side_set 1 opt
+
+    mov OSR, ~NULL                    ; Prepare value for setting PINDIRS = 1
+    wait 0 gpio DIOW_GPIO             ; Wait for host to start a write
+    in PINS, 16             side 0    ; Read register address, start loading CR
+    mov PINS, X                       ; Value with CR_DATA_SEL = 1
+    out PINDIRS, 32                [1]; Pins as outputs
+    out PINDIRS, 16         side 1    ; Raise MUX_SEL to load control register, set pins as inputs
+
+    wait 1 gpio DIOW_GPIO             ; Wait for host to finish write operation
+    in PINS, 16             side 0    ; Read data bus, autopush
+
+    ; Write req is complete, restore mux to reading status signals
+    mov OSR, ~NULL                    ; Prepare next PINDIRS value
+    mov PINS, Y                       ; Value with CR_DATA_SEL = 0
+    out PINDIRS, 32                [1]; Pins as outputs
+    out PINDIRS, 16         side 1    ; Raise MUX_SEL to load control register, set pins as inputs
+
+
+
+; Detect register reads
+; IN mapping: data pins 0-15
+; OUT mapping: data pins 0-15
+; SIDESET mapping: MUX_SEL and IORDY
+; Register X: mux control register value during read transfer
+; Register Y: mux control register value after read transfer
+; RX FIFO will receive 32-bit word with address
+; TX FIFO must be written with data
+.program ide_reg_read
+    .side_set 2 opt
+
+    mov OSR, ~NULL                    ; Prepare value for setting PINDIRS = 1
+    wait 0 gpio DIOR_GPIO             ; Wait for host to start a read
+    in PINS, 32             side 0    ; Read register address and autopush, start loading CR, negate IORDY
+    mov PINS, X                       ; Value with CR_DATA_SEL = 1
+    out PINDIRS, 32                [1]; Pins as outputs
+    pull block              side 1    ; Raise MUX_SEL to load control register, wait for data from CPU
+    out PINS, 32            side 3    ; Write register value to bus and assert IORDY
+
+    wait 1 gpio DIOR_GPIO             ; Wait for host to finish read operation
+
+    ; Read req is complete, restore mux to reading status signals
+    mov PINS, Y             side 2 [1]; Prepare to load control reg, set MUX_SEL = 0
+    out PINDIRS, 16         side 3    ; Raise MUX_SEL to load control register, set pins as inputs

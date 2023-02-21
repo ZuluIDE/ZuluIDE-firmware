@@ -9,12 +9,24 @@
 #define IDE_IO_SHIFT 0
 #define IDE_IO_MASK 0xFFFF
 
+// The hardware uses a multiplexed 16-bit data bus to access the signals.
+// The signals accessed are selected primarily by MUX_SEL and secondarily
+// by bits written to mux control register on rising edge of MUX_SEL.
+//
+// MUX_SEL   CR_DATA_SEL   CR_DATA_DIR    Data bus contents
+// -------------------------------------------------------------
+//    0          x              x         Data to load to mux control register
+//                                        on next rising edge of MUX_SEL (bits CR_xxxx).
+//    1          0              x         IDE status signals (bits SI_xxxx).
+//    1          1              0         Data input from IDE bus
+//    1          1              1         Data output to IDE bus
+
 // Multiplexer select signal
 // Rising edge = load control register
 // High = enable data registers
 #define MUX_SEL 16
 
-// Bits accessed through the control register
+// Bits accessed through the mux control register
 // The ones marked _NEG_ are active low.
 #define CR_MUX_OE           0
 #define CR_DATA_SEL         1
@@ -35,6 +47,16 @@
                        (1 << CR_NEG_IDE_PDIAG) | \
                        (1 << CR_NEG_IDE_DASP) | \
                        (1 << CR_NEG_IDE_INTRQ_EN))
+
+// Status signals accessed through input multiplexed
+#define SI_DA0      0
+#define SI_DA1      1
+#define SI_DA2      2
+#define SI_CS0      3
+#define SI_CS1      4
+#define SI_CSEL     5
+#define SI_PDIAG    6
+#define SI_DMACK    7
 
 // Strobe signals
 #define IDE_OUT_IORDY 17

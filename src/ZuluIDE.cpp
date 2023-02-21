@@ -114,10 +114,13 @@ static bool mountSDCard()
   return true;
 }
 
+void ide_phy_test();
+
 extern "C" void zuluide_setup(void)
 {
   azplatform_init();
   azplatform_late_init();
+  ide_phy_test();
 
   g_sdcard_present = mountSDCard();
 

@@ -25,6 +25,9 @@ void azlog_raw(const char *str);
 void azlog_raw(uint8_t value);
 
 // Log integer as hex
+void azlog_raw(uint16_t value);
+
+// Log integer as hex
 void azlog_raw(uint32_t value);
 
 // Log integer as hex
