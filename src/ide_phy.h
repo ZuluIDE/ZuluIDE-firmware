@@ -10,18 +10,32 @@ enum ide_msg_type_t {
     IDE_MSG_NONE        = 0x00,
     IDE_MSG_RESET       = 0x01, // IDE bus has been reset by host
     IDE_MSG_CMD_START   = 0x02, // New command has started
-    IDE_MSG_SEND_DONE   = 0x03, // Previous SEND_DATA request has completed
-    IDE_MSG_RECV_DONE   = 0x04, // Previous RECV_DATA request has completed
-
+    
     // Messages from application to PHY
+    IDE_MSG_ASSERT_IRQ  = 0x80, // Assert IRQ line if host has enabled interrupts
     IDE_MSG_CMD_DONE    = 0x82, // Command done, unset BSY
     IDE_MSG_SEND_DATA   = 0x83, // Start transmitting data buffer to host
     IDE_MSG_RECV_DATA   = 0x84, // Start receiving data buffer from host
+    
+    // Codes 0xE0 to 0xFF are reserved for platform specific implementation
+    IDE_MSG_PLATFORM    = 0xE0
+};
+
+enum ide_msg_status_t {
+    IDE_MSGSTAT_IDLE        = 0x00,  // Message has not yet been queued
+    IDE_MSGSTAT_QUEUED      = 0x01,  // Message is queued for execution
+    IDE_MSGSTAT_EXECUTING   = 0x02,  // Message is currently executing
+
+    IDE_MSGSTAT_DONE        = 0x80,  // Any type of done status will have highest bit set
+    IDE_MSGSTAT_SUCCESS     = 0x83,  // Message was successful
+    IDE_MSGSTAT_ABORTED     = 0x84,  // Message was aborted due to host activity
+    IDE_MSGSTAT_ERROR       = 0x85   // Error during message handling
 };
 
 struct ide_phy_msg_t {
     ide_msg_type_t type;
-
+    volatile ide_msg_status_t *status; // If not NULL, will get message status updates
+    
     // Payload type depends on message type
     union {
         struct {
@@ -37,13 +51,13 @@ struct ide_phy_msg_t {
         } cmd_done;
 
         struct {
-            uint32_t length;
-            const uint8_t *data;
+            uint32_t words; // Number of 16-bit words to send
+            const uint16_t *data;
         } send_data;
 
         struct {
-            uint32_t length;
-            uint8_t *data;
+            uint32_t words; // Number of 16-bit words to receive
+            uint16_t *data;
         } recv_data;
     } payload;
 };
@@ -56,6 +70,7 @@ void ide_phy_reset();
 ide_phy_msg_t *ide_phy_get_msg();
 
 // Puts a message to be executed by PHY.
-// This function takes internal copy of the message.
+// This function takes internal copy of the message, so the message struct can be immediately freed.
+// Any memory block referred by pointers inside message must remain valid until *status has IDE_MSGSTAT_DONE set.
 // Returns false if FIFO is full (PHY stuck)
 bool ide_phy_send_msg(ide_phy_msg_t *msg);

@@ -15,22 +15,24 @@
 #define ide_reg_write_wrap_target 0
 #define ide_reg_write_wrap 13
 
+#define ide_reg_write_offset_set_mux 10u
+
 static const uint16_t ide_reg_write_program_instructions[] = {
             //     .wrap_target
-    0x4059, //  0: in     y, 25
-    0xa0eb, //  1: mov    osr, !null
-    0x2019, //  2: wait   0 gpio, 25
-    0x5005, //  3: in     pins, 5         side 0
-    0xa001, //  4: mov    pins, x
-    0x6080, //  5: out    pindirs, 32
-    0x4062, //  6: in     null, 2
-    0x7890, //  7: out    pindirs, 16     side 1
-    0x2099, //  8: wait   1 gpio, 25
-    0x5000, //  9: in     pins, 32        side 0
-    0xa0eb, // 10: mov    osr, !null
-    0xa011, // 11: mov    pins, ::x
-    0x6180, // 12: out    pindirs, 32            [1]
-    0x7890, // 13: out    pindirs, 16     side 1
+    0x4059, //  0: in     y, 25                      
+    0xa0eb, //  1: mov    osr, !null                 
+    0x2019, //  2: wait   0 gpio, 25                 
+    0x5005, //  3: in     pins, 5         side 0     
+    0xa001, //  4: mov    pins, x                    
+    0x6080, //  5: out    pindirs, 32                
+    0x4062, //  6: in     null, 2                    
+    0x7890, //  7: out    pindirs, 16     side 1     
+    0x2099, //  8: wait   1 gpio, 25                 
+    0x4000, //  9: in     pins, 32                   
+    0xb0eb, // 10: mov    osr, !null      side 0     
+    0xa011, // 11: mov    pins, ::x                  
+    0x6180, // 12: out    pindirs, 32            [1] 
+    0x7890, // 13: out    pindirs, 16     side 1     
             //     .wrap
 };
 
@@ -54,28 +56,29 @@ static inline pio_sm_config ide_reg_write_program_get_default_config(uint offset
 // ------------ //
 
 #define ide_reg_read_wrap_target 0
-#define ide_reg_read_wrap 10
+#define ide_reg_read_wrap 11
 
 static const uint16_t ide_reg_read_program_instructions[] = {
             //     .wrap_target
-    0x405b, //  0: in     y, 27
-    0xa0eb, //  1: mov    osr, !null
-    0x2018, //  2: wait   0 gpio, 24
-    0x5005, //  3: in     pins, 5         side 0
-    0xa001, //  4: mov    pins, x
-    0x6180, //  5: out    pindirs, 32            [1]
-    0x94a0, //  6: pull   block           side 1
-    0x7c00, //  7: out    pins, 32        side 3
-    0x2098, //  8: wait   1 gpio, 24
-    0xb911, //  9: mov    pins, ::x       side 2 [1]
-    0x7c90, // 10: out    pindirs, 16     side 3
+    0x405a, //  0: in     y, 26                      
+    0xa0eb, //  1: mov    osr, !null                 
+    0x2018, //  2: wait   0 gpio, 24                 
+    0x5005, //  3: in     pins, 5         side 0     
+    0x4061, //  4: in     null, 1                    
+    0xa001, //  5: mov    pins, x                    
+    0x6180, //  6: out    pindirs, 32            [1] 
+    0x94a0, //  7: pull   block           side 1     
+    0x7c00, //  8: out    pins, 32        side 3     
+    0x2098, //  9: wait   1 gpio, 24                 
+    0xb911, // 10: mov    pins, ::x       side 2 [1] 
+    0x7c90, // 11: out    pindirs, 16     side 3     
             //     .wrap
 };
 
 #if !PICO_NO_HARDWARE
 static const struct pio_program ide_reg_read_program = {
     .instructions = ide_reg_read_program_instructions,
-    .length = 11,
+    .length = 12,
     .origin = -1,
 };
 
@@ -86,3 +89,4 @@ static inline pio_sm_config ide_reg_read_program_get_default_config(uint offset)
     return c;
 }
 #endif
+

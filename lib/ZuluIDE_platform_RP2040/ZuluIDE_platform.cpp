@@ -60,7 +60,7 @@ void azplatform_init()
 
     /* Initialize logging to SWO pin (UART0) */
     gpio_conf(SWO_PIN,        GPIO_FUNC_UART,false,false, true,  false, true);
-    uart_init(uart0, 1000000);
+    uart_init(uart0, 7812500); // Debug UART at 7.8125 MHz baudrate (RP2040 max), to avoid slowing IDE interface down.
     g_uart_initialized = true;
     mbed_set_error_hook(mbed_error_hook);
 
@@ -198,6 +198,13 @@ void mbed_error_hook(const mbed_error_ctx * error_context)
 
         azlog("STACK ", (uint32_t)p, ":    ", p[0], " ", p[1], " ", p[2], " ", p[3]);
         p += 4;
+    }
+
+    if (sio_hw->cpuid == 1)
+    {
+        // Don't try to save files from core 1
+        azlog("--- CORE1 CRASH HANDLER END");
+        while(1) delay_100ns();
     }
 
     azplatform_emergency_log_save();

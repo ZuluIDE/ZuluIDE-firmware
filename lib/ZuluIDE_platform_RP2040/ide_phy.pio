@@ -28,10 +28,11 @@
     out PINDIRS, 16         side 1    ; Raise MUX_SEL to load control register, set pins as inputs
 
     wait 1 gpio DIOW_GPIO             ; Wait for host to finish write operation
-    in PINS, 32             side 0    ; Read data bus, autopush
+    in PINS, 32                       ; Read data bus, autopush
 
+PUBLIC set_mux:
     ; Write req is complete, restore mux to reading status signals
-    mov OSR, ~NULL                    ; Prepare next PINDIRS value
+    mov OSR, ~NULL          side 0    ; Prepare next PINDIRS value
     mov PINS, ::X                     ; Value with CR_DATA_SEL = 0
     out PINDIRS, 32                [1]; Pins as outputs
     out PINDIRS, 16         side 1    ; Raise MUX_SEL to load control register, set pins as inputs
@@ -44,19 +45,20 @@
 ; SIDESET mapping: MUX_SEL and IORDY
 ; Register X: low half has mux control register value during read transfer,
 ;             upper half has mux control value after read transfer with reversed bit order
-; Register Y: base address for register reads (bottom 5 bits will be added)
+; Register Y: base address for register reads (bottom 6 bits will be added)
 ; RX FIFO will receive 32-bit word with register read address
 ; TX FIFO must be written with data
 .program ide_reg_read
     .side_set 2 opt
 
-    in Y, 27                          ; Prepare base address
+    in Y, 26                          ; Prepare base address
     mov OSR, ~NULL                    ; Prepare value for setting PINDIRS = 1
     wait 0 gpio DIOR_GPIO             ; Wait for host to start a read
-    in PINS, 5              side 0    ; Read register address and autopush, start loading CR, negate IORDY
+    in PINS, 5              side 0    ; Read register address, start loading CR, negate IORDY
+    in NULL, 1                        ; Fill in bottom bit, autopush
     mov PINS, X                       ; Value with CR_DATA_SEL = 1
     out PINDIRS, 32                [1]; Pins as outputs
-    pull block              side 1    ; Raise MUX_SEL to load control register, wait for data from CPU
+    pull block              side 1    ; Raise MUX_SEL to load control register, wait for data from DMA
     out PINS, 32            side 3    ; Write register value to bus and assert IORDY
 
     wait 1 gpio DIOR_GPIO             ; Wait for host to finish read operation

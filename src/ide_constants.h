@@ -1,5 +1,6 @@
 // Standard values for IDE protocol
 #pragma once
+#include <stdint.h>
 
 // Status register bits
 #define IDE_STATUS_BSY      0x80
@@ -16,133 +17,124 @@
 #define IDE_ERROR_ABORT           0x04
 #define IDE_ERROR_NOMEDIA         0x01
 
-// IDE command set
-#define IDE_CMD_NOP                                       0x00
-#define IDE_CMD_CFA_REQUEST_EXTENDED_ERROR                0x03
-#define IDE_CMD_DEVICE_RESET                              0x08
-#define IDE_CMD_READ_SECTORS                              0x20
-#define IDE_CMD_READ_SECTORS_EXT                          0x24
-#define IDE_CMD_READ_DMA_EXT                              0x25
-#define IDE_CMD_READ_DMA_QUEUED_EXT                       0x26
-#define IDE_CMD_READ_NATIVE_MAX_ADDRESS_EXT               0x27
-#define IDE_CMD_READ_MULTIPLE_EXT                         0x29
-#define IDE_CMD_READ_LOG_EXT                              0x2F
-#define IDE_CMD_WRITE_SECTORS                             0x30
-#define IDE_CMD_WRITE_SECTORS_EXT                         0x34
-#define IDE_CMD_WRITE_DMA_EXT                             0x35
-#define IDE_CMD_WRITE_DMA_QUEUED_EXT                      0x36
-#define IDE_CMD_SET_MAX_ADDRESS_EXT                       0x37
-#define IDE_CMD_CFA_WRITE_SECTORS_WOUT_ERASE              0x38
-#define IDE_CMD_WRITE_MULTIPLE_EXT                        0x39
-#define IDE_CMD_WRITE_LOG_EXT                             0x3F
-#define IDE_CMD_READ_VERIFY_SECTORS                       0x40
-#define IDE_CMD_READ_VERIFY_SECTORS_EXT                   0x42
-#define IDE_CMD_SEEK                                      0x70
-#define IDE_CMD_CFA_TRANSLATE_SECTOR                      0x87
-#define IDE_CMD_EXECUTE_DEVICE_DIAGNOSTIC                 0x90
-#define IDE_CMD_DOWNLOAD_MICROCODE                        0x92
-#define IDE_CMD_PACKET                                    0xA0
-#define IDE_CMD_IDENTIFY_PACKET_DEVICE                    0xA1
-#define IDE_CMD_SERVICE                                   0xA2
-#define IDE_CMD_SMART                                     0xB0
-#define IDE_CMD_DEVICE_CONFIGURATION                      0xB1
-#define IDE_CMD_CFA_ERASE_SECTORS                         0xC0
-#define IDE_CMD_READ_MULTIPLE                             0xC4
-#define IDE_CMD_WRITE_MULTIPLE                            0xC5
-#define IDE_CMD_SET_MULTIPLE_MODE                         0xC6
-#define IDE_CMD_READ_DMA_QUEUED                           0xC7
-#define IDE_CMD_READ_DMA                                  0xC8
-#define IDE_CMD_WRITE_DMA                                 0xCA
-#define IDE_CMD_WRITE_DMA_QUEUED                          0xCC
-#define IDE_CMD_CFA_WRITE_MULTIPLE_WOUT_ERASE             0xCD
-#define IDE_CMD_CHECK_MEDIA_CARD_TYPE                     0xD1
-#define IDE_CMD_GET_MEDIA_STATUS                          0xDA
-#define IDE_CMD_MEDIA_LOCK                                0xDE
-#define IDE_CMD_MEDIA_UNLOCK                              0xDF
-#define IDE_CMD_STANDBY_IMMEDIATE                         0xE0
-#define IDE_CMD_IDLE_IMMEDIATE                            0xE1
-#define IDE_CMD_STANDBY                                   0xE2
-#define IDE_CMD_IDLE                                      0xE3
-#define IDE_CMD_READ_BUFFER                               0xE4
-#define IDE_CMD_CHECK_POWER_MODE                          0xE5
-#define IDE_CMD_SLEEP                                     0xE6
-#define IDE_CMD_FLUSH_CACHE                               0xE7
-#define IDE_CMD_WRITE_BUFFER                              0xE8
-#define IDE_CMD_FLUSH_CACHE_EXT                           0xEA
-#define IDE_CMD_IDENTIFY_DEVICE                           0xEC
-#define IDE_CMD_MEDIA_EJECT                               0xED
-#define IDE_CMD_SET_FEATURES                              0xEF
-#define IDE_CMD_SECURITY_SET_PASSWORD                     0xF1
-#define IDE_CMD_SECURITY_UNLOCK                           0xF2
-#define IDE_CMD_SECURITY_ERASE_PREPARE                    0xF3
-#define IDE_CMD_SECURITY_ERASE_UNIT                       0xF4
-#define IDE_CMD_SECURITY_FREEZE_LOCK                      0xF5
-#define IDE_CMD_SECURITY_DISABLE_PASSWORD                 0xF6
-#define IDE_CMD_READ_NATIVE_MAX_ADDRESS                   0xF8
-#define IDE_CMD_SET_MAX_ADDRESS                           0xF9
-
-// X-macro list of the command names, for use with e.g. debug printers.
+// IDE command set defined as X-macro
+// These will be available as enum values named IDE_CMD_xxx
 #define IDE_COMMAND_LIST(X) \
-X(NOP                             ) \
-X(CFA_REQUEST_EXTENDED_ERROR      ) \
-X(DEVICE_RESET                    ) \
-X(READ_SECTORS                    ) \
-X(READ_SECTORS_EXT                ) \
-X(READ_DMA_EXT                    ) \
-X(READ_DMA_QUEUED_EXT             ) \
-X(READ_NATIVE_MAX_ADDRESS_EXT     ) \
-X(READ_MULTIPLE_EXT               ) \
-X(READ_LOG_EXT                    ) \
-X(WRITE_SECTORS                   ) \
-X(WRITE_SECTORS_EXT               ) \
-X(WRITE_DMA_EXT                   ) \
-X(WRITE_DMA_QUEUED_EXT            ) \
-X(SET_MAX_ADDRESS_EXT             ) \
-X(CFA_WRITE_SECTORS_WOUT_ERASE    ) \
-X(WRITE_MULTIPLE_EXT              ) \
-X(WRITE_LOG_EXT                   ) \
-X(READ_VERIFY_SECTORS             ) \
-X(READ_VERIFY_SECTORS_EXT         ) \
-X(SEEK                            ) \
-X(CFA_TRANSLATE_SECTOR            ) \
-X(EXECUTE_DEVICE_DIAGNOSTIC       ) \
-X(DOWNLOAD_MICROCODE              ) \
-X(PACKET                          ) \
-X(IDENTIFY_PACKET_DEVICE          ) \
-X(SERVICE                         ) \
-X(SMART                           ) \
-X(DEVICE_CONFIGURATION            ) \
-X(CFA_ERASE_SECTORS               ) \
-X(READ_MULTIPLE                   ) \
-X(WRITE_MULTIPLE                  ) \
-X(SET_MULTIPLE_MODE               ) \
-X(READ_DMA_QUEUED                 ) \
-X(READ_DMA                        ) \
-X(WRITE_DMA                       ) \
-X(WRITE_DMA_QUEUED                ) \
-X(CFA_WRITE_MULTIPLE_WOUT_ERASE   ) \
-X(CHECK_MEDIA_CARD_TYPE           ) \
-X(GET_MEDIA_STATUS                ) \
-X(MEDIA_LOCK                      ) \
-X(MEDIA_UNLOCK                    ) \
-X(STANDBY_IMMEDIATE               ) \
-X(IDLE_IMMEDIATE                  ) \
-X(STANDBY                         ) \
-X(IDLE                            ) \
-X(READ_BUFFER                     ) \
-X(CHECK_POWER_MODE                ) \
-X(SLEEP                           ) \
-X(FLUSH_CACHE                     ) \
-X(WRITE_BUFFER                    ) \
-X(FLUSH_CACHE_EXT                 ) \
-X(IDENTIFY_DEVICE                 ) \
-X(MEDIA_EJECT                     ) \
-X(SET_FEATURES                    ) \
-X(SECURITY_SET_PASSWORD           ) \
-X(SECURITY_UNLOCK                 ) \
-X(SECURITY_ERASE_PREPARE          ) \
-X(SECURITY_ERASE_UNIT             ) \
-X(SECURITY_FREEZE_LOCK            ) \
-X(SECURITY_DISABLE_PASSWORD       ) \
-X(READ_NATIVE_MAX_ADDRESS         ) \
-X(SET_MAX_ADDRESS                 )
+X(IDE_CMD_NOP                                       , 0x00) \
+X(IDE_CMD_CFA_REQUEST_EXTENDED_ERROR                , 0x03) \
+X(IDE_CMD_DEVICE_RESET                              , 0x08) \
+X(IDE_CMD_READ_SECTORS                              , 0x20) \
+X(IDE_CMD_READ_SECTORS_EXT                          , 0x24) \
+X(IDE_CMD_READ_DMA_EXT                              , 0x25) \
+X(IDE_CMD_READ_DMA_QUEUED_EXT                       , 0x26) \
+X(IDE_CMD_READ_NATIVE_MAX_ADDRESS_EXT               , 0x27) \
+X(IDE_CMD_READ_MULTIPLE_EXT                         , 0x29) \
+X(IDE_CMD_READ_LOG_EXT                              , 0x2F) \
+X(IDE_CMD_WRITE_SECTORS                             , 0x30) \
+X(IDE_CMD_WRITE_SECTORS_EXT                         , 0x34) \
+X(IDE_CMD_WRITE_DMA_EXT                             , 0x35) \
+X(IDE_CMD_WRITE_DMA_QUEUED_EXT                      , 0x36) \
+X(IDE_CMD_SET_MAX_ADDRESS_EXT                       , 0x37) \
+X(IDE_CMD_CFA_WRITE_SECTORS_WOUT_ERASE              , 0x38) \
+X(IDE_CMD_WRITE_MULTIPLE_EXT                        , 0x39) \
+X(IDE_CMD_WRITE_LOG_EXT                             , 0x3F) \
+X(IDE_CMD_READ_VERIFY_SECTORS                       , 0x40) \
+X(IDE_CMD_READ_VERIFY_SECTORS_EXT                   , 0x42) \
+X(IDE_CMD_SEEK                                      , 0x70) \
+X(IDE_CMD_CFA_TRANSLATE_SECTOR                      , 0x87) \
+X(IDE_CMD_EXECUTE_DEVICE_DIAGNOSTIC                 , 0x90) \
+X(IDE_CMD_INIT_DEV_PARAMS                           , 0x91) \
+X(IDE_CMD_DOWNLOAD_MICROCODE                        , 0x92) \
+X(IDE_CMD_PACKET                                    , 0xA0) \
+X(IDE_CMD_IDENTIFY_PACKET_DEVICE                    , 0xA1) \
+X(IDE_CMD_SERVICE                                   , 0xA2) \
+X(IDE_CMD_SMART                                     , 0xB0) \
+X(IDE_CMD_DEVICE_CONFIGURATION                      , 0xB1) \
+X(IDE_CMD_CFA_ERASE_SECTORS                         , 0xC0) \
+X(IDE_CMD_READ_MULTIPLE                             , 0xC4) \
+X(IDE_CMD_WRITE_MULTIPLE                            , 0xC5) \
+X(IDE_CMD_SET_MULTIPLE_MODE                         , 0xC6) \
+X(IDE_CMD_READ_DMA_QUEUED                           , 0xC7) \
+X(IDE_CMD_READ_DMA                                  , 0xC8) \
+X(IDE_CMD_WRITE_DMA                                 , 0xCA) \
+X(IDE_CMD_WRITE_DMA_QUEUED                          , 0xCC) \
+X(IDE_CMD_CFA_WRITE_MULTIPLE_WOUT_ERASE             , 0xCD) \
+X(IDE_CMD_CHECK_MEDIA_CARD_TYPE                     , 0xD1) \
+X(IDE_CMD_GET_MEDIA_STATUS                          , 0xDA) \
+X(IDE_CMD_MEDIA_LOCK                                , 0xDE) \
+X(IDE_CMD_MEDIA_UNLOCK                              , 0xDF) \
+X(IDE_CMD_STANDBY_IMMEDIATE                         , 0xE0) \
+X(IDE_CMD_IDLE_IMMEDIATE                            , 0xE1) \
+X(IDE_CMD_STANDBY                                   , 0xE2) \
+X(IDE_CMD_IDLE                                      , 0xE3) \
+X(IDE_CMD_READ_BUFFER                               , 0xE4) \
+X(IDE_CMD_CHECK_POWER_MODE                          , 0xE5) \
+X(IDE_CMD_SLEEP                                     , 0xE6) \
+X(IDE_CMD_FLUSH_CACHE                               , 0xE7) \
+X(IDE_CMD_WRITE_BUFFER                              , 0xE8) \
+X(IDE_CMD_FLUSH_CACHE_EXT                           , 0xEA) \
+X(IDE_CMD_IDENTIFY_DEVICE                           , 0xEC) \
+X(IDE_CMD_MEDIA_EJECT                               , 0xED) \
+X(IDE_CMD_SET_FEATURES                              , 0xEF) \
+X(IDE_CMD_SECURITY_SET_PASSWORD                     , 0xF1) \
+X(IDE_CMD_SECURITY_UNLOCK                           , 0xF2) \
+X(IDE_CMD_SECURITY_ERASE_PREPARE                    , 0xF3) \
+X(IDE_CMD_SECURITY_ERASE_UNIT                       , 0xF4) \
+X(IDE_CMD_SECURITY_FREEZE_LOCK                      , 0xF5) \
+X(IDE_CMD_SECURITY_DISABLE_PASSWORD                 , 0xF6) \
+X(IDE_CMD_READ_NATIVE_MAX_ADDRESS                   , 0xF8) \
+X(IDE_CMD_SET_MAX_ADDRESS                           , 0xF9)
+
+enum ide_cmd_t {
+#define IDE_ENUM_ENTRY(name, code) name = code,
+IDE_COMMAND_LIST(IDE_ENUM_ENTRY)
+#undef IDE_ENUM_ENTRY 
+};
+
+// IDE_CMD_IDENTIFY_DEVICE response format
+#define IDE_IDENTIFY_OFFSET_GENERAL_CONFIGURATION     0
+#define IDE_IDENTIFY_OFFSET_NUM_CYLINDERS             1
+#define IDE_IDENTIFY_OFFSET_SPECIFIC_CONFIGURATION    2
+#define IDE_IDENTIFY_OFFSET_NUM_HEADS                 3
+#define IDE_IDENTIFY_OFFSET_BYTES_PER_TRACK           4
+#define IDE_IDENTIFY_OFFSET_BYTES_PER_SECTOR          5
+#define IDE_IDENTIFY_OFFSET_SECTORS_PER_TRACK         6
+#define IDE_IDENTIFY_OFFSET_SERIAL_NUMBER            10
+#define IDE_IDENTIFY_OFFSET_FIRMWARE_REV             23
+#define IDE_IDENTIFY_OFFSET_MODEL_NUMBER             27
+#define IDE_IDENTIFY_OFFSET_MAX_SECTORS              47
+#define IDE_IDENTIFY_OFFSET_CAPABILITIES_1           49
+#define IDE_IDENTIFY_OFFSET_CAPABILITIES_2           50
+#define IDE_IDENTIFY_OFFSET_MODE_INFO_VALID          53
+#define IDE_IDENTIFY_OFFSET_MULTI_SECTOR_VALID       59
+#define IDE_IDENTIFY_OFFSET_TOTAL_SECTORS            60
+#define IDE_IDENTIFY_OFFSET_MODEINFO_MULTIWORD       63
+#define IDE_IDENTIFY_OFFSET_MODEINFO_PIO             64
+#define IDE_IDENTIFY_OFFSET_MULTIWORD_CYCLETIME_MIN  65
+#define IDE_IDENTIFY_OFFSET_MULTIWORD_CYCLETIME_REC  66
+#define IDE_IDENTIFY_OFFSET_PIO_CYCLETIME_MIN        67
+#define IDE_IDENTIFY_OFFSET_PIO_CYCLETIME_IORDY      68
+#define IDE_IDENTIFY_OFFSET_QUEUE_DEPTH              75
+#define IDE_IDENTIFY_OFFSET_STANDARD_VERSION_MAJOR   80
+#define IDE_IDENTIFY_OFFSET_STANDARD_VERSION_MINOR   81
+#define IDE_IDENTIFY_OFFSET_COMMAND_SET_SUPPORT_1    82
+#define IDE_IDENTIFY_OFFSET_COMMAND_SET_SUPPORT_2    83
+#define IDE_IDENTIFY_OFFSET_COMMAND_SET_SUPPORT_3    84
+#define IDE_IDENTIFY_OFFSET_COMMAND_SET_ENABLED_1    85
+#define IDE_IDENTIFY_OFFSET_COMMAND_SET_ENABLED_2    86
+#define IDE_IDENTIFY_OFFSET_COMMAND_SET_INFO         87
+#define IDE_IDENTIFY_OFFSET_MODEINFO_ULTRADMA        88
+#define IDE_IDENTIFY_OFFSET_SECURITY_ERASE_TIME      89
+#define IDE_IDENTIFY_OFFSET_ENH_SECURITY_ERASE_TIME  90
+#define IDE_IDENTIFY_OFFSET_POWER_MANAGEMENT         91
+#define IDE_IDENTIFY_OFFSET_MASTER_PASSWORD_REV      92
+#define IDE_IDENTIFY_OFFSET_HARDWARE_RESET_RESULT    93
+#define IDE_IDENTIFY_OFFSET_ACOUSTIC_MANAGEMENT      94
+#define IDE_IDENTIFY_OFFSET_MAX_LBA                 100
+#define IDE_IDENTIFY_OFFSET_REMOVABLE_MEDIA_SUPPORT 127
+#define IDE_IDENTIFY_OFFSET_SECURITY_STATUS         128
+#define IDE_IDENTIFY_OFFSET_CFA_POWER_MODE_1        160
+#define IDE_IDENTIFY_OFFSET_MEDIA_SERIAL_NUMBER     176
+#define IDE_IDENTIFY_OFFSET_INTEGRITY_WORD          255
+
+
