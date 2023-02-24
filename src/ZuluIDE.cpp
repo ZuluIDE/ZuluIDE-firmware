@@ -7,6 +7,7 @@
 #include "ZuluIDE_config.h"
 #include "ZuluIDE_platform.h"
 #include "ZuluIDE_log.h"
+#include "ide_protocol.h"
 
 SdFs SD;
 FsFile g_logfile;
@@ -120,7 +121,6 @@ extern "C" void zuluide_setup(void)
 {
   azplatform_init();
   azplatform_late_init();
-  ide_phy_test();
 
   g_sdcard_present = mountSDCard();
 
@@ -160,6 +160,8 @@ extern "C" void zuluide_setup(void)
       azplatform_disable_led();
     }
   }
+
+  ide_protocol_init();
 }
 
 extern "C" void zuluide_main_loop(void)
@@ -169,6 +171,8 @@ extern "C" void zuluide_main_loop(void)
   azplatform_reset_watchdog();
 
   save_logfile();
+
+  ide_protocol_poll();
 
   if (g_sdcard_present)
   {
