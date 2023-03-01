@@ -12,8 +12,7 @@ enum ide_msg_type_t {
     IDE_MSG_CMD_START   = 0x02, // New command has started
     
     // Messages from application to PHY
-    IDE_MSG_ASSERT_IRQ  = 0x80, // Assert IRQ line if host has enabled interrupts
-    IDE_MSG_CMD_DONE    = 0x82, // Command done, unset BSY
+    IDE_MSG_DEVICE_RDY  = 0x82, // Command done, device ready, unset BSY
     IDE_MSG_SEND_DATA   = 0x83, // Start transmitting data buffer to host
     IDE_MSG_RECV_DATA   = 0x84, // Start receiving data buffer from host
     
@@ -39,25 +38,51 @@ struct ide_phy_msg_t {
     // Payload type depends on message type
     union {
         struct {
+            uint8_t device_control;
+        } reset;
+        struct {
             uint8_t command;
             uint8_t device;
             uint8_t features;
             uint8_t sector_count;
-            uint32_t lba;
+            uint8_t lbalow;
+            uint8_t lbamid;
+            uint8_t lbahigh;
         } cmd_start;
-
         struct {
+            // Error register value for latest command
             uint8_t error;
-        } cmd_done;
+
+            // Override bits in status register
+            uint8_t status;
+
+            // For some commands the command block registers are set
+            // to different value upon completion.
+            bool set_registers;
+            uint8_t sector_count;
+            uint8_t device;
+            uint8_t lbalow;
+            uint8_t lbamid;
+            uint8_t lbahigh;
+
+            // Assert interrupt signal after register updates
+            bool assert_irq;
+        } device_rdy;
 
         struct {
             uint32_t words; // Number of 16-bit words to send
             const uint16_t *data;
+
+            // Assert interrupt when ready to transfer
+            bool assert_irq;
         } send_data;
 
         struct {
             uint32_t words; // Number of 16-bit words to receive
             uint16_t *data;
+
+            // Assert interrupt when ready to transfer
+            bool assert_irq;
         } recv_data;
     } payload;
 };

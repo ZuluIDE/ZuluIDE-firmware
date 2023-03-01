@@ -4,13 +4,26 @@
 .define DIOW_GPIO 25
 .define DIOR_GPIO 24
 
+; SM0: Control data bus direction & write control register default value
+; The data bus values can be overridden by higher numbered state machines.
+; OUT mapping: data pins 0-15
+; SIDESET mapping: MUX_SEL
+; Register X: lower 16 bits control register value, upper 16 bits all set
+.program ide_cr_loader
+    .side_set 1 opt
+
+    mov OSR, X                    ; Reuse same value, can be set by forced instructions
+    wait 1 irq 0                  ; Wait for trigger from other state machine
+    out PINS, 16         side 0   ; Write control register default value, lower MUX_SEL
+    out PINDIRS, 16      [1]      ; Pins as outputs
+    out PINDIRS, 16      side 1   ; Raise MUX_SEL to load control register, set pins as inputs
+
+
 ; Detect register writes
 ; IN mapping: data pins 0-15
 ; OUT mapping: data pins 0-15
-; SIDESET mapping: MUX_SEL
-; Register X: low half has mux control register value during write transfer,
-;             upper half has mux control value after write transfer with reversed bit order
-; Register Y: base address for register write lookup address table (bottom 7 bits will be added)
+; SIDESET mapping: data pin D1 for CR_DATA_SEL
+; Register Y: Top 25 bits of address for register write lookup address table, bottom 7 bits will be added
 ;
 ; RX FIFO will receive two 32-bit words.
 ; First one has address to the lookup table for executing register write.
@@ -18,51 +31,56 @@
 .program ide_reg_write
     .side_set 1 opt
 
-    in Y, 25                          ; Prepare base address
-    mov OSR, ~NULL                    ; Prepare value for setting PINDIRS = 1
     wait 0 gpio DIOW_GPIO             ; Wait for host to start a write
-    in PINS, 5              side 0    ; Read register address, start loading CR
-    mov PINS, X                       ; Value with CR_DATA_SEL = 1
-    out PINDIRS, 32                   ; Pins as outputs
-    in NULL, 2                        ; Fill in bottom two bits, autopush
-    out PINDIRS, 16         side 1    ; Raise MUX_SEL to load control register, set pins as inputs
+    irq nowait 0                      ; Trigger ide_cr_loader
+    in PINS, 5              side 1    ; Read register address, override CR_DATA_SEL = 1
+    in Y, 25                side 1    ; Fill in top 25 bits, autopush
 
     wait 1 gpio DIOW_GPIO             ; Wait for host to finish write operation
     in PINS, 32                       ; Read data bus, autopush
 
-PUBLIC set_mux:
-    ; Write req is complete, restore mux to reading status signals
-    mov OSR, ~NULL          side 0    ; Prepare next PINDIRS value
-    mov PINS, ::X                     ; Value with CR_DATA_SEL = 0
-    out PINDIRS, 32                [1]; Pins as outputs
-    out PINDIRS, 16         side 1    ; Raise MUX_SEL to load control register, set pins as inputs
-
+    irq nowait 0                      ; Restore default CR value
 
 
 ; Detect and respond to register reads
 ; IN mapping: data pins 0-15
 ; OUT mapping: data pins 0-15
-; SIDESET mapping: MUX_SEL and IORDY
-; Register X: low half has mux control register value during read transfer,
-;             upper half has mux control value after read transfer with reversed bit order
-; Register Y: base address for register reads (bottom 6 bits will be added)
+; SIDESET mapping: data pins D1 and D2 for CR_DATA_SEL and CR_DATA_DIR
+; Register Y: Top 26 bits of address for register reads, bottom 6 bits will be added
 ; RX FIFO will receive 32-bit word with register read address
-; TX FIFO must be written with data
+; TX FIFO must be written with data that gets passed to host
 .program ide_reg_read
     .side_set 2 opt
 
-    in Y, 26                          ; Prepare base address
-    mov OSR, ~NULL                    ; Prepare value for setting PINDIRS = 1
     wait 0 gpio DIOR_GPIO             ; Wait for host to start a read
-    in PINS, 5              side 0    ; Read register address, start loading CR, negate IORDY
-    in NULL, 1                        ; Fill in bottom bit, autopush
-    mov PINS, X                       ; Value with CR_DATA_SEL = 1
-    out PINDIRS, 32                [1]; Pins as outputs
-    pull block              side 1    ; Raise MUX_SEL to load control register, wait for data from DMA
-    out PINS, 32            side 3    ; Write register value to bus and assert IORDY
+    irq nowait 0                      ; Trigger ide_cr_loader
+    in PINS, 5              side 3    ; Read register address, override CR_DATA_SEL = 1, CR_DATA_DIR = 1
+    in Y, 26                side 3    ; Fill in top 26 bits and autopush
+    mov OSR, ~NULL                [1] ; Prepare value for setting pins to outputs, wait for ide_cr_loader
+    out PINDIRS, 16                   ; Override pins to outputs
+    pull block                        ; Wait for data from DMA
+    out PINS, 32                      ; Write register value to bus
 
     wait 1 gpio DIOR_GPIO             ; Wait for host to finish read operation
 
-    ; Read req is complete, restore mux to reading status signals
-    mov PINS, ::X           side 2 [1]; Prepare to load control reg, set MUX_SEL = 0
-    out PINDIRS, 16         side 3    ; Raise MUX_SEL to load control register, set pins as inputs
+    irq nowait 0                      ; Restore default CR value
+
+
+; Handle data register reading
+; Overrides the outputs of ide_reg_read when CS0 = 0 and DA2,1,0 = 0
+; JMP PIN: DIOR
+; IN mapping: data pins 0-15
+; OUT mapping: data pins 0-15
+; TX FIFO should receive data to be sent, autopull is used
+; .program ide_data_read
+; start:
+;     mov ISR, NULL                     ; Clear ISR
+;     wait 0 gpio DIOR_GPIO             ; Wait for host to start a read
+;     in PINS, 4                        ; Read CS0 and DA register selectors
+;     mov X, ISR                        ; Copy data for comparison
+;     jmp !X start                      ; Check for non-zero address
+
+; .wrap_target:
+;     out PINS, 16                      ; Override data written by ide_reg_read
+;     jmp pin start                     ; Keep overriding as long as DIOR is low
+; .wrap

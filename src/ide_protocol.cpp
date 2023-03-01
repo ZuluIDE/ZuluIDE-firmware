@@ -3,8 +3,9 @@
 #include "ZuluIDE_log.h"
 #include "ide_phy.h"
 #include "ide_constants.h"
-#include "ide_commands.h"
+#include "ide_cdrom.h"
 
+// Map from command index for command name for logging
 static const char *get_ide_command_name(uint8_t cmd)
 {
     switch (cmd)
@@ -16,26 +17,8 @@ static const char *get_ide_command_name(uint8_t cmd)
     }
 }
 
-static bool ide_handle_command(ide_phy_msg_t *msg)
-{
-    ide_phy_msg_t response = {};
-    uint8_t cmd = msg->payload.cmd_start.command;
-
-    azdbg("-- Command: ", cmd, " ", get_ide_command_name(cmd));
-
-    switch (cmd)
-    {
-        case IDE_CMD_IDENTIFY_DEVICE: return ide_cmd_identify_device(msg);
-        case IDE_CMD_INIT_DEV_PARAMS: return ide_cmd_init_dev_params(msg);
-
-        default:
-            azdbg("-- No handler for command, reporting error");
-            response.type = IDE_MSG_CMD_DONE;
-            response.payload.cmd_done.error = IDE_ERROR_ABORT;
-            return ide_phy_send_msg(&response);
-    }
-}
-
+static IDECDROMDevice g_ide_cdrom;
+static IDEDevice *g_ide_device = &g_ide_cdrom;
 
 void ide_protocol_init()
 {
@@ -50,11 +33,32 @@ void ide_protocol_poll()
     {
         if (msg->type == IDE_MSG_CMD_START)
         {
-            bool status = ide_handle_command(msg);
+            uint8_t cmd = msg->payload.cmd_start.command;
+            azdbg("Command: ", cmd, " ", get_ide_command_name(cmd));
+
+            bool status = g_ide_device->handle_command(msg);
             if (!status)
             {
-                azdbg("Command handling problem");
+                azdbg("-- No command handler");
+                ide_phy_msg_t response = {};
+                response.type = IDE_MSG_DEVICE_RDY;
+                response.payload.device_rdy.error = IDE_ERROR_ABORT;
+                if (!ide_phy_send_msg(&response))
+                {
+                    azlog("-- IDE PHY stuck on command ", cmd, "? Attempting reset");
+                    ide_phy_reset();
+                }
             }
+        }
+        else
+        {
+            switch(msg->type)
+            {
+                case IDE_MSG_RESET: azdbg("Reset, device control ", msg->payload.reset.device_control); break;
+                default: azdbg("PHY EVENT: ", (uint8_t)msg->type); break;
+            }
+
+            g_ide_device->handle_event(msg);
         }
     }
 }

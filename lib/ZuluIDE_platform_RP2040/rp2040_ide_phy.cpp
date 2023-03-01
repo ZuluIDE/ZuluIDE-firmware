@@ -48,6 +48,22 @@
 // These are in the order of bits 0-7 read from the status signal input multiplexer.
 // Refer to tables 15 and 16 starting on page 58 in "T13/1410D revision 3a"
 // The CS bits are defined with inverted polarity in the spec.
+//
+// IDE register quick reference:
+// 0x0E RD: ALT_STATUS          Same as status, does not clear IRQ
+//      WR: DEVICE_CONTROL      7: HOB, 2: SRST, 1: nIEN
+// 0x10 RW: DATA
+// 0x11 RD: ERROR               2: ABORT
+//      WR: FEATURE             Command parameter
+// 0x12 RW: SECTOR_COUNT
+// 0x13 RW: LBA_LOW
+// 0x14 RW: LBA_MID
+// 0x15 RW: LBA_HIGH
+// 0x16 RW: DEVICE              4: DEV
+// 0x17 RD: STATUS              7: BSY, 6: DRDY, 5: DF, 3: DRQ, 0: ERR
+//      WR: COMMAND
+//
+
 #define REGADDR(ncs0, ncs1, da2, da1, da0) \
     ((ncs0 ? 0 : BM(SI_CS0)) | \
      (ncs1 ? 0 : BM(SI_CS1)) | \
@@ -79,10 +95,7 @@
 #define REGRD_DEVICE            REGADDR(1,0,1,1,0)
 #define REGRD_STATUS            REGADDR(1,0,1,1,1)
 
-// Mux control values when:
-// 1) monitoring status signals
-// 2) register write
-// 3) register read
+// Default MUX control value for monitoring status signals
 #define MUXCR_STATUS \
      (BM(CR_MUX_OE) | \
       BM(CR_NEG_CTRL_OUT) | \
@@ -91,26 +104,10 @@
       BM(CR_NEG_IDE_DASP) | \
       BM(CR_NEG_IDE_INTRQ_EN))
 
-#define MUXCR_WRITE \
-     (BM(CR_MUX_OE) | \
-      BM(CR_DATA_SEL) | \
-      BM(CR_NEG_IDE_IOCS16) | \
-      BM(CR_NEG_IDE_PDIAG) | \
-      BM(CR_NEG_IDE_DASP) | \
-      BM(CR_NEG_IDE_INTRQ_EN))
-
-#define MUXCR_READ \
-     (BM(CR_MUX_OE) | \
-      BM(CR_DATA_SEL) | \
-      BM(CR_DATA_DIR) | \
-      BM(CR_NEG_IDE_IOCS16) | \
-      BM(CR_NEG_IDE_PDIAG) | \
-      BM(CR_NEG_IDE_DASP) | \
-      BM(CR_NEG_IDE_INTRQ_EN))
-
 #define IDE_PIO pio0
-#define IDE_PIO_SM_REGWR 0
-#define IDE_PIO_SM_REGRD 1
+#define IDE_PIO_SM_CRLOAD 0
+#define IDE_PIO_SM_REGWR 1
+#define IDE_PIO_SM_REGRD 2
 
 // Register reads and writes have very short response times.
 // As such they are executed by PIO and DMA hardware.
@@ -157,11 +154,12 @@ static struct {
     // Current interrupt status
     bool intrq;
 
-    // Register X values loaded to PIOs
-    uint32_t pio_regwr_xreg;
-    uint32_t pio_regrd_xreg;
+    // LED state
+    bool status_led;
 
     bool channels_claimed;
+    uint32_t pio_offset_ide_cr_loader;
+    pio_sm_config pio_cfg_ide_cr_loader;
     uint32_t pio_offset_ide_reg_write;
     pio_sm_config pio_cfg_ide_reg_write;
     uint32_t pio_offset_ide_reg_read;
@@ -180,12 +178,16 @@ static uint32_t g_ide_phy_core1_stack[512];
 #define TRACE_ID_RESET_START     0x01
 #define TRACE_ID_RESET_DONE      0x02
 #define TRACE_ID_FIFO_OVERRUN    0x03
+#define TRACE_ID_ASSERT_IRQ      0x04
 #define TRACE_ID_REGWR           0x10
 #define TRACE_ID_REGRD           0x11
 #define TRACE_ID_COMMAND         0x12
 #define TRACE_ID_SENDDATA_START  0x20
 #define TRACE_ID_SENDDATA_DONE   0x21
 #define TRACE_ID_SENDDATA_ABORT  0x22
+#define TRACE_ID_RECVDATA_START  0x24
+#define TRACE_ID_RECVDATA_DONE   0x25
+#define TRACE_ID_RECVDATA_ABORT  0x26
 #define TRACE_ID_MUXCR_LOAD      0x30
 #define TRACE_REGWR(addr, data) ((uint32_t)TRACE_ID_REGWR | (((addr) & 0xFF) << 8) | (((data) & 0xFFFF) << 16))
 #define TRACE_REGRD(addr, data) ((uint32_t)TRACE_ID_REGRD | (((addr) & 0xFF) << 8) | (((data) & 0xFFFF) << 16))
@@ -260,7 +262,6 @@ static inline ide_phy_msg_t *ide_phy_get_rcvbuf()
 /* PHY initialization code                  */
 /********************************************/
 
-
 static inline void ide_set_status(uint8_t status)
 {
     g_ide_registers[REGRD_ALT_STATUS] = status;
@@ -283,61 +284,11 @@ static inline void idepio_load_regy(uint sm, uint32_t value)
     pio_sm_exec(IDE_PIO, sm, pio_encode_mov(pio_y, pio_osr));
 }
 
-// Set the control mux register value based on 
-static inline void idepio_set_control_mux()
-{    
-    uint32_t pio_regwr_xreg = MUXCR_WRITE | (REVBITS(MUXCR_STATUS) << 16);
-    uint32_t pio_regrd_xreg = MUXCR_READ | (REVBITS(MUXCR_STATUS) << 16);
-
-    bool device1 = (g_ide_registers[REGWR_DEVICE] & 0x10);
-    bool device_selected = (device1 ? g_ide_phy.device1 : g_ide_phy.device0);
-    if (device_selected)
-    {
-        // Device selected, can write CTRL_OUT continuously
-        pio_regwr_xreg &= ~(BM(CR_NEG_CTRL_OUT) | (REVBITS(BM(CR_NEG_CTRL_OUT) << 16)));
-        pio_regrd_xreg &= ~(BM(CR_NEG_CTRL_OUT) | (REVBITS(BM(CR_NEG_CTRL_OUT) << 16)));
-        
-        if ((g_ide_registers[REGWR_DEVICE_CONTROL] & 0x02) == 0)
-        {
-            // Interrupt out enabled
-            pio_regwr_xreg &= ~(BM(CR_NEG_IDE_INTRQ_EN) | (REVBITS(BM(CR_NEG_IDE_INTRQ_EN) << 16)));
-            pio_regrd_xreg &= ~(BM(CR_NEG_IDE_INTRQ_EN) | (REVBITS(BM(CR_NEG_IDE_INTRQ_EN) << 16)));
-            
-            if (g_ide_phy.intrq)
-            {
-                // Interrupt request active
-                // NOTE: BM(9) for errata in first PCB prototype version
-                pio_regwr_xreg |= (BM(9) | BM(CR_IDE_INTRQ) | (REVBITS((BM(9) | BM(CR_IDE_INTRQ)) << 16)));
-                pio_regrd_xreg |= (BM(9) | BM(CR_IDE_INTRQ) | (REVBITS((BM(9) | BM(CR_IDE_INTRQ)) << 16)));
-            }
-        }
-    }
-    
-    if (pio_regwr_xreg != g_ide_phy.pio_regwr_xreg || pio_regrd_xreg != g_ide_phy.pio_regrd_xreg)
-    {
-        g_ide_phy.pio_regwr_xreg = pio_regwr_xreg;
-        g_ide_phy.pio_regrd_xreg = pio_regrd_xreg;
-        trace_write(TRACE_ID_MUXCR_LOAD | (pio_regrd_xreg << 8));
-
-        // Stop the state machines and load new register values.
-        // This is a bit time critical, because host might try to access registers at same time
-        uint32_t jmp_cmd = pio_encode_jmp(ide_reg_write_offset_set_mux + g_ide_phy.pio_offset_ide_reg_write);
-        uint32_t ctrl_orig = IDE_PIO->ctrl;
-        
-        IDE_PIO->ctrl = ctrl_orig & ~(BM(IDE_PIO_SM_REGWR) | BM(IDE_PIO_SM_REGRD));
-        idepio_load_regx(IDE_PIO_SM_REGWR, pio_regwr_xreg);
-        idepio_load_regx(IDE_PIO_SM_REGRD, pio_regrd_xreg);
-        pio_sm_exec(IDE_PIO, IDE_PIO_SM_REGRD, pio_encode_mov_not(pio_osr, pio_null));
-        pio_sm_exec(IDE_PIO, IDE_PIO_SM_REGWR, pio_encode_mov(pio_isr, pio_null));
-        pio_sm_exec(IDE_PIO, IDE_PIO_SM_REGWR, jmp_cmd);
-        IDE_PIO->ctrl = ctrl_orig;
-    }
-}
-
 static void ide_phy_init()
 {
     if (!g_ide_phy.channels_claimed)
     {
+        pio_sm_claim(IDE_PIO, IDE_PIO_SM_CRLOAD);
         pio_sm_claim(IDE_PIO, IDE_PIO_SM_REGWR);
         pio_sm_claim(IDE_PIO, IDE_PIO_SM_REGRD);
         dma_channel_claim(IDE_DMACH_REGWR1);
@@ -366,32 +317,35 @@ static void ide_phy_init()
 
     // Load PIO programs
     pio_clear_instruction_memory(IDE_PIO);
+    g_ide_phy.pio_offset_ide_cr_loader = pio_add_program(IDE_PIO, &ide_cr_loader_program);
+    g_ide_phy.pio_cfg_ide_cr_loader = ide_cr_loader_program_get_default_config(g_ide_phy.pio_offset_ide_cr_loader);
+    sm_config_set_out_shift(&g_ide_phy.pio_cfg_ide_reg_write, true, false, 32);
+    sm_config_set_out_pins(&g_ide_phy.pio_cfg_ide_cr_loader, IDE_IO_SHIFT, 16);
+    sm_config_set_sideset_pins(&g_ide_phy.pio_cfg_ide_cr_loader, MUX_SEL);
+
     g_ide_phy.pio_offset_ide_reg_write = pio_add_program(IDE_PIO, &ide_reg_write_program);
     g_ide_phy.pio_cfg_ide_reg_write = ide_reg_write_program_get_default_config(g_ide_phy.pio_offset_ide_reg_write);
     sm_config_set_out_shift(&g_ide_phy.pio_cfg_ide_reg_write, true, false, 32);
-    sm_config_set_in_shift(&g_ide_phy.pio_cfg_ide_reg_write, false, true, 32);
+    sm_config_set_in_shift(&g_ide_phy.pio_cfg_ide_reg_write, true, true, 30);
     sm_config_set_in_pins(&g_ide_phy.pio_cfg_ide_reg_write, IDE_IO_SHIFT);
     sm_config_set_out_pins(&g_ide_phy.pio_cfg_ide_reg_write, IDE_IO_SHIFT, 16);
-    sm_config_set_sideset_pins(&g_ide_phy.pio_cfg_ide_reg_write, MUX_SEL);
+    sm_config_set_sideset_pins(&g_ide_phy.pio_cfg_ide_reg_write, CR_DATA_SEL);
 
     g_ide_phy.pio_offset_ide_reg_read = pio_add_program(IDE_PIO, &ide_reg_read_program);
     g_ide_phy.pio_cfg_ide_reg_read = ide_reg_read_program_get_default_config(g_ide_phy.pio_offset_ide_reg_read);
     sm_config_set_out_shift(&g_ide_phy.pio_cfg_ide_reg_read, true, false, 32);
-    sm_config_set_in_shift(&g_ide_phy.pio_cfg_ide_reg_read, false, true, 32);
+    sm_config_set_in_shift(&g_ide_phy.pio_cfg_ide_reg_read, true, true, 31);
     sm_config_set_in_pins(&g_ide_phy.pio_cfg_ide_reg_read, IDE_IO_SHIFT);
     sm_config_set_out_pins(&g_ide_phy.pio_cfg_ide_reg_read, IDE_IO_SHIFT, 16);
-    sm_config_set_sideset_pins(&g_ide_phy.pio_cfg_ide_reg_read, MUX_SEL);
+    sm_config_set_sideset_pins(&g_ide_phy.pio_cfg_ide_reg_read, CR_DATA_SEL);
 
-    // Initialize register write watcher
+    // Initialize state machines
+    pio_sm_init(IDE_PIO, IDE_PIO_SM_CRLOAD, g_ide_phy.pio_offset_ide_cr_loader, &g_ide_phy.pio_cfg_ide_cr_loader);
     pio_sm_init(IDE_PIO, IDE_PIO_SM_REGWR, g_ide_phy.pio_offset_ide_reg_write, &g_ide_phy.pio_cfg_ide_reg_write);
-    g_ide_phy.pio_regwr_xreg = MUXCR_WRITE | (REVBITS(MUXCR_STATUS) << 16);
-    idepio_load_regx(IDE_PIO_SM_REGWR, g_ide_phy.pio_regwr_xreg);
-    idepio_load_regy(IDE_PIO_SM_REGWR, ((uint32_t)g_ide_register_wr_lookup) >> 7);
-
-    // Initialize register read watcher
     pio_sm_init(IDE_PIO, IDE_PIO_SM_REGRD, g_ide_phy.pio_offset_ide_reg_read, &g_ide_phy.pio_cfg_ide_reg_read);
-    g_ide_phy.pio_regrd_xreg = MUXCR_READ | (REVBITS(MUXCR_STATUS) << 16);
-    idepio_load_regx(IDE_PIO_SM_REGRD, g_ide_phy.pio_regrd_xreg);
+
+    // Load base addresses for register access
+    idepio_load_regy(IDE_PIO_SM_REGWR, ((uint32_t)g_ide_register_wr_lookup) >> 7);
     idepio_load_regy(IDE_PIO_SM_REGRD, ((uint32_t)g_ide_registers) >> 6);
 
     // Configure register write DMA chain
@@ -463,18 +417,63 @@ static void ide_phy_init()
     iobank0_hw->io[IDE_OUT_IORDY].ctrl  = GPIO_FUNC_PIO0;
 }
 
-static void ide_phy_write_mux_ctrl(uint16_t value)
-{
-    pio_sm_put(IDE_PIO, IDE_PIO_SM_REGWR, 0xFFFF0000 | value);
-    pio_sm_exec(IDE_PIO, IDE_PIO_SM_REGWR, pio_encode_pull(false, true) | pio_encode_sideset_opt(1, 0));
-    pio_sm_exec(IDE_PIO, IDE_PIO_SM_REGWR, pio_encode_out(pio_pins, 16));
-    pio_sm_exec(IDE_PIO, IDE_PIO_SM_REGWR, pio_encode_out(pio_pindirs, 16));
-    pio_sm_exec(IDE_PIO, IDE_PIO_SM_REGWR, pio_encode_out(pio_pindirs, 16) | pio_encode_sideset_opt(1, 1));
-}
-
 /********************************************/
 /* PHY low-level implementation code        */
 /********************************************/
+
+// Check if an emulated device is currently selected
+static inline bool ide_check_device_selected()
+{
+    bool device1 = (g_ide_registers[REGWR_DEVICE] & 0x10);
+    return (device1 ? g_ide_phy.device1 : g_ide_phy.device0);
+}
+
+// Load new value to the state machine that loads the control register
+// If update_now is true,
+static inline void ide_update_control_reg(bool update_now)
+{
+    uint32_t cr_val = MUXCR_STATUS;
+
+    if (ide_check_device_selected())
+    {
+        cr_val &= ~BM(CR_NEG_CTRL_OUT);
+
+        if ((g_ide_registers[REGWR_DEVICE_CONTROL] & 0x02) == 0)
+        {
+            // Interrupt out enabled
+            cr_val &= ~BM(CR_NEG_IDE_INTRQ_EN);
+
+            if (g_ide_phy.intrq)
+            {
+                // Interrupt request active
+                // NOTE: BM(9) for errata in first PCB prototype version
+                cr_val |= BM(9) | BM(CR_IDE_INTRQ);
+            }
+        }
+    }
+
+    if (g_ide_phy.status_led)
+    {
+        cr_val |= BM(CR_STATUS_LED);
+    }
+
+    cr_val |= 0xFFFF0000; // For setting pin directions
+    IDE_PIO->txf[IDE_PIO_SM_CRLOAD] = cr_val;
+    IDE_PIO->sm[IDE_PIO_SM_CRLOAD].instr = pio_encode_pull(false, false);
+    IDE_PIO->sm[IDE_PIO_SM_CRLOAD].instr = pio_encode_mov(pio_x, pio_osr);
+
+    if (update_now)
+    {
+        IDE_PIO->irq_force = 1; // Start loading
+    }
+}
+
+__attribute__((section(".scratch_y.idephy")))
+static void ide_phy_delay_us_core1(uint32_t us)
+{
+    uint32_t start = timer_hw->timerawl;
+    while ((uint32_t)(timer_hw->timerawl - start) < us);
+}
 
 // Handle IDE bus reset state
 __attribute__((section(".scratch_y.idephy")))
@@ -483,21 +482,26 @@ static void ide_phy_reset_loop_core1()
     // Stop state machines
     pio_sm_set_enabled(IDE_PIO, IDE_PIO_SM_REGWR, false);
     pio_sm_set_enabled(IDE_PIO, IDE_PIO_SM_REGRD, false);
+    pio_sm_set_enabled(IDE_PIO, IDE_PIO_SM_CRLOAD, true);
+
+    g_ide_registers[REGWR_DEVICE_CONTROL] = 0x02;
 
     trace_write(TRACE_ID_RESET_START);
 
     // Handle bus reset condition
     do {
         gpio_set_pulls(IDE_IN_RST, true, false); // Pull IDERST high to temporarily enable MUX_OE
-        ide_phy_write_mux_ctrl(MUXCR_STATUS);
-        delay_100ns();
+        ide_phy_delay_us_core1(2);
+        ide_update_control_reg(true);
+        ide_phy_delay_us_core1(2);
         gpio_set_pulls(IDE_IN_RST, false, true); // Pull IDERST low to see if mux was autodisabled again
-        delay_100ns();
+        ide_phy_delay_us_core1(2);
     } while (!(sio_hw->gpio_in & BM(IDE_IN_RST)));
 
     trace_write(TRACE_ID_RESET_DONE);
 
     g_ide_registers[REGRD_ERROR] = 0;
+    g_ide_registers[REGRD_DEVICE] = 0;
     ide_set_status(IDE_STATUS_DEVRDY);
 
     // Start state machines
@@ -528,7 +532,7 @@ static void ide_phy_check_register_event_core1()
         if (regaddr == REGRD_STATUS && g_ide_phy.intrq)
         {
             g_ide_phy.intrq = false;
-            idepio_set_control_mux();
+            ide_update_control_reg(true);
         }
 
         trace_write(TRACE_REGRD(regaddr, data));
@@ -555,11 +559,9 @@ static void ide_phy_check_register_event_core1()
                 buf->payload.cmd_start.device = g_ide_registers[REGRD_DEVICE];
                 buf->payload.cmd_start.features = g_ide_phy.feature;
                 buf->payload.cmd_start.sector_count = g_ide_registers[REGRD_SECTORCOUNT];
-                buf->payload.cmd_start.lba =
-                    ((uint32_t)(g_ide_registers[REGRD_LBALOW]) << 0) |
-                    ((uint32_t)(g_ide_registers[REGRD_LBAMID]) << 8) |
-                    ((uint32_t)(g_ide_registers[REGRD_LBAHIGH]) << 16) |
-                    ((uint32_t)(g_ide_registers[REGRD_DEVICE] & 0x0F) << 24);
+                buf->payload.cmd_start.lbalow = g_ide_registers[REGRD_LBALOW];
+                buf->payload.cmd_start.lbamid = g_ide_registers[REGRD_LBAMID];
+                buf->payload.cmd_start.lbahigh = g_ide_registers[REGRD_LBAHIGH];
                 __sync_synchronize();
                 sio_hw->fifo_wr = (uint32_t)buf;
             }
@@ -568,34 +570,74 @@ static void ide_phy_check_register_event_core1()
                 trace_write(TRACE_ID_FIFO_OVERRUN);
             }
         }
-        else if (regaddr == REGWR_DEVICE_CONTROL)
-        {
-            trace_write(TRACE_REGWR(regaddr, data));
-            idepio_set_control_mux();
-        }
         else
         {
-            // Just a regular register write
+            // A regular register write
             trace_write(TRACE_REGWR(regaddr, data));
+
+            if (regaddr == REGWR_DEVICE_CONTROL)
+            {
+                ide_update_control_reg(false);
+
+                if (data & 0x04)
+                {
+                    // Report software reset to protocol level
+                    if (multicore_fifo_wready())
+                    {
+                        ide_phy_msg_t *buf = ide_phy_get_rcvbuf();
+                        buf->type = IDE_MSG_RESET;
+                        buf->payload.reset.device_control = g_ide_phy.device_control;
+                        __sync_synchronize();
+                        sio_hw->fifo_wr = (uint32_t)buf;
+                    }
+                }
+            }
+            else if (regaddr == REGWR_DEVICE)
+            {
+                if (ide_check_device_selected())
+                {
+                    pio_sm_set_enabled(IDE_PIO, IDE_PIO_SM_REGRD, true);
+                    ide_update_control_reg(false);
+                }
+                else
+                {
+                    pio_sm_set_enabled(IDE_PIO, IDE_PIO_SM_REGRD, false);
+                    ide_update_control_reg(true);
+                }
+            }
         }
     }
 }
 
+// Assert interrupt
+__attribute__((section(".scratch_y.idephy")))
+static void ide_phy_assert_irq_core1()
+{
+    trace_write(TRACE_ID_ASSERT_IRQ);
+    g_ide_phy.intrq = true;
+    ide_update_control_reg(true);
+}
+
 // Send data to host
 __attribute__((section(".scratch_y.idephy")))
-static bool ide_phy_send_data_core1(uint32_t words, const uint16_t *data)
+static bool ide_phy_send_data_core1(uint32_t words, const uint16_t *data, bool assert_irq)
 {
     trace_write(TRACE_ID_SENDDATA_START | (words << 8));
 
     g_ide_registers[REGRD_DATA] = data[0];
     ide_set_status(IDE_STATUS_DEVRDY | IDE_STATUS_DATAREQ);
     
+    if (assert_irq)
+    {
+        ide_phy_assert_irq_core1();
+    }
+
     uint32_t done = 1;
     while (done < words)
     {
         uint32_t irq;
         
-        while ((irq = dma_hw->intr) & BM(IDE_DMACH_REGRD2))
+        while ((irq = dma_hw->intr) & BM(IDE_DMACH_REGRD2) && done < words)
         {
             // Process reads in tight loop
             *(volatile uint32_t*)&(dma_hw->intr) = BM(IDE_DMACH_REGRD2);
@@ -619,30 +661,105 @@ static bool ide_phy_send_data_core1(uint32_t words, const uint16_t *data)
     return true;
 }
 
+// Receive data from host
+__attribute__((section(".scratch_y.idephy")))
+static bool ide_phy_recv_data_core1(uint32_t words, uint16_t *data, bool assert_irq)
+{
+    trace_write(TRACE_ID_RECVDATA_START | (words << 8));
+
+    g_ide_register_wr_lookup[REGWR_DATA] = &data[0];
+    ide_set_status(IDE_STATUS_DEVRDY | IDE_STATUS_DATAREQ);
+
+    if (assert_irq)
+    {
+        ide_phy_assert_irq_core1();
+    }
+
+    uint32_t done = 0;
+    while (done < words)
+    {
+        uint32_t irq = dma_hw->intr;
+
+        if (irq & BM(IDE_DMACH_REGWR3))
+        {
+            uint32_t lookup_addr = dma_hw->ch[IDE_DMACH_REGWR2].al1_read_addr;
+            if (lookup_addr == (uint32_t)&g_ide_register_wr_lookup[REGWR_DATA])
+            {
+                // Advance write pointer for data register
+                *(volatile uint32_t*)&(dma_hw->intr) = BM(IDE_DMACH_REGWR3);
+                g_ide_register_wr_lookup[REGWR_DATA] = &data[++done];
+            }
+            else
+            {
+                // Host wrote other register, abort data transfer
+                trace_write(TRACE_ID_RECVDATA_ABORT | (done << 8));
+                ide_set_status(IDE_STATUS_DEVRDY | IDE_STATUS_BSY);
+                return false;
+            }
+        }
+    }
+
+    trace_write(TRACE_ID_RECVDATA_DONE);
+    ide_set_status(IDE_STATUS_DEVRDY | IDE_STATUS_BSY);
+    return true;
+}
+
 __attribute__((section(".scratch_y.idephy")))
 static void ide_phy_loop_core1()
 {
     multicore_fifo_drain();
-    ide_phy_reset_loop_core1();
+
+    bool first = true;
 
     while (1)
     {
-        if (!(sio_hw->gpio_in & BM(IDE_IN_RST)))
+        // Check for reset conditions
+        if (first || !(sio_hw->gpio_in & BM(IDE_IN_RST)))
         {
+            first = false;
             ide_phy_reset_loop_core1();
+
+            // Report hardware reset to protocol level
+            if (multicore_fifo_wready())
+            {
+                ide_phy_msg_t *buf = ide_phy_get_rcvbuf();
+                buf->type = IDE_MSG_RESET;
+                buf->payload.reset.device_control = g_ide_phy.device_control;
+                __sync_synchronize();
+                sio_hw->fifo_wr = (uint32_t)buf;
+            }
         }
 
+        // Check hardware register read/writes handled by PIO & DMA
         ide_phy_check_register_event_core1();
         
+        // Process commands sent from core 0
         if (multicore_fifo_rvalid())
         {
             ide_phy_msg_t *buf = (ide_phy_msg_t*)sio_hw->fifo_rd;
             *buf->status = IDE_MSGSTAT_EXECUTING;
-            if (buf->type == IDE_MSG_CMD_DONE)
+            if (buf->type == IDE_MSG_DEVICE_RDY)
             {
-                g_ide_registers[REGRD_ERROR] = buf->payload.cmd_done.error;
+                g_ide_registers[REGRD_ERROR] = buf->payload.device_rdy.error;
 
-                if (buf->payload.cmd_done.error != 0)
+                if (buf->payload.device_rdy.set_registers)
+                {
+                    g_ide_registers[REGRD_SECTORCOUNT] = buf->payload.device_rdy.sector_count;
+                    g_ide_registers[REGRD_LBALOW] = buf->payload.device_rdy.lbalow;
+                    g_ide_registers[REGRD_LBAMID] = buf->payload.device_rdy.lbamid;
+                    g_ide_registers[REGRD_LBAHIGH] = buf->payload.device_rdy.lbahigh;
+
+                    uint8_t devreg = g_ide_registers[REGRD_DEVICE];
+                    devreg &= 0x10; // Keep drive bit
+                    devreg |= (buf->payload.device_rdy.device) & (~0x10);
+                    g_ide_registers[REGRD_DEVICE] = devreg;
+                }
+
+                if (buf->payload.device_rdy.status != 0)
+                {
+                    ide_set_status(buf->payload.device_rdy.status);
+                }
+                else if (buf->payload.device_rdy.error != 0)
                 {
                     ide_set_status(IDE_STATUS_DEVRDY | IDE_STATUS_ERR);
                 }
@@ -650,11 +767,17 @@ static void ide_phy_loop_core1()
                 {
                     ide_set_status(IDE_STATUS_DEVRDY);
                 }
+
+                if (buf->payload.device_rdy.assert_irq)
+                {
+                    ide_phy_assert_irq_core1();
+                }
                 *buf->status = IDE_MSGSTAT_SUCCESS;
             }
             else if (buf->type == IDE_MSG_SEND_DATA)
             {
-                if (ide_phy_send_data_core1(buf->payload.send_data.words, buf->payload.send_data.data))
+                if (ide_phy_send_data_core1(buf->payload.send_data.words,
+                        buf->payload.send_data.data, buf->payload.send_data.assert_irq))
                 {
                     *buf->status = IDE_MSGSTAT_SUCCESS;
                 }
@@ -663,11 +786,17 @@ static void ide_phy_loop_core1()
                     *buf->status = IDE_MSGSTAT_ABORTED;
                 }
             }
-            else if (buf->type == IDE_MSG_ASSERT_IRQ)
+            else if (buf->type == IDE_MSG_RECV_DATA)
             {
-                g_ide_phy.intrq = true;
-                idepio_set_control_mux();
-                *buf->status = IDE_MSGSTAT_SUCCESS;
+                if (ide_phy_recv_data_core1(buf->payload.recv_data.words,
+                        buf->payload.recv_data.data, buf->payload.recv_data.assert_irq))
+                {
+                    *buf->status = IDE_MSGSTAT_SUCCESS;
+                }
+                else
+                {
+                    *buf->status = IDE_MSGSTAT_ABORTED;
+                }
             }
             else
             {
@@ -739,6 +868,10 @@ static void print_trace_log()
             uint8_t command = (uint8_t)(msg >> 8);
             azdbg("-- CMD ", command);
         }
+        else if (id == TRACE_ID_ASSERT_IRQ)
+        {
+            azdbg("-- ASSERT IRQ");
+        }
         else if (id == TRACE_ID_FIFO_OVERRUN)
         {
             azdbg("-- PHY RX FIFO OVERRUN");
@@ -754,6 +887,18 @@ static void print_trace_log()
         else if (id == TRACE_ID_SENDDATA_ABORT)
         {
             azdbg("-- SENDDATA ABORT after", (int)(msg >> 8), " words");
+        }
+        else if (id == TRACE_ID_RECVDATA_START)
+        {
+            azdbg("-- RECVDATA ", (int)(msg >> 8), " words");
+        }
+        else if (id == TRACE_ID_RECVDATA_DONE)
+        {
+            azdbg("-- RECVDATA DONE");
+        }
+        else if (id == TRACE_ID_RECVDATA_ABORT)
+        {
+            azdbg("-- RECVDATA ABORT after", (int)(msg >> 8), " words");
         }
         else if (id == TRACE_ID_MUXCR_LOAD)
         {

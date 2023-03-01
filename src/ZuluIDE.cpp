@@ -11,7 +11,7 @@
 
 SdFs SD;
 FsFile g_logfile;
-static bool g_sdcard_present;
+bool g_sdcard_present;
 
 /************************************/
 /* Status reporting by blinking led */

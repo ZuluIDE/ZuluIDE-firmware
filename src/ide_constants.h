@@ -1,4 +1,6 @@
 // Standard values for IDE protocol
+// Refer to https://pdos.csail.mit.edu/6.828/2005/readings/hardware/ATA-d1410r3a.pdf
+// (with TOC https://jpa.kapsi.fi/stuff/other/ATA-d1410r3a_toc.pdf )
 #pragma once
 #include <stdint.h>
 
