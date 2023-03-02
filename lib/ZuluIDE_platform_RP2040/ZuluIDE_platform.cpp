@@ -8,15 +8,12 @@
 #include <hardware/uart.h>
 #include <hardware/spi.h>
 #include <hardware/structs/xip_ctrl.h>
+#include <hardware/structs/iobank0.h>
+#include <hardware/flash.h>
 #include <platform/mbed_error.h>
 #include <multicore.h>
 
 extern "C" {
-
-// As of 2022-09-13, the platformio RP2040 core is missing cplusplus guard on flash.h
-// For that reason this has to be inside the extern "C" here.
-#include <hardware/flash.h>
-#include "rp2040_flash_do_cmd.h"
 
 const char *g_azplatform_name = PLATFORM_NAME;
 static uint32_t g_flash_chip_size = 0;
