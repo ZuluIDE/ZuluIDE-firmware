@@ -25,3 +25,4 @@ public:
     // Implementation can be empty.
     virtual void handle_event(ide_phy_msg_t *msg) = 0;
 };
+

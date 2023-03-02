@@ -838,6 +838,8 @@ static void ide_phy_loop_core1()
             {
                 *buf->status = IDE_MSGSTAT_ERROR;
             }
+
+            buf->status = nullptr;
         }
     }
 }
@@ -945,12 +947,29 @@ static void print_trace_log()
 
 void ide_phy_reset()
 {
+    // Stop second core
     multicore_reset_core1();
     multicore_fifo_drain();
+
+    // Abort all ongoing requests
+    for (int i = 0; i < MSG_FIFO_SIZE; i++)
+    {
+        if (g_ide_phy_msgs.sndbuf[i].status)
+        {
+            *g_ide_phy_msgs.sndbuf[i].status = IDE_MSGSTAT_ABORTED;
+            g_ide_phy_msgs.sndbuf[i].status = nullptr;
+        }
+    }
+
+    // Reinitialize hardware
     ide_phy_init();
     multicore_launch_core1_with_stack(&ide_phy_loop_core1, g_ide_phy_core1_stack, sizeof(g_ide_phy_core1_stack));
 
-    g_ide_phy.lowlevel_trace = ini_getbool("IDE", "Trace", g_ide_phy.lowlevel_trace, CONFIGFILE);
+    // Skip config reading if called from watchdog handler
+    if ((SCB->ICSR & SCB_ICSR_VECTACTIVE_Msk) == 0)
+    {
+        g_ide_phy.lowlevel_trace = ini_getbool("IDE", "Trace", g_ide_phy.lowlevel_trace, CONFIGFILE);
+    }
 }
 
 ide_phy_msg_t *ide_phy_get_msg()

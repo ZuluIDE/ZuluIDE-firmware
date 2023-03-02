@@ -1,6 +1,7 @@
 // High-level implementation of IDE command handling
 
-#include "ZuluIDE_log.h"
+#include "ZuluIDE.h"
+#include "ZuluIDE_config.h"
 #include "ide_phy.h"
 #include "ide_constants.h"
 #include "ide_cdrom.h"
@@ -17,12 +18,17 @@ static const char *get_ide_command_name(uint8_t cmd)
     }
 }
 
+static uint32_t g_ide_buffer[IDE_BUFFER_SIZE / 4];
 static IDECDROMDevice g_ide_cdrom;
+static IDEImageFile g_ide_current_image((uint8_t*)g_ide_buffer, IDE_BUFFER_SIZE);
 static IDEDevice *g_ide_device = &g_ide_cdrom;
 
 void ide_protocol_init()
 {
     ide_phy_reset();
+
+    g_ide_current_image.open_file(SD.vol(), "cd.iso", true);
+    g_ide_cdrom.set_image(&g_ide_current_image);
 }
 
 void ide_protocol_poll()

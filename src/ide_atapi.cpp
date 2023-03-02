@@ -20,6 +20,11 @@ IDEATAPIDevice::IDEATAPIDevice():
 
 }
 
+void IDEATAPIDevice::set_image(IDEImage *image)
+{
+    m_image = image;
+}
+
 void IDEATAPIDevice::poll()
 {
 
@@ -191,7 +196,12 @@ bool IDEATAPIDevice::handle_atapi_command(const uint8_t *cmd)
         case ATAPI_CMD_INQUIRY:         return atapi_inquiry(cmd);
         case ATAPI_CMD_MODE_SENSE10:    return atapi_mode_sense(cmd);
         case ATAPI_CMD_REQUEST_SENSE:   return atapi_request_sense(cmd);
+        case ATAPI_CMD_GET_EVENT_STATUS_NOTIFICATION: return atapi_get_event_status_notification(cmd);
         case ATAPI_CMD_READ_CAPACITY:   return atapi_read_capacity(cmd);
+        case ATAPI_CMD_READ10:          return atapi_read(cmd);
+        case ATAPI_CMD_READ12:          return atapi_read(cmd);
+        case ATAPI_CMD_WRITE10:         return atapi_write(cmd);
+        case ATAPI_CMD_WRITE12:         return atapi_write(cmd);
 
         default:
             return atapi_cmd_error(ATAPI_SENSE_ILLEGAL_REQ, ATAPI_ASC_INVALID_CMD);
@@ -304,13 +314,132 @@ bool IDEATAPIDevice::atapi_request_sense(const uint8_t *cmd)
     return atapi_cmd_ok();
 }
 
+bool IDEATAPIDevice::atapi_get_event_status_notification(const uint8_t *cmd)
+{
+    if (!(cmd[1] & 1))
+    {
+        // Async. notification is not supported
+        return atapi_cmd_error(ATAPI_SENSE_ILLEGAL_REQ, ATAPI_ASC_INVALID_FIELD);
+    }
+    else if (m_devinfo.media_status_events)
+    {
+        // Report media status events
+        uint8_t *buf = m_buffer.bytes;
+        buf[0] = 0;
+        buf[1] = 6; // EventDataLength
+        buf[2] = 0x04; // Media status events
+        buf[3] = 0x04; // Supported events
+        buf[4] = m_devinfo.media_status_events;
+        buf[5] = 0x01; // Power status
+        buf[6] = 0; // Start slot
+        buf[7] = 0; // End slot
+        if (!atapi_send_data(m_buffer.word, 8))
+        {
+            return atapi_cmd_error(ATAPI_SENSE_ABORTED_CMD, 0);
+        }
+
+        m_devinfo.media_status_events = 0;
+        return atapi_cmd_ok();
+    }
+    else
+    {
+        // No events to report
+        uint8_t *buf = m_buffer.bytes;
+        buf[0] = 0;
+        buf[1] = 2; // EventDataLength
+        buf[2] = 0x00; // Media status events
+        buf[3] = 0x04; // Supported events
+        atapi_send_data(m_buffer.word, 4);
+        return atapi_cmd_ok();
+    }
+}
+
 bool IDEATAPIDevice::atapi_read_capacity(const uint8_t *cmd)
 {
-    m_buffer.dword[0] = __builtin_bswap32(m_devinfo.max_lba);
+    uint64_t capacity = (m_image ? m_image->capacity() : 0);
+
+    m_buffer.dword[0] = __builtin_bswap32(capacity / m_devinfo.bytes_per_sector);
     m_buffer.dword[1] = __builtin_bswap32(m_devinfo.bytes_per_sector);
     atapi_send_data(m_buffer.word, 8);
 
     return atapi_cmd_ok();
+}
+
+bool IDEATAPIDevice::atapi_read(const uint8_t *cmd)
+{
+    uint32_t lba, transfer_len;
+    if (cmd[0] == ATAPI_CMD_READ10)
+    {
+        lba = ((uint32_t)cmd[2] << 24)
+            | ((uint32_t)cmd[3] << 16)
+            | ((uint32_t)cmd[4] << 8)
+            | ((uint32_t)cmd[5] << 0);
+        
+        transfer_len = ((uint32_t)cmd[7] << 8)
+                     | ((uint32_t)cmd[8] << 0);
+    }
+    else
+    {
+        lba = ((uint32_t)cmd[2] << 24)
+            | ((uint32_t)cmd[3] << 16)
+            | ((uint32_t)cmd[4] << 8)
+            | ((uint32_t)cmd[5] << 0);
+        
+        transfer_len = ((uint32_t)cmd[6] << 24)
+                     | ((uint32_t)cmd[7] << 16)
+                     | ((uint32_t)cmd[8] << 8)
+                     | ((uint32_t)cmd[9] << 0);
+    }
+
+    if (!m_image)
+    {
+        return atapi_cmd_error(ATAPI_SENSE_NOT_READY, ATAPI_ASC_NO_MEDIUM);
+    }
+
+    // for (int i = 0; i < ATAPI_TRANSFER_REQ_COUNT; i++)
+    // {
+    //     m_transfer_reqs[i] = ide_phy_msg_t{};
+    //     m_transfer_reqs[i].status = &m_transfer_req_status[i];
+    //     m_transfer_reqs[i].type = IDE_MSG_SEND_DATA;
+    // }
+
+    bool status = m_image->read((uint64_t)lba * m_devinfo.bytes_per_sector,
+                                transfer_len * m_devinfo.bytes_per_sector,
+                                this);
+    
+    if (status)
+    {
+        return atapi_cmd_ok();
+    }
+    else
+    {
+        return atapi_cmd_error(ATAPI_SENSE_MEDIUM_ERROR, 0);
+    }
+}
+
+ssize_t IDEATAPIDevice::read_callback(const uint8_t *data, size_t bytes)
+{
+    // TODO: Make this asynchronous for optimization
+    bytes &= ~1;
+    if (!atapi_send_data((const uint16_t*)data, bytes))
+    {
+        return -1;
+    }
+    else
+    {
+        return bytes;
+    }
+}
+
+bool IDEATAPIDevice::atapi_write(const uint8_t *cmd)
+{
+    return atapi_cmd_error(ATAPI_SENSE_ABORTED_CMD, ATAPI_ASC_WRITE_PROTECTED);
+}
+
+ssize_t IDEATAPIDevice::write_callback(uint8_t *data, size_t bytes)
+{
+    assert(false);
+    return -1;
 }
 
 size_t IDEATAPIDevice::atapi_get_mode_page(uint8_t page_ctrl, uint8_t page_idx, uint8_t *buffer, size_t max_bytes)

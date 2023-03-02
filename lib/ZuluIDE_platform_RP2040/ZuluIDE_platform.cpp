@@ -254,6 +254,7 @@ void azplatform_log(const char *s)
 
 static int g_watchdog_timeout;
 static bool g_watchdog_initialized;
+static bool g_watchdog_did_bus_reset;
 
 static void watchdog_callback(unsigned alarm_num)
 {
@@ -261,7 +262,7 @@ static void watchdog_callback(unsigned alarm_num)
 
     if (g_watchdog_timeout <= WATCHDOG_CRASH_TIMEOUT - WATCHDOG_BUS_RESET_TIMEOUT)
     {
-        if (false)
+        if (!g_watchdog_did_bus_reset)
         {
             azlog("--------------");
             azlog("WATCHDOG TIMEOUT, attempting bus reset");
@@ -275,6 +276,9 @@ static void watchdog_callback(unsigned alarm_num)
                 azlog("STACK ", (uint32_t)p, ":    ", p[0], " ", p[1], " ", p[2], " ", p[3]);
                 p += 4;
             }
+
+            g_watchdog_did_bus_reset = true;
+            ide_phy_reset();
         }
 
         if (g_watchdog_timeout <= 0)
@@ -312,6 +316,7 @@ static void watchdog_callback(unsigned alarm_num)
 void azplatform_reset_watchdog()
 {
     g_watchdog_timeout = WATCHDOG_CRASH_TIMEOUT;
+    g_watchdog_did_bus_reset = false;
 
     if (!g_watchdog_initialized)
     {
