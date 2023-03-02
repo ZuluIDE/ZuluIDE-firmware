@@ -1,6 +1,7 @@
 #include "ZuluIDE_platform.h"
 #include "ZuluIDE_log.h"
 #include "ZuluIDE_config.h"
+#include "ide_phy.h"
 #include <SdFat.h>
 #include <assert.h>
 #include <hardware/gpio.h>
@@ -137,12 +138,24 @@ void azplatform_write_led(bool state)
 {
     if (g_led_disabled) return;
 
-    // This codepath is used before the IDE PHY code is initialized.
-    // It keeps the IDE bus free while writing the LED state
-    gpio_put(MUX_SEL, false);
-    gpio_set_pulls(CR_STATUS_LED, state, !state);
-    delayMicroseconds(1);
-    gpio_put(MUX_SEL, true);
+    if (iobank0_hw->io[MUX_SEL].ctrl  == GPIO_FUNC_SIO)
+    {
+        // This codepath is used before the IDE PHY code is initialized.
+        // It keeps the IDE bus free while writing the LED state
+        gpio_put(MUX_SEL, false);
+        gpio_set_pulls(CR_STATUS_LED, state, !state);
+        delayMicroseconds(1);
+        gpio_put(MUX_SEL, true);
+    }
+    else
+    {
+        // IDE PHY running on core 1 has exclusive access to the mux control register,
+        // so LED writes have to be done through message passing.
+        ide_phy_msg_t msg = {};
+        msg.type = IDE_MSG_PLATFORM_0;
+        msg.payload.raw[0] = state;
+        ide_phy_send_msg(&msg);
+    }
 }
 
 void azplatform_disable_led(void)

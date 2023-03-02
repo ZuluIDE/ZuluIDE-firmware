@@ -17,7 +17,16 @@ enum ide_msg_type_t {
     IDE_MSG_RECV_DATA   = 0x84, // Start receiving data buffer from host
     
     // Codes 0xE0 to 0xFF are reserved for platform specific implementation
-    IDE_MSG_PLATFORM    = 0xE0
+    IDE_MSG_PLATFORM_0    = 0xE0,
+    IDE_MSG_PLATFORM_1    = 0xE1,
+    IDE_MSG_PLATFORM_2    = 0xE2,
+    IDE_MSG_PLATFORM_3    = 0xE3,
+    IDE_MSG_PLATFORM_4    = 0xE4,
+    IDE_MSG_PLATFORM_5    = 0xE5,
+    IDE_MSG_PLATFORM_6    = 0xE6,
+    IDE_MSG_PLATFORM_7    = 0xE7,
+    IDE_MSG_PLATFORM_8    = 0xE8,
+    IDE_MSG_PLATFORM_9    = 0xE9,
 };
 
 enum ide_msg_status_t {
@@ -84,6 +93,8 @@ struct ide_phy_msg_t {
             // Assert interrupt when ready to transfer
             bool assert_irq;
         } recv_data;
+
+        uint32_t raw[4];
     } payload;
 };
 

@@ -103,3 +103,7 @@ ATAPI_COMMAND_LIST(ATAPI_ENUM_ENTRY)
 #define ATAPI_INQUIRY_VENDOR            8
 #define ATAPI_INQUIRY_PRODUCT           16
 #define ATAPI_INQUIRY_REVISION          32
+
+// ATAPI device types
+#define ATAPI_DEVTYPE_DIRECT_ACCESS     0
+#define ATAPI_DEVTYPE_CDROM             5

@@ -15,6 +15,7 @@
 #include <hardware/structs/iobank0.h>
 #include <multicore.h>
 #include <assert.h>
+#include <minIni.h>
 #include "ide_constants.h"
 #include "ide_phy.h"
 #include "ide_phy.pio.h"
@@ -131,12 +132,12 @@
 // Register set that can be read and possibly written by host
 // Addressed by REGRD_ addresses
 __attribute__((section(".scratch_x.idepio"), aligned(32 * 2)))
-static uint16_t g_ide_registers[32];
+static volatile uint16_t g_ide_registers[32];
 
 // Lookup table to get the address for register writes
 // Addressed by REGWR_ addresses
 __attribute__((section(".scratch_x.idepio"), aligned(32 * 4)))
-static uint16_t *g_ide_register_wr_lookup[32];
+static volatile uint16_t *g_ide_register_wr_lookup[32];
 
 __attribute__((section(".scratch_x.idepio")))
 static struct {
@@ -154,8 +155,11 @@ static struct {
     // Current interrupt status
     bool intrq;
 
+    // Low level tracing
+    bool lowlevel_trace;
+
     // LED state
-    bool status_led;
+    volatile bool status_led;
 
     bool channels_claimed;
     uint32_t pio_offset_ide_cr_loader;
@@ -314,6 +318,7 @@ static void ide_phy_init()
     g_ide_register_wr_lookup[REGWR_LBAMID     ]    = &g_ide_registers[REGRD_LBAMID     ];
     g_ide_register_wr_lookup[REGWR_LBAHIGH    ]    = &g_ide_registers[REGRD_LBAHIGH    ];
     g_ide_register_wr_lookup[REGWR_DEVICE     ]    = &g_ide_registers[REGRD_DEVICE     ];
+    g_ide_register_wr_lookup[REGWR_DATA       ]    = &g_ide_registers[REGRD_DATA       ];
 
     // Load PIO programs
     pio_clear_instruction_memory(IDE_PIO);
@@ -429,7 +434,8 @@ static inline bool ide_check_device_selected()
 }
 
 // Load new value to the state machine that loads the control register
-// If update_now is true,
+// If update_now is true, triggers the state machine immediately.
+// Otherwise it will be done on next register read/write or by ide_update_control_reg_apply().
 static inline void ide_update_control_reg(bool update_now)
 {
     uint32_t cr_val = MUXCR_STATUS;
@@ -466,6 +472,11 @@ static inline void ide_update_control_reg(bool update_now)
     {
         IDE_PIO->irq_force = 1; // Start loading
     }
+}
+
+static inline void ide_update_control_reg_apply()
+{
+    IDE_PIO->irq_force = 1;
 }
 
 __attribute__((section(".scratch_y.idephy")))
@@ -624,12 +635,20 @@ static bool ide_phy_send_data_core1(uint32_t words, const uint16_t *data, bool a
 {
     trace_write(TRACE_ID_SENDDATA_START | (words << 8));
 
+    // Load bytes to simulated data register each time host reads it.
     g_ide_registers[REGRD_DATA] = data[0];
-    ide_set_status(IDE_STATUS_DEVRDY | IDE_STATUS_DATAREQ);
     
     if (assert_irq)
     {
+        // This sequence ensures that we are able to start sending immediately
+        // after the interrupt assert takes effect.
         ide_phy_assert_irq_core1();
+        ide_set_status(IDE_STATUS_DEVRDY | IDE_STATUS_DATAREQ);
+        ide_update_control_reg_apply();
+    }
+    else
+    {
+        ide_set_status(IDE_STATUS_DEVRDY | IDE_STATUS_DATAREQ);
     }
 
     uint32_t done = 1;
@@ -656,6 +675,11 @@ static bool ide_phy_send_data_core1(uint32_t words, const uint16_t *data, bool a
         }
     }
 
+    // Wait for last byte
+    while (!(dma_hw->intr & BM(IDE_DMACH_REGRD2)));
+    *(volatile uint32_t*)&(dma_hw->intr) = BM(IDE_DMACH_REGRD2);
+
+    g_ide_registers[REGRD_DATA] = 0;
     trace_write(TRACE_ID_SENDDATA_DONE);
     ide_set_status(IDE_STATUS_DEVRDY | IDE_STATUS_BSY);
     return true;
@@ -667,12 +691,17 @@ static bool ide_phy_recv_data_core1(uint32_t words, uint16_t *data, bool assert_
 {
     trace_write(TRACE_ID_RECVDATA_START | (words << 8));
 
-    g_ide_register_wr_lookup[REGWR_DATA] = &data[0];
-    ide_set_status(IDE_STATUS_DEVRDY | IDE_STATUS_DATAREQ);
-
     if (assert_irq)
     {
+        // This sequence ensures that we are able to start receiving immediately
+        // after the interrupt assert takes effect.
         ide_phy_assert_irq_core1();
+        ide_set_status(IDE_STATUS_DEVRDY | IDE_STATUS_DATAREQ);
+        ide_update_control_reg_apply();
+    }
+    else
+    {
+        ide_set_status(IDE_STATUS_DEVRDY | IDE_STATUS_DATAREQ);
     }
 
     uint32_t done = 0;
@@ -686,8 +715,8 @@ static bool ide_phy_recv_data_core1(uint32_t words, uint16_t *data, bool assert_
             if (lookup_addr == (uint32_t)&g_ide_register_wr_lookup[REGWR_DATA])
             {
                 // Advance write pointer for data register
+                data[done++] = g_ide_registers[REGRD_DATA];
                 *(volatile uint32_t*)&(dma_hw->intr) = BM(IDE_DMACH_REGWR3);
-                g_ide_register_wr_lookup[REGWR_DATA] = &data[++done];
             }
             else
             {
@@ -797,6 +826,13 @@ static void ide_phy_loop_core1()
                 {
                     *buf->status = IDE_MSGSTAT_ABORTED;
                 }
+            }
+            else if (buf->type == IDE_MSG_PLATFORM_0)
+            {
+                // Platform message is to update control register for LED blinking
+                g_ide_phy.status_led = buf->payload.raw[0];
+                ide_update_control_reg(true);
+                *buf->status = IDE_MSGSTAT_SUCCESS;
             }
             else
             {
@@ -913,11 +949,13 @@ void ide_phy_reset()
     multicore_fifo_drain();
     ide_phy_init();
     multicore_launch_core1_with_stack(&ide_phy_loop_core1, g_ide_phy_core1_stack, sizeof(g_ide_phy_core1_stack));
+
+    g_ide_phy.lowlevel_trace = ini_getbool("IDE", "Trace", g_ide_phy.lowlevel_trace, CONFIGFILE);
 }
 
 ide_phy_msg_t *ide_phy_get_msg()
 {
-    if (g_azlog_debug)
+    if (g_azlog_debug && g_ide_phy.lowlevel_trace)
     {
         print_trace_log();
     }
@@ -935,6 +973,7 @@ ide_phy_msg_t *ide_phy_get_msg()
 bool ide_phy_send_msg(ide_phy_msg_t *msg)
 {
     static ide_msg_status_t dummy_status;
+    bool retval = false;
 
     if (multicore_fifo_wready())
     {
@@ -945,10 +984,14 @@ bool ide_phy_send_msg(ide_phy_msg_t *msg)
         sio_hw->fifo_wr = (uint32_t)buf;
         
         *buf->status = IDE_MSGSTAT_QUEUED;
-        return true;
+        retval = true;
     }
-    else
+    
+    if (g_azlog_debug && g_ide_phy.lowlevel_trace)
     {
-        return false;
+        print_trace_log();
     }
+
+    return retval;
 }
+
