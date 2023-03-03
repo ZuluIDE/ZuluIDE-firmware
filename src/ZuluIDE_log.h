@@ -49,6 +49,7 @@ inline void azlog_raw()
     // End of template recursion
 }
 
+// Timing function provided by Arduino or platform code
 extern "C" unsigned long millis();
 
 // Variadic template for printing multiple items

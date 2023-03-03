@@ -1,10 +1,9 @@
 // High-level implementation of IDE command handling
 
 #include "ZuluIDE.h"
-#include "ZuluIDE_config.h"
+#include "ide_protocol.h"
 #include "ide_phy.h"
 #include "ide_constants.h"
-#include "ide_cdrom.h"
 
 // Map from command index for command name for logging
 static const char *get_ide_command_name(uint8_t cmd)
@@ -18,18 +17,21 @@ static const char *get_ide_command_name(uint8_t cmd)
     }
 }
 
-static uint32_t g_ide_buffer[IDE_BUFFER_SIZE / 4];
-static IDECDROMDevice g_ide_cdrom;
-static IDEImageFile g_ide_current_image((uint8_t*)g_ide_buffer, IDE_BUFFER_SIZE);
-static IDEDevice *g_ide_device = &g_ide_cdrom;
+static IDEDevice *g_ide_devices[2];
 
-void ide_protocol_init()
+static void do_phy_reset()
 {
-    ide_phy_reset();
-
-    g_ide_current_image.open_file(SD.vol(), "cd.iso", true);
-    g_ide_cdrom.set_image(&g_ide_current_image);
+    ide_phy_reset(g_ide_devices[0] != NULL, g_ide_devices[1] != NULL);
 }
+
+void ide_protocol_init(IDEDevice *primary, IDEDevice *secondary)
+{
+    g_ide_devices[0] = primary;
+    g_ide_devices[1] = secondary;
+
+    do_phy_reset();
+}
+
 
 void ide_protocol_poll()
 {
@@ -40,9 +42,18 @@ void ide_protocol_poll()
         if (msg->type == IDE_MSG_CMD_START)
         {
             uint8_t cmd = msg->payload.cmd_start.command;
-            azdbg("Command: ", cmd, " ", get_ide_command_name(cmd));
+            int selected_device = (msg->payload.cmd_start.device >> 4) & 1;
+            azdbg("DEV", selected_device, " Command: ", cmd, " ", get_ide_command_name(cmd));
 
-            bool status = g_ide_device->handle_command(msg);
+            IDEDevice *device = g_ide_devices[selected_device];
+
+            if (!device)
+            {
+                azdbg("-- Ignoring command for device not present");
+                return;
+            }
+
+            bool status = device->handle_command(msg);
             if (!status)
             {
                 azdbg("-- No command handler");
@@ -52,7 +63,7 @@ void ide_protocol_poll()
                 if (!ide_phy_send_msg(&response))
                 {
                     azlog("-- IDE PHY stuck on command ", cmd, "? Attempting reset");
-                    ide_phy_reset();
+                    do_phy_reset();
                 }
             }
         }
@@ -64,7 +75,8 @@ void ide_protocol_poll()
                 default: azdbg("PHY EVENT: ", (uint8_t)msg->type); break;
             }
 
-            g_ide_device->handle_event(msg);
+            if (g_ide_devices[0]) g_ide_devices[0]->handle_event(msg);
+            if (g_ide_devices[1]) g_ide_devices[1]->handle_event(msg);
         }
     }
 }

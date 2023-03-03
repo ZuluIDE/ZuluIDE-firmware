@@ -11,7 +11,7 @@ pyocd gdbserver --target rp2040_core0 --persist &
 #sleep 0.2
 #orbuculum &
 
-pidof orbuculum || orbuculum -O "-T u -a 7812500" -v3 > orbuculum.log 2>&1 &
+pidof orbuculum || orbuculum -O "-T u -a 1000000" -v3 > orbuculum.log 2>&1 &
 
 sleep 0.2
 nc -v localhost 3443 &

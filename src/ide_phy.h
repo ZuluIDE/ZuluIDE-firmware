@@ -99,7 +99,7 @@ struct ide_phy_msg_t {
 };
 
 // Reset the PHY layer and clear FIFOs
-void ide_phy_reset();
+void ide_phy_reset(bool has_dev0, bool has_dev1);
 
 // Returns one message from PHY FIFO, or NULL if empty.
 // Returned pointer is valid until next call to this function.

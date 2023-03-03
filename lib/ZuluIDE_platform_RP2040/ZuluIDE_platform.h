@@ -6,10 +6,6 @@
 #include <Arduino.h>
 #include "ZuluIDE_platform_gpio.h"
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 /* These are used in debug output and default SCSI strings */
 extern const char *g_azplatform_name;
 #define PLATFORM_NAME "ZuluIDE RP2040"
@@ -23,20 +19,9 @@ void azplatform_emergency_log_save();
 
 // Timing and delay functions.
 // Arduino platform already provides these
-unsigned long millis(void);
-void delay(unsigned long ms);
-
-// Short delays, can be called from interrupt mode
-static inline void delay_ns(unsigned long ns)
-{
-    delayMicroseconds((ns + 999) / 1000);
-}
-
-// Approximate fast delay
-static inline void delay_100ns()
-{
-    asm volatile ("nop \n nop \n nop \n nop \n nop \n nop \n nop \n nop \n nop \n nop \n nop");
-}
+// unsigned long millis(void);
+// void delay(unsigned long ms);
+// void delayMicroseconds(unsigned long us);
 
 // Initialize SD card and GPIO configuration
 void azplatform_init();
@@ -72,13 +57,8 @@ bool azplatform_rewrite_flash_page(uint32_t offset, uint8_t buffer[AZPLATFORM_FL
 void azplatform_boot_to_main_firmware();
 #endif
 
-#ifdef __cplusplus
-}
-
 // SD card driver for SdFat
 class SdioConfig;
 extern SdioConfig g_sd_sdio_config;
 #define SD_CONFIG g_sd_sdio_config
 #define SD_CONFIG_CRASH g_sd_sdio_config
-
-#endif

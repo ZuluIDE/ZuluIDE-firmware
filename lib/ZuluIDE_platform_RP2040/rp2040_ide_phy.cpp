@@ -303,9 +303,6 @@ static void ide_phy_init()
         g_ide_phy.channels_claimed = true;
     }
 
-    // TODO: device selection
-    g_ide_phy.device0 = true;
-
     // Fill in register write lookup table.
     // Some of the write addresses overlap the read address for a different register,
     // so they have to go through an extra lookup table.
@@ -945,7 +942,7 @@ static void print_trace_log()
     }
 }
 
-void ide_phy_reset()
+static void ide_phy_stop()
 {
     // Stop second core
     multicore_reset_core1();
@@ -960,16 +957,30 @@ void ide_phy_reset()
             g_ide_phy_msgs.sndbuf[i].status = nullptr;
         }
     }
+}
 
-    // Reinitialize hardware
+static void ide_phy_start()
+{
     ide_phy_init();
     multicore_launch_core1_with_stack(&ide_phy_loop_core1, g_ide_phy_core1_stack, sizeof(g_ide_phy_core1_stack));
+}
 
-    // Skip config reading if called from watchdog handler
-    if ((SCB->ICSR & SCB_ICSR_VECTACTIVE_Msk) == 0)
-    {
-        g_ide_phy.lowlevel_trace = ini_getbool("IDE", "Trace", g_ide_phy.lowlevel_trace, CONFIGFILE);
-    }
+void ide_phy_reset_from_watchdog()
+{
+    ide_phy_stop();
+    ide_phy_start();
+}
+
+void ide_phy_reset(bool has_dev0, bool has_dev1)
+{
+    ide_phy_stop();
+
+    // Reinitialize configuration
+    g_ide_phy.device0 = has_dev0;
+    g_ide_phy.device1 = has_dev1;
+    g_ide_phy.lowlevel_trace = ini_getbool("IDE", "Trace", g_ide_phy.lowlevel_trace, CONFIGFILE);
+
+    ide_phy_start();
 }
 
 ide_phy_msg_t *ide_phy_get_msg()

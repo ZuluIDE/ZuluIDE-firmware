@@ -13,8 +13,6 @@
 #include <platform/mbed_error.h>
 #include <multicore.h>
 
-extern "C" {
-
 const char *g_azplatform_name = PLATFORM_NAME;
 static uint32_t g_flash_chip_size = 0;
 static bool g_uart_initialized = false;
@@ -58,7 +56,7 @@ void azplatform_init()
 
     /* Initialize logging to SWO pin (UART0) */
     gpio_conf(SWO_PIN,        GPIO_FUNC_UART,false,false, true,  false, true);
-    uart_init(uart0, 7812500); // Debug UART at 7.8125 MHz baudrate (RP2040 max), to avoid slowing IDE interface down.
+    uart_init(uart0, 1000000); // Debug UART at 1 MHz baudrate
     g_uart_initialized = true;
     mbed_set_error_hook(mbed_error_hook);
 
@@ -213,8 +211,9 @@ void mbed_error_hook(const mbed_error_ctx * error_context)
     if (sio_hw->cpuid == 1)
     {
         // Don't try to save files from core 1
+        // Core 0 will reset this to recover
         azlog("--- CORE1 CRASH HANDLER END");
-        while(1) delay_100ns();
+        while(1);
     }
 
     azplatform_emergency_log_save();
@@ -223,19 +222,19 @@ void mbed_error_hook(const mbed_error_ctx * error_context)
     {
         // Flash the crash address on the LED
         // Short pulse means 0, long pulse means 1
-        int base_delay = 1000;
+        int base_delay = 200000;
         for (int i = 31; i >= 0; i--)
         {
             LED_OFF();
-            for (int j = 0; j < base_delay; j++) delay_ns(100000);
+            delayMicroseconds(base_delay);
 
             int delay = (error_context->error_address & (1 << i)) ? (3 * base_delay) : base_delay;
             LED_ON();
-            for (int j = 0; j < delay; j++) delay_ns(100000);
+            delayMicroseconds(delay);
             LED_OFF();
         }
 
-        for (int j = 0; j < base_delay * 10; j++) delay_ns(100000);
+        delayMicroseconds(base_delay);
     }
 }
 
@@ -255,6 +254,8 @@ void azplatform_log(const char *s)
 static int g_watchdog_timeout;
 static bool g_watchdog_initialized;
 static bool g_watchdog_did_bus_reset;
+
+void ide_phy_reset_from_watchdog();
 
 static void watchdog_callback(unsigned alarm_num)
 {
@@ -278,7 +279,7 @@ static void watchdog_callback(unsigned alarm_num)
             }
 
             g_watchdog_did_bus_reset = true;
-            ide_phy_reset();
+            ide_phy_reset_from_watchdog();
         }
 
         if (g_watchdog_timeout <= 0)
@@ -416,8 +417,6 @@ __attribute__((section(".btldr_vectors")))
 const void * btldr_vectors[2] = {&__StackTop, (void*)&btldr_reset_handler};
 
 #endif
-
-} /* extern "C" */
 
 /* Logging from mbed */
 

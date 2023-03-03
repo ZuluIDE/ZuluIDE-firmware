@@ -22,8 +22,8 @@ int main(void)
 
 #else
 
-extern "C" void zuluide_setup(void);
-extern "C" void zuluide_main_loop(void);
+void zuluide_setup(void);
+void zuluide_main_loop(void);
 
 #ifdef USE_ARDUINO
 extern "C" void setup(void)

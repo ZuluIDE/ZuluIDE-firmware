@@ -6,9 +6,6 @@
 #include "ide_constants.h"
 #include "ide_phy.h"
 
-void ide_protocol_init();
-void ide_protocol_poll();
-
 // This interface is used for implementing emulated IDE devices
 class IDEDevice
 {
@@ -26,3 +23,8 @@ public:
     virtual void handle_event(ide_phy_msg_t *msg) = 0;
 };
 
+// Initialize the protocol layer with devices
+void ide_protocol_init(IDEDevice *primary, IDEDevice *secondary);
+
+// Call this periodically to process events
+void ide_protocol_poll();

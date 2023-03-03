@@ -4,6 +4,11 @@
 
 #define SD_BLOCKSIZE 512
 
+IDEImageFile::IDEImageFile(): IDEImageFile(nullptr, 0)
+{
+
+}
+
 IDEImageFile::IDEImageFile(uint8_t *buffer, size_t buffer_size):
     m_blockdev(nullptr), m_contiguous(false), m_first_sector(0), m_capacity(0),
     m_read_only(false), m_buffer(buffer), m_buffer_size(buffer_size)
