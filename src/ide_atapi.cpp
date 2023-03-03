@@ -85,6 +85,7 @@ bool IDEATAPIDevice::cmd_identify_packet_device(ide_phy_msg_t *msg)
     response.type = IDE_MSG_SEND_DATA;
     response.payload.send_data.data = idf;
     response.payload.send_data.words = 256;
+    response.payload.send_data.assert_irq = true;
     ide_phy_send_msg(&response);
 
     while (!(status & IDE_MSGSTAT_DONE))
@@ -121,6 +122,7 @@ bool IDEATAPIDevice::cmd_packet(ide_phy_msg_t *msg)
     response.status = &status;
     response.payload.recv_data.words = 6;
     response.payload.recv_data.data = cmdbuf;
+    response.payload.recv_data.assert_irq = true;
     ide_phy_send_msg(&response);
 
     while (!(status & IDE_MSGSTAT_DONE))
@@ -396,6 +398,9 @@ bool IDEATAPIDevice::atapi_read(const uint8_t *cmd)
         return atapi_cmd_error(ATAPI_SENSE_NOT_READY, ATAPI_ASC_NO_MEDIUM);
     }
 
+    azdbg("-- Read ", (int)transfer_len, " sectors starting at ", (int)lba);
+
+    // TODO: asynchronous transfer
     // for (int i = 0; i < ATAPI_TRANSFER_REQ_COUNT; i++)
     // {
     //     m_transfer_reqs[i] = ide_phy_msg_t{};

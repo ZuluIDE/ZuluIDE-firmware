@@ -850,9 +850,32 @@ static void ide_phy_loop_core1()
 // Because of speed constraints, sometimes a few accesses may be lost.
 static void print_trace_log()
 {
+    uint32_t prev_msg = 0;
     uint32_t msg = 0;
-    while ((msg = trace_read()) != 0)
+    int repeat_count = 0;
+    while (1)
     {
+        msg = trace_read();
+        if (msg == prev_msg)
+        {
+            repeat_count++;
+            continue;
+        }
+        else
+        {
+            if (repeat_count > 0)
+            {
+                azdbg("---- repeat x ", (repeat_count + 1));
+            }
+            repeat_count = 0;
+        }
+        prev_msg = msg;
+
+        if (!msg)
+        {
+            break;
+        }
+
         uint8_t id = msg & 0xFF;
         if (id == TRACE_ID_RESET_START)
         {
