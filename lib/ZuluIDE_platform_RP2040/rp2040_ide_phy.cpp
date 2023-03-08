@@ -152,8 +152,8 @@ static struct {
     bool device0;
     bool device1;
 
-    // Current interrupt status
-    bool intrq;
+    // Latest mux control register value loaded to PIO
+    uint32_t control_reg;
 
     // Low level tracing
     bool lowlevel_trace;
@@ -445,13 +445,6 @@ static inline void ide_update_control_reg(bool update_now)
         {
             // Interrupt out enabled
             cr_val &= ~BM(CR_NEG_IDE_INTRQ_EN);
-
-            if (g_ide_phy.intrq)
-            {
-                // Interrupt request active
-                // NOTE: BM(9) for errata in first PCB prototype version
-                cr_val |= BM(9) | BM(CR_IDE_INTRQ);
-            }
         }
     }
 
@@ -461,6 +454,7 @@ static inline void ide_update_control_reg(bool update_now)
     }
 
     cr_val |= 0xFFFF0000; // For setting pin directions
+    g_ide_phy.control_reg = cr_val;
     IDE_PIO->txf[IDE_PIO_SM_CRLOAD] = cr_val;
     IDE_PIO->sm[IDE_PIO_SM_CRLOAD].instr = pio_encode_pull(false, false);
     IDE_PIO->sm[IDE_PIO_SM_CRLOAD].instr = pio_encode_mov(pio_x, pio_osr);
@@ -471,6 +465,18 @@ static inline void ide_update_control_reg(bool update_now)
     }
 }
 
+// Enable interrupt signal temporarily until next register access
+// For strict spec conformance it should stay active until next STATUS register read,
+// but in practice the next register access typically is a status read.
+static inline void ide_update_control_reg_temporary_irq()
+{
+    // Interrupt request active
+    // NOTE: BM(9) for errata in first PCB prototype version
+    IDE_PIO->txf[IDE_PIO_SM_CRLOAD] = g_ide_phy.control_reg | BM(9) | BM(CR_IDE_INTRQ);
+    IDE_PIO->sm[IDE_PIO_SM_CRLOAD].instr = pio_encode_pull(false, false);
+}
+
+// Apply previously started control registery update
 static inline void ide_update_control_reg_apply()
 {
     IDE_PIO->irq_force = 1;
@@ -536,13 +542,6 @@ static void ide_phy_check_register_event_core1()
         uint32_t lookup_addr = dma_hw->ch[IDE_DMACH_REGRD2].al1_read_addr;
         uint8_t regaddr = (lookup_addr >> 1) & REGADDR_MASK;
         uint8_t data = g_ide_registers[regaddr];
-
-        if (regaddr == REGRD_STATUS && g_ide_phy.intrq)
-        {
-            g_ide_phy.intrq = false;
-            ide_update_control_reg(true);
-        }
-
         trace_write(TRACE_REGRD(regaddr, data));
     }
 
@@ -617,15 +616,6 @@ static void ide_phy_check_register_event_core1()
     }
 }
 
-// Assert interrupt
-__attribute__((section(".scratch_y.idephy")))
-static void ide_phy_assert_irq_core1()
-{
-    trace_write(TRACE_ID_ASSERT_IRQ);
-    g_ide_phy.intrq = true;
-    ide_update_control_reg(true);
-}
-
 // Send data to host
 __attribute__((section(".scratch_y.idephy")))
 static bool ide_phy_send_data_core1(uint32_t words, const uint16_t *data, bool assert_irq)
@@ -639,7 +629,7 @@ static bool ide_phy_send_data_core1(uint32_t words, const uint16_t *data, bool a
     {
         // This sequence ensures that we are able to start sending immediately
         // after the interrupt assert takes effect.
-        ide_phy_assert_irq_core1();
+        ide_update_control_reg_temporary_irq();
         ide_set_status(IDE_STATUS_DEVRDY | IDE_STATUS_DATAREQ);
         ide_update_control_reg_apply();
     }
@@ -653,7 +643,7 @@ static bool ide_phy_send_data_core1(uint32_t words, const uint16_t *data, bool a
     {
         uint32_t irq;
         
-        while ((irq = dma_hw->intr) & BM(IDE_DMACH_REGRD2) && done < words)
+        while (((irq = dma_hw->intr) & BM(IDE_DMACH_REGRD2)) && done < words)
         {
             // Process reads in tight loop
             *(volatile uint32_t*)&(dma_hw->intr) = BM(IDE_DMACH_REGRD2);
@@ -692,7 +682,7 @@ static bool ide_phy_recv_data_core1(uint32_t words, uint16_t *data, bool assert_
     {
         // This sequence ensures that we are able to start receiving immediately
         // after the interrupt assert takes effect.
-        ide_phy_assert_irq_core1();
+        ide_update_control_reg_temporary_irq();
         ide_set_status(IDE_STATUS_DEVRDY | IDE_STATUS_DATAREQ);
         ide_update_control_reg_apply();
     }
@@ -796,7 +786,8 @@ static void ide_phy_loop_core1()
 
                 if (buf->payload.device_rdy.assert_irq)
                 {
-                    ide_phy_assert_irq_core1();
+                    ide_update_control_reg_temporary_irq();
+                    ide_update_control_reg_apply();
                 }
                 *buf->status = IDE_MSGSTAT_SUCCESS;
             }

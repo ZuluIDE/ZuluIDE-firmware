@@ -212,7 +212,7 @@ bool IDEATAPIDevice::handle_atapi_command(const uint8_t *cmd)
 
 bool IDEATAPIDevice::atapi_cmd_error(uint8_t sense_key, uint16_t sense_asc)
 {
-    azdbg("-- Reporting ATAPI error: ", sense_key, " ", sense_asc);
+    azdbg("-- ATAPI error: ", sense_key, " ", sense_asc);
     m_atapi_state.sense_key = sense_key;
     m_atapi_state.sense_asc = sense_asc;
 
@@ -228,7 +228,7 @@ bool IDEATAPIDevice::atapi_cmd_error(uint8_t sense_key, uint16_t sense_asc)
 
 bool IDEATAPIDevice::atapi_cmd_ok()
 {
-    azdbg("-- Command completed ok");
+    azdbg("-- ATAPI success");
     m_atapi_state.sense_key = 0;
     m_atapi_state.sense_asc = 0;
 

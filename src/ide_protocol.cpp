@@ -66,6 +66,10 @@ void ide_protocol_poll()
                     do_phy_reset();
                 }
             }
+            else
+            {
+                azdbg("-- Command complete");
+            }
         }
         else
         {
