@@ -43,6 +43,8 @@ bool IDEATAPIDevice::handle_command(ide_phy_msg_t *msg)
         case IDE_CMD_READ_SECTORS_EXT:
             return set_packet_device_signature(IDE_ERROR_ABORT);
 
+        // Supported IDE commands
+        case IDE_CMD_SET_FEATURES: return cmd_set_features(msg);
         case IDE_CMD_IDENTIFY_PACKET_DEVICE: return cmd_identify_packet_device(msg);
         case IDE_CMD_PACKET: return cmd_packet(msg);
         default: return false;
@@ -55,6 +57,37 @@ void IDEATAPIDevice::handle_event(ide_phy_msg_t *msg)
     {
         set_packet_device_signature(0);
     }
+}
+
+// Set configuration based on register contents
+bool IDEATAPIDevice::cmd_set_features(ide_phy_msg_t *msg)
+{
+    uint8_t feature = msg->payload.cmd_start.features;
+
+    ide_phy_msg_t response = {};
+    response.type = IDE_MSG_DEVICE_RDY;
+
+    if (feature == IDE_SET_FEATURE_TRANSFER_MODE)
+    {
+        uint8_t mode = msg->payload.cmd_start.sector_count;
+        azdbg("-- Set transfer mode ", mode);
+    }
+    else if (feature == IDE_SET_FEATURE_DISABLE_REVERT_TO_POWERON)
+    {
+        azdbg("-- Disable revert to power-on defaults");
+    }
+    else if (feature == IDE_SET_FEATURE_ENABLE_REVERT_TO_POWERON)
+    {
+        azdbg("-- Enable revert to power-on defaults");
+    }
+    else
+    {
+        azdbg("-- Unknown SET_FEATURE: ", feature);
+        response.payload.device_rdy.error = IDE_ERROR_ABORT;
+    }
+
+    response.payload.device_rdy.assert_irq = true;
+    return ide_phy_send_msg(&response);
 }
 
 // Responds with 512 bytes of identification data
@@ -96,6 +129,7 @@ bool IDEATAPIDevice::cmd_identify_packet_device(ide_phy_msg_t *msg)
     response = ide_phy_msg_t{};
     response.type = IDE_MSG_DEVICE_RDY;
     response.payload.device_rdy.error = 0;
+    response.payload.device_rdy.assert_irq = true;
     return ide_phy_send_msg(&response);
 }
 
@@ -148,6 +182,7 @@ bool IDEATAPIDevice::set_packet_device_signature(uint8_t error)
     msg.payload.device_rdy.lbamid = 0x14;
     msg.payload.device_rdy.lbahigh = 0xEB;
     msg.payload.device_rdy.sector_count = 0x01;
+    msg.payload.device_rdy.assert_irq = true;
     return ide_phy_send_msg(&msg);
 }
 

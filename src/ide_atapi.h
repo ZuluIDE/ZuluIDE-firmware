@@ -54,6 +54,7 @@ protected:
     // ide_phy_msg_t m_transfer_reqs[ATAPI_TRANSFER_REQ_COUNT];
     
     // IDE command handlers
+    virtual bool cmd_set_features(ide_phy_msg_t *msg);
     virtual bool cmd_identify_packet_device(ide_phy_msg_t *msg);
     virtual bool cmd_packet(ide_phy_msg_t *msg);
     virtual bool set_packet_device_signature(uint8_t error);

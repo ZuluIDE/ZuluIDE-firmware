@@ -60,6 +60,7 @@ void ide_protocol_poll()
                 ide_phy_msg_t response = {};
                 response.type = IDE_MSG_DEVICE_RDY;
                 response.payload.device_rdy.error = IDE_ERROR_ABORT;
+                response.payload.device_rdy.assert_irq = true;
                 if (!ide_phy_send_msg(&response))
                 {
                     azlog("-- IDE PHY stuck on command ", cmd, "? Attempting reset");

@@ -514,7 +514,7 @@ static void ide_phy_reset_loop_core1()
 
     trace_write(TRACE_ID_RESET_DONE);
 
-    g_ide_registers[REGRD_ERROR] = 0;
+    g_ide_registers[REGRD_ERROR] = 0x01; // Diagnostics ok
     g_ide_registers[REGRD_DEVICE] = 0;
     ide_set_status(IDE_STATUS_DEVRDY);
 
@@ -584,9 +584,16 @@ static void ide_phy_check_register_event_core1()
 
             if (regaddr == REGWR_DEVICE_CONTROL)
             {
+                bool is_reset = data & 0x04;
+                if (is_reset)
+                {
+                    g_ide_registers[REGRD_ERROR] = 0x01; // Diagnostics ok
+                    ide_set_status(IDE_STATUS_DEVRDY);
+                }
+
                 ide_update_control_reg(false);
 
-                if (data & 0x04)
+                if (is_reset)
                 {
                     // Report software reset to protocol level
                     if (multicore_fifo_wready())
