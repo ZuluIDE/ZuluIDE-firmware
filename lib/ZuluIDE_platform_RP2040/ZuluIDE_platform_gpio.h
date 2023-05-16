@@ -4,65 +4,31 @@
 
 #include <hardware/gpio.h>
 
-// IDE data port on pins 0-15
-// Used for data in/out and for controlling registers.
-#define IDE_IO_SHIFT 0
-#define IDE_IO_MASK 0xFFFF
+// FPGA configuration pins
+#define FPGA_CRESET 0
+#define FPGA_CDONE 7
+#define FPGA_SS 1
+#define FPGA_SCK 2
+#define FPGA_MOSI 3
+#define FPGA_MISO 4
+#define FPGA_SPI spi0
 
-// The hardware uses a multiplexed 16-bit data bus to access the signals.
-// The signals accessed are selected primarily by MUX_SEL and secondarily
-// by bits written to mux control register on rising edge of MUX_SEL.
-//
-// MUX_SEL   CR_DATA_SEL   CR_DATA_DIR    Data bus contents
-// -------------------------------------------------------------
-//    0          x              x         Data to load to mux control register
-//                                        on next rising edge of MUX_SEL (bits CR_xxxx).
-//    1          0              x         IDE status signals (bits SI_xxxx).
-//    1          1              0         Data input from IDE bus
-//    1          1              1         Data output to IDE bus
+// Clock output to FPGA
+#define FPGA_CLK 25
 
-// Multiplexer select signal
-// Rising edge = load control register
-// High = enable data registers
-#define MUX_SEL 16
+// QSPI bus to FPGA
+// Overlaps the configuration SPI bus
+#define FPGA_QSPI_SS 1
+#define FPGA_QSPI_SCK 2
+#define FPGA_QSPI_D0 3
+#define FPGA_QSPI_D1 4
+#define FPGA_QSPI_D2 5
+#define FPGA_QSPI_D3 6
 
-// Bits accessed through the mux control register
-// The ones marked _NEG_ are active low.
-#define CR_MUX_OE           0
-#define CR_DATA_SEL         1
-#define CR_DATA_DIR         2
-#define CR_NEG_CTRL_OUT     3
-#define CR_NEG_CTRL_IN      4
-#define CR_STATUS_LED       7
-#define CR_IDE_DMARQ        8
-#define CR_NEG_IDE_IOCS16   10
-#define CR_NEG_IDE_PDIAG    11
-#define CR_NEG_IDE_DASP     12
-#define CR_IDE_INTRQ        13
-#define CR_NEG_IDE_INTRQ_EN 14
-#define CR_IDLE_VALUE ((1 << CR_MUX_OE) | \
-                       (1 << CR_NEG_CTRL_OUT) | \
-                       (1 << CR_NEG_CTRL_IN) | \
-                       (1 << CR_NEG_IDE_IOCS16) | \
-                       (1 << CR_NEG_IDE_PDIAG) | \
-                       (1 << CR_NEG_IDE_DASP) | \
-                       (1 << CR_NEG_IDE_INTRQ_EN))
-
-// Status signals accessed through input multiplexed
-#define SI_DA0      0
-#define SI_DA1      1
-#define SI_DA2      2
-#define SI_CS0      3
-#define SI_CS1      4
-#define SI_CSEL     5
-#define SI_PDIAG    6
-#define SI_DMACK    7
-
-// Strobe signals
-#define IDE_OUT_IORDY 17
-#define IDE_IN_DIOR 24
-#define IDE_IN_DIOW 25
-#define IDE_IN_RST 29
+// IDE initialization status signals
+#define IDE_CSEL_IN 8
+#define IDE_PDIAG_IN 9
+#define IDE_DASP_IN 10
 
 // SD card pins in SDIO mode
 #define SDIO_CLK 18
@@ -77,9 +43,12 @@
 #define GPIO_I2C_SCL 27
 
 // DIP switch pins
-#define DIP_CABLESEL 24
-#define DIP_DRIVE_ID 25
-#define DIP_DBGLOG 28
+#define DIP_CABLESEL 29
+#define DIP_DRIVE_ID 28
+#define DIP_DBGLOG 24
 
 // Serial output pin
-#define SWO_PIN 28
+#define SWO_PIN 16
+
+// Status LED
+#define STATUS_LED 17

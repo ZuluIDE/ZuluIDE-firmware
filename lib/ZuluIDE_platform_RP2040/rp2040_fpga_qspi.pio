@@ -1,0 +1,24 @@
+; RP2040 PIO program for QSPI communication with FPGA
+; Run "pioasm rp2040_fpga_qspi.pio rp2040_fpga_qspi.pio.h" to regenerate the C header from this.
+
+; QSPI read/write program
+; Input shift register: shift right, autopush, threshold 8, 16 or 32 bits
+; Output shift register: shift right, autopull, threshold 8, 16 or 32 bits
+; OUT mapping: 4 QSPI data pins
+; IN mapping: 4 QSPI data pins
+; SIDESET mapping: SCK pin
+;
+; The transfer size per FIFO entry is set by autopush & autopull thresholds.
+; Using 16- or 32-bit sizes improves performance but requires divisible total count.
+;
+; When writing, the RX FIFO contents can be discarded.
+; When reading, the TX FIFO is written with dummy bytes to set number of items.
+;
+; Pin directions should be set before starting the program.
+.program fpga_qspi_transfer
+.side_set 1
+    out PINS, 4     side 0    ; Write low nibble (if TX)
+    in PINS, 4      side 1    ; Clock rising edge, read low nibble (if RX)
+    out PINS, 4     side 1    ; Write high nibble (if TX)
+    in PINS, 4      side 0    ; Clock falling edge, read high nibble (if RX)
+
