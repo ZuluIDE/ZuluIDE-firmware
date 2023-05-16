@@ -41,13 +41,13 @@ bool IDEImageFile::open_file(FsVolume *volume, const char *filename, bool read_o
     uint32_t begin = 0, end = 0;
     if (m_file.contiguousRange(&begin, &end))
     {
-        azdbg("Image file ", filename, " is contiguous, sectors ", (int)begin, " to ", (int)end);
+        dbgmsg("Image file ", filename, " is contiguous, sectors ", (int)begin, " to ", (int)end);
         m_first_sector = begin;
         m_contiguous = true;
     }
     else
     {
-        azlog("Image file ", filename, " is not contiguous, access will be slower");
+        logmsg("Image file ", filename, " is not contiguous, access will be slower");
     }
 
     return true;

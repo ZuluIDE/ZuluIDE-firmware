@@ -58,19 +58,19 @@ static bool mountSDCard()
 void print_sd_info()
 {
     uint64_t size = (uint64_t)SD.vol()->clusterCount() * SD.vol()->bytesPerCluster();
-    azlog("SD card detected, FAT", (int)SD.vol()->fatType(),
+    logmsg("SD card detected, FAT", (int)SD.vol()->fatType(),
                     " volume size: ", (int)(size / 1024 / 1024), " MB");
 
     cid_t sd_cid;
 
     if(SD.card()->readCID(&sd_cid))
     {
-        azlog("SD MID: ", (uint8_t)sd_cid.mid, ", OID: ", (uint8_t)sd_cid.oid[0], " ", (uint8_t)sd_cid.oid[1]);
+        logmsg("SD MID: ", (uint8_t)sd_cid.mid, ", OID: ", (uint8_t)sd_cid.oid[0], " ", (uint8_t)sd_cid.oid[1]);
 
         char sdname[6] = {sd_cid.pnm[0], sd_cid.pnm[1], sd_cid.pnm[2], sd_cid.pnm[3], sd_cid.pnm[4], 0};
-        azlog("SD Name: ", sdname);
-        azlog("SD Date: ", (int)sd_cid.mdtMonth(), "/", sd_cid.mdtYear());
-        azlog("SD Serial: ", sd_cid.psn());
+        logmsg("SD Name: ", sdname);
+        logmsg("SD Date: ", (int)sd_cid.mdtMonth(), "/", sd_cid.mdtYear());
+        logmsg("SD Serial: ", sd_cid.psn());
     }
 }
 
@@ -86,15 +86,15 @@ void save_logfile(bool always = false)
     static uint32_t prev_log_pos = 0;
     static uint32_t prev_log_len = 0;
     static uint32_t prev_log_save = 0;
-    uint32_t loglen = azlog_get_buffer_len();
+    uint32_t loglen = log_get_buffer_len();
 
     if (loglen != prev_log_len && g_sdcard_present)
     {
         // When debug is off, save log at most every LOG_SAVE_INTERVAL_MS
         // When debug is on, save after every SCSI command.
-        if (always || g_azlog_debug || (LOG_SAVE_INTERVAL_MS > 0 && (uint32_t)(millis() - prev_log_save) > LOG_SAVE_INTERVAL_MS))
+        if (always || g_log_debug || (LOG_SAVE_INTERVAL_MS > 0 && (uint32_t)(millis() - prev_log_save) > LOG_SAVE_INTERVAL_MS))
         {
-            g_logfile.write(azlog_get_buffer(&prev_log_pos));
+            g_logfile.write(log_get_buffer(&prev_log_pos));
             g_logfile.flush();
 
             prev_log_len = loglen;
@@ -112,7 +112,7 @@ void init_logfile()
     g_logfile = SD.open(LOGFILE, flags);
     if (!g_logfile.isOpen())
     {
-        azlog("Failed to open log file: ", SD.sdErrorCode());
+        logmsg("Failed to open log file: ", SD.sdErrorCode());
     }
     save_logfile(true);
 
@@ -133,7 +133,7 @@ static bool find_next_image(const char *directory, const char *prev_image, char 
 
     if (!root.open(directory))
     {
-        azlog("Could not open directory: ", directory);
+        logmsg("Could not open directory: ", directory);
         return false;
     }
 
@@ -191,59 +191,59 @@ void load_image()
     char imagefile[MAX_FILE_PATH];
     if (find_next_image("/", NULL, imagefile, sizeof(imagefile)))
     {
-        azlog("Loading image ", imagefile);
+        logmsg("Loading image ", imagefile);
         g_ide_imagefile.open_file(SD.vol(), imagefile, true);
         g_ide_cdrom.set_image(&g_ide_imagefile);
         blinkStatus(BLINK_STATUS_OK);
     }
     else
     {
-        azlog("No image files found");
+        logmsg("No image files found");
         blinkStatus(BLINK_ERROR_NO_IMAGES);
     }
 }
 
 void zuluide_setup(void)
 {
-    azplatform_init();
-    azplatform_late_init();
+    platform_init();
+    platform_late_init();
 
     g_sdcard_present = mountSDCard();
 
     if(!g_sdcard_present)
     {
-        azlog("SD card init failed, sdErrorCode: ", (int)SD.sdErrorCode(),
+        logmsg("SD card init failed, sdErrorCode: ", (int)SD.sdErrorCode(),
                      " sdErrorData: ", (int)SD.sdErrorData());
 
         do
         {
             blinkStatus(BLINK_ERROR_NO_SD_CARD);
             delay(1000);
-            azplatform_reset_watchdog();
+            platform_reset_watchdog();
             g_sdcard_present = mountSDCard();
         } while (!g_sdcard_present);
-        azlog("SD card init succeeded after retry");
+        logmsg("SD card init succeeded after retry");
     }
 
     if (g_sdcard_present)
     {
         if (SD.clusterCount() == 0)
         {
-            azlog("SD card without filesystem!");
+            logmsg("SD card without filesystem!");
         }
 
         print_sd_info();
     }
 
     load_image();
-    azlog("Initialization complete!");
+    logmsg("Initialization complete!");
 
     if (g_sdcard_present)
     {
         init_logfile();
         if (ini_getbool("IDE", "DisableStatusLED", false, CONFIGFILE))
         {
-            azplatform_disable_led();
+            platform_disable_led();
         }
     }
 
@@ -254,7 +254,7 @@ void zuluide_main_loop(void)
 {
     static uint32_t sd_card_check_time = 0;
 
-    azplatform_reset_watchdog();
+    platform_reset_watchdog();
 
     save_logfile();
 
@@ -272,7 +272,7 @@ void zuluide_main_loop(void)
                 if (!SD.card()->readOCR(&ocr))
                 {
                     g_sdcard_present = false;
-                    azlog("SD card removed, trying to reinit");
+                    logmsg("SD card removed, trying to reinit");
                 }
             }
         }
@@ -285,7 +285,7 @@ void zuluide_main_loop(void)
 
         if (g_sdcard_present)
         {
-            azlog("SD card reinit succeeded");
+            logmsg("SD card reinit succeeded");
             print_sd_info();
 
             init_logfile();

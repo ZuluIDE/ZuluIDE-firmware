@@ -43,41 +43,41 @@ void ide_protocol_poll()
         {
             uint8_t cmd = msg->payload.cmd_start.command;
             int selected_device = (msg->payload.cmd_start.device >> 4) & 1;
-            azdbg("DEV", selected_device, " Command: ", cmd, " ", get_ide_command_name(cmd));
+            dbgmsg("DEV", selected_device, " Command: ", cmd, " ", get_ide_command_name(cmd));
 
             IDEDevice *device = g_ide_devices[selected_device];
 
             if (!device)
             {
-                azdbg("-- Ignoring command for device not present");
+                dbgmsg("-- Ignoring command for device not present");
                 return;
             }
 
             bool status = device->handle_command(msg);
             if (!status)
             {
-                azdbg("-- No command handler");
+                dbgmsg("-- No command handler");
                 ide_phy_msg_t response = {};
                 response.type = IDE_MSG_DEVICE_RDY;
                 response.payload.device_rdy.error = IDE_ERROR_ABORT;
                 response.payload.device_rdy.assert_irq = true;
                 if (!ide_phy_send_msg(&response))
                 {
-                    azlog("-- IDE PHY stuck on command ", cmd, "? Attempting reset");
+                    logmsg("-- IDE PHY stuck on command ", cmd, "? Attempting reset");
                     do_phy_reset();
                 }
             }
             else
             {
-                azdbg("-- Command complete");
+                dbgmsg("-- Command complete");
             }
         }
         else
         {
             switch(msg->type)
             {
-                case IDE_MSG_RESET: azdbg("Reset, device control ", msg->payload.reset.device_control); break;
-                default: azdbg("PHY EVENT: ", (uint8_t)msg->type); break;
+                case IDE_MSG_RESET: dbgmsg("Reset, device control ", msg->payload.reset.device_control); break;
+                default: dbgmsg("PHY EVENT: ", (uint8_t)msg->type); break;
             }
 
             if (g_ide_devices[0]) g_ide_devices[0]->handle_event(msg);

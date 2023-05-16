@@ -70,19 +70,19 @@ bool IDEATAPIDevice::cmd_set_features(ide_phy_msg_t *msg)
     if (feature == IDE_SET_FEATURE_TRANSFER_MODE)
     {
         uint8_t mode = msg->payload.cmd_start.sector_count;
-        azdbg("-- Set transfer mode ", mode);
+        dbgmsg("-- Set transfer mode ", mode);
     }
     else if (feature == IDE_SET_FEATURE_DISABLE_REVERT_TO_POWERON)
     {
-        azdbg("-- Disable revert to power-on defaults");
+        dbgmsg("-- Disable revert to power-on defaults");
     }
     else if (feature == IDE_SET_FEATURE_ENABLE_REVERT_TO_POWERON)
     {
-        azdbg("-- Enable revert to power-on defaults");
+        dbgmsg("-- Enable revert to power-on defaults");
     }
     else
     {
-        azdbg("-- Unknown SET_FEATURE: ", feature);
+        dbgmsg("-- Unknown SET_FEATURE: ", feature);
         response.payload.device_rdy.error = IDE_ERROR_ABORT;
     }
 
@@ -190,7 +190,7 @@ bool IDEATAPIDevice::atapi_send_data(const uint16_t *data, uint16_t byte_count)
 {
     volatile ide_msg_status_t status = IDE_MSGSTAT_IDLE;
 
-    azdbg("-- ATAPI send ", (int)byte_count, " bytes: ", bytearray((const uint8_t*)data, byte_count));
+    dbgmsg("-- ATAPI send ", (int)byte_count, " bytes: ", bytearray((const uint8_t*)data, byte_count));
 
     // Set number bytes to transfer to registers
     ide_phy_msg_t response = {};
@@ -217,7 +217,7 @@ bool IDEATAPIDevice::atapi_send_data(const uint16_t *data, uint16_t byte_count)
 
     if (status != IDE_MSGSTAT_SUCCESS)
     {
-        azdbg("---- Send data failed: ", (uint8_t)status);
+        dbgmsg("---- Send data failed: ", (uint8_t)status);
     }
 
     return true;
@@ -225,7 +225,7 @@ bool IDEATAPIDevice::atapi_send_data(const uint16_t *data, uint16_t byte_count)
 
 bool IDEATAPIDevice::handle_atapi_command(const uint8_t *cmd)
 {
-    azdbg("-- ATAPI command: ", get_atapi_command_name(cmd[0]), " ", bytearray(cmd, 12));
+    dbgmsg("-- ATAPI command: ", get_atapi_command_name(cmd[0]), " ", bytearray(cmd, 12));
 
     switch (cmd[0])
     {
@@ -247,7 +247,7 @@ bool IDEATAPIDevice::handle_atapi_command(const uint8_t *cmd)
 
 bool IDEATAPIDevice::atapi_cmd_error(uint8_t sense_key, uint16_t sense_asc)
 {
-    azdbg("-- ATAPI error: ", sense_key, " ", sense_asc);
+    dbgmsg("-- ATAPI error: ", sense_key, " ", sense_asc);
     m_atapi_state.sense_key = sense_key;
     m_atapi_state.sense_asc = sense_asc;
 
@@ -263,7 +263,7 @@ bool IDEATAPIDevice::atapi_cmd_error(uint8_t sense_key, uint16_t sense_asc)
 
 bool IDEATAPIDevice::atapi_cmd_ok()
 {
-    azdbg("-- ATAPI success");
+    dbgmsg("-- ATAPI success");
     m_atapi_state.sense_key = 0;
     m_atapi_state.sense_asc = 0;
 
@@ -433,7 +433,7 @@ bool IDEATAPIDevice::atapi_read(const uint8_t *cmd)
         return atapi_cmd_error(ATAPI_SENSE_NOT_READY, ATAPI_ASC_NO_MEDIUM);
     }
 
-    azdbg("-- Read ", (int)transfer_len, " sectors starting at ", (int)lba);
+    dbgmsg("-- Read ", (int)transfer_len, " sectors starting at ", (int)lba);
 
     // TODO: asynchronous transfer
     // for (int i = 0; i < ATAPI_TRANSFER_REQ_COUNT; i++)
