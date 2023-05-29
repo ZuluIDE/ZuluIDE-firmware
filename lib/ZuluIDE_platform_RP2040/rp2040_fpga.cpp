@@ -124,19 +124,17 @@ bool fpga_init()
     fpga_qspi_pio_init();
 
     // Test communication
-    uint32_t result = 0;
-    fpga_rdcmd(0x7F, (uint8_t*)&result, 4);
-    logmsg("Result1: ", result);
-    delay(5);
-    fpga_rdcmd(0x7F, (uint8_t*)&result, 4);
-    logmsg("Result2: ", result);
-    delay(5);
-    fpga_rdcmd(0x7F, (uint8_t*)&result, 4);
-    logmsg("Result3: ", result);
-
-    if (result != 0x03020100)
+    uint32_t result1, result2, result3;
+    fpga_rdcmd(0x7F, (uint8_t*)&result1, 4);
+    delay(1);
+    fpga_rdcmd(0x7F, (uint8_t*)&result2, 4);
+    delay(1);
+    fpga_rdcmd(0x7F, (uint8_t*)&result3, 4);
+    
+    uint32_t expected = 0x03020100;
+    if (result1 != expected || result2 != expected || result3 != expected)
     {
-        logmsg("FPGA communication test failed, got ", result, " expected 0x03020100");
+        logmsg("FPGA communication test failed, got ", result1, " ", result2, " ", result3, " expected ", expected);
         return false;
     }
 

@@ -30,10 +30,9 @@ void IDEATAPIDevice::poll()
 
 }
 
-bool IDEATAPIDevice::handle_command(ide_phy_msg_t *msg)
+bool IDEATAPIDevice::handle_command(ide_registers_t *regs)
 {
-    if (msg->type != IDE_MSG_CMD_START) return false;
-    switch (msg->payload.cmd_start.command)
+    switch (regs->command)
     {
         // Commands superseded by the ATAPI packet interface
         case IDE_CMD_IDENTIFY_DEVICE:
@@ -44,32 +43,30 @@ bool IDEATAPIDevice::handle_command(ide_phy_msg_t *msg)
             return set_packet_device_signature(IDE_ERROR_ABORT);
 
         // Supported IDE commands
-        case IDE_CMD_SET_FEATURES: return cmd_set_features(msg);
-        case IDE_CMD_IDENTIFY_PACKET_DEVICE: return cmd_identify_packet_device(msg);
-        case IDE_CMD_PACKET: return cmd_packet(msg);
+        case IDE_CMD_SET_FEATURES: return cmd_set_features(regs);
+        case IDE_CMD_IDENTIFY_PACKET_DEVICE: return cmd_identify_packet_device(regs);
+        case IDE_CMD_PACKET: return cmd_packet(regs);
         default: return false;
     }
 }
 
-void IDEATAPIDevice::handle_event(ide_phy_msg_t *msg)
+void IDEATAPIDevice::handle_event(ide_event_t evt)
 {
-    if (msg->type == IDE_MSG_RESET)
+    if (evt == IDE_EVENT_HWRST || evt == IDE_EVENT_SWRST)
     {
         set_packet_device_signature(0);
     }
 }
 
 // Set configuration based on register contents
-bool IDEATAPIDevice::cmd_set_features(ide_phy_msg_t *msg)
+bool IDEATAPIDevice::cmd_set_features(ide_registers_t *regs)
 {
-    uint8_t feature = msg->payload.cmd_start.features;
+    uint8_t feature = regs->feature;
 
-    ide_phy_msg_t response = {};
-    response.type = IDE_MSG_DEVICE_RDY;
-
+    regs->error = 0;
     if (feature == IDE_SET_FEATURE_TRANSFER_MODE)
     {
-        uint8_t mode = msg->payload.cmd_start.sector_count;
+        uint8_t mode = regs->sector_count;
         dbgmsg("-- Set transfer mode ", mode);
     }
     else if (feature == IDE_SET_FEATURE_DISABLE_REVERT_TO_POWERON)
@@ -83,18 +80,26 @@ bool IDEATAPIDevice::cmd_set_features(ide_phy_msg_t *msg)
     else
     {
         dbgmsg("-- Unknown SET_FEATURE: ", feature);
-        response.payload.device_rdy.error = IDE_ERROR_ABORT;
+        regs->error = IDE_ERROR_ABORT;
     }
 
-    response.payload.device_rdy.assert_irq = true;
-    return ide_phy_send_msg(&response);
+    ide_phy_set_regs(regs);
+    if (regs->error == 0)
+    {
+        ide_phy_assert_irq(IDE_STATUS_DEVRDY);
+    }
+    else
+    {
+        ide_phy_assert_irq(IDE_STATUS_DEVRDY | IDE_STATUS_ERR);
+    }
+
+    return true;
 }
 
 // Responds with 512 bytes of identification data
-bool IDEATAPIDevice::cmd_identify_packet_device(ide_phy_msg_t *msg)
+bool IDEATAPIDevice::cmd_identify_packet_device(ide_registers_t *regs)
 {
     uint16_t idf[256] = {0};
-    volatile ide_msg_status_t status = IDE_MSGSTAT_IDLE;
 
     idf[IDE_IDENTIFY_OFFSET_GENERAL_CONFIGURATION] = 0x8000 | (m_devinfo.devtype << 8) | (m_devinfo.removable ? 0x80 : 0); // Device type
     idf[IDE_IDENTIFY_OFFSET_STANDARD_VERSION_MAJOR] = 0x0078; // Version ATAPI-6
@@ -113,111 +118,97 @@ bool IDEATAPIDevice::cmd_identify_packet_device(ide_phy_msg_t *msg)
     checksum = -checksum;
     idf[IDE_IDENTIFY_OFFSET_INTEGRITY_WORD] = ((uint16_t)checksum << 8) | 0xA5;
 
-    ide_phy_msg_t response = {};
-    response.status = &status;
-    response.type = IDE_MSG_SEND_DATA;
-    response.payload.send_data.data = idf;
-    response.payload.send_data.words = 256;
-    response.payload.send_data.assert_irq = true;
-    ide_phy_send_msg(&response);
-
-    while (!(status & IDE_MSGSTAT_DONE))
+    ide_phy_start_write(sizeof(idf));
+    ide_phy_write_block((uint8_t*)idf);
+    
+    uint32_t start = millis();
+    while (!ide_phy_is_write_finished())
     {
-        delay(1);
+        if ((uint32_t)(millis() - start) > 10000)
+        {
+            logmsg("IDEATAPIDevice::cmd_identify_packet_device() response write timeout");
+            ide_phy_stop_transfers();
+            return false;
+        }
     }
 
-    response = ide_phy_msg_t{};
-    response.type = IDE_MSG_DEVICE_RDY;
-    response.payload.device_rdy.error = 0;
-    response.payload.device_rdy.assert_irq = true;
-    return ide_phy_send_msg(&response);
+    regs->error = 0;
+    ide_phy_set_regs(regs);
+    ide_phy_assert_irq(IDE_STATUS_DEVRDY);
+    return true;
 }
 
-bool IDEATAPIDevice::cmd_packet(ide_phy_msg_t *msg)
+bool IDEATAPIDevice::cmd_packet(ide_registers_t *regs)
 {
     // Host gives limit to bytecount in responses
-    m_atapi_state.bytes_req = msg->payload.cmd_start.lbamid | ((uint16_t)msg->payload.cmd_start.lbahigh << 8);
+    m_atapi_state.bytes_req = regs->lba_mid | ((uint16_t)regs->lba_high << 8);
 
     // Report ready to receive command, keep BSY still high
-    ide_phy_msg_t response = {};
-    response.type = IDE_MSG_DEVICE_RDY;
-    response.payload.device_rdy.status = IDE_STATUS_DEVRDY | IDE_STATUS_BSY;
-    response.payload.device_rdy.set_registers = true;
-    response.payload.device_rdy.sector_count = ATAPI_SCOUNT_IS_CMD; // Command transfer to device
-    response.payload.device_rdy.lbamid = msg->payload.cmd_start.lbamid;
-    response.payload.device_rdy.lbahigh = msg->payload.cmd_start.lbahigh;
-    ide_phy_send_msg(&response);
-
+    regs->sector_count = ATAPI_SCOUNT_IS_CMD; // Command transfer to device
+    ide_phy_set_regs(regs);
+    
     // Start the data transfer and clear BSY
-    uint16_t cmdbuf[6] = {0};
-    volatile ide_msg_status_t status = IDE_MSGSTAT_IDLE;
-    response = ide_phy_msg_t{};
-    response.type = IDE_MSG_RECV_DATA;
-    response.status = &status;
-    response.payload.recv_data.words = 6;
-    response.payload.recv_data.data = cmdbuf;
-    response.payload.recv_data.assert_irq = true;
-    ide_phy_send_msg(&response);
+    uint8_t cmdbuf[12] = {0};
+    ide_phy_start_read(sizeof(cmdbuf));
 
-    while (!(status & IDE_MSGSTAT_DONE))
+    uint32_t start = millis();
+    while (!ide_phy_can_read_block())
     {
-        delay(1);
+        if ((uint32_t)(millis() - start) > 10000)
+        {
+            logmsg("IDEATAPIDevice::cmd_packet() command read timeout");
+            ide_phy_stop_transfers();
+            return false;
+        }
     }
 
-    __sync_synchronize(); // Make sure data buffer writes have committed
-
-    return handle_atapi_command((const uint8_t*)cmdbuf);
+    ide_phy_read_block(cmdbuf);
+    
+    return handle_atapi_command(cmdbuf);
 }
 
 // Set the packet device signature values to PHY registers
 // See T13/1410D revision 3a section 9.12 Signature and persistence
 bool IDEATAPIDevice::set_packet_device_signature(uint8_t error)
 {
-    ide_phy_msg_t msg = {};
-    msg.type = IDE_MSG_DEVICE_RDY;
-    msg.payload.device_rdy.error = error;
-    msg.payload.device_rdy.set_registers = true;
-    msg.payload.device_rdy.device = 0x00;
-    msg.payload.device_rdy.lbalow = 0x01;
-    msg.payload.device_rdy.lbamid = 0x14;
-    msg.payload.device_rdy.lbahigh = 0xEB;
-    msg.payload.device_rdy.sector_count = 0x01;
-    msg.payload.device_rdy.assert_irq = true;
-    return ide_phy_send_msg(&msg);
+    ide_registers_t regs = {};
+    regs.error = error;
+    regs.device = 0x00;
+    regs.lba_low = 0x01;
+    regs.lba_mid = 0x14;
+    regs.lba_high = 0xEB;
+    regs.sector_count = 0x01;
+    
+    ide_phy_set_regs(&regs);
+    ide_phy_assert_irq(IDE_STATUS_DEVRDY);
+    return true;
 }
 
-bool IDEATAPIDevice::atapi_send_data(const uint16_t *data, uint16_t byte_count)
+bool IDEATAPIDevice::atapi_send_data(const uint8_t *data, uint16_t byte_count)
 {
-    volatile ide_msg_status_t status = IDE_MSGSTAT_IDLE;
-
     dbgmsg("-- ATAPI send ", (int)byte_count, " bytes: ", bytearray((const uint8_t*)data, byte_count));
 
     // Set number bytes to transfer to registers
-    ide_phy_msg_t response = {};
-    response.type = IDE_MSG_DEVICE_RDY;
-    response.payload.device_rdy.status = IDE_STATUS_DEVRDY | IDE_STATUS_BSY;
-    response.payload.device_rdy.set_registers = true;
-    response.payload.device_rdy.sector_count = ATAPI_SCOUNT_TO_HOST; // Data transfer to host
-    response.payload.device_rdy.lbamid = (uint8_t)byte_count;
-    response.payload.device_rdy.lbahigh = (uint8_t)(byte_count >> 8);
-    if (!ide_phy_send_msg(&response)) return false;
+    ide_registers_t regs = {};
+    regs.status = IDE_STATUS_DEVRDY | IDE_STATUS_BSY;
+    regs.sector_count = ATAPI_SCOUNT_TO_HOST; // Data transfer to host
+    regs.lba_mid = (uint8_t)byte_count;
+    regs.lba_high = (uint8_t)(byte_count >> 8);
+    ide_phy_set_regs(&regs);
 
-    response = ide_phy_msg_t{};
-    response.status = &status;
-    response.type = IDE_MSG_SEND_DATA;
-    response.payload.send_data.data = data;
-    response.payload.send_data.words = (byte_count + 1) / 2;
-    response.payload.send_data.assert_irq = true;
-    if (!ide_phy_send_msg(&response)) return false;
-
-    while (!(status & IDE_MSGSTAT_DONE))
+    // Start data transfer
+    ide_phy_start_write(byte_count);
+    ide_phy_write_block(data);
+    
+    uint32_t start = millis();
+    while (!ide_phy_is_write_finished())
     {
-        delay(1);
-    }
-
-    if (status != IDE_MSGSTAT_SUCCESS)
-    {
-        dbgmsg("---- Send data failed: ", (uint8_t)status);
+        if ((uint32_t)(millis() - start) > 10000)
+        {
+            logmsg("IDEATAPIDevice::atapi_send_data() data write timeout");
+            ide_phy_stop_transfers();
+            return false;
+        }
     }
 
     return true;
@@ -251,14 +242,14 @@ bool IDEATAPIDevice::atapi_cmd_error(uint8_t sense_key, uint16_t sense_asc)
     m_atapi_state.sense_key = sense_key;
     m_atapi_state.sense_asc = sense_asc;
 
-    ide_phy_msg_t msg = {};
-    msg.type = IDE_MSG_DEVICE_RDY;
-    msg.payload.device_rdy.error = IDE_ERROR_ABORT | (sense_key << 4);
-    msg.payload.device_rdy.status = IDE_STATUS_DEVRDY | IDE_STATUS_ERR;
-    msg.payload.device_rdy.set_registers = true;
-    msg.payload.device_rdy.sector_count = ATAPI_SCOUNT_IS_CMD | ATAPI_SCOUNT_TO_HOST;
-    msg.payload.device_rdy.assert_irq = true;
-    return ide_phy_send_msg(&msg);
+    ide_registers_t regs = {};
+    ide_phy_get_regs(&regs);
+    regs.error = IDE_ERROR_ABORT | (sense_key << 4);
+    regs.sector_count = ATAPI_SCOUNT_IS_CMD | ATAPI_SCOUNT_TO_HOST;
+    ide_phy_set_regs(&regs);
+    ide_phy_assert_irq(IDE_STATUS_DEVRDY | IDE_STATUS_ERR);
+
+    return true;
 }
 
 bool IDEATAPIDevice::atapi_cmd_ok()
@@ -267,14 +258,14 @@ bool IDEATAPIDevice::atapi_cmd_ok()
     m_atapi_state.sense_key = 0;
     m_atapi_state.sense_asc = 0;
 
-    ide_phy_msg_t msg = {};
-    msg.type = IDE_MSG_DEVICE_RDY;
-    msg.payload.device_rdy.error = 0;
-    msg.payload.device_rdy.status = IDE_STATUS_DEVRDY;
-    msg.payload.device_rdy.set_registers = true;
-    msg.payload.device_rdy.sector_count = ATAPI_SCOUNT_IS_CMD | ATAPI_SCOUNT_TO_HOST;
-    msg.payload.device_rdy.assert_irq = true;
-    return ide_phy_send_msg(&msg);
+    ide_registers_t regs = {};
+    ide_phy_get_regs(&regs);
+    regs.error = 0;
+    regs.sector_count = ATAPI_SCOUNT_IS_CMD | ATAPI_SCOUNT_TO_HOST;
+    ide_phy_set_regs(&regs);
+    ide_phy_assert_irq(IDE_STATUS_DEVRDY);
+
+    return true;
 }
 
 bool IDEATAPIDevice::atapi_test_unit_ready(const uint8_t *cmd)
@@ -285,8 +276,7 @@ bool IDEATAPIDevice::atapi_test_unit_ready(const uint8_t *cmd)
 bool IDEATAPIDevice::atapi_inquiry(const uint8_t *cmd)
 {
     uint8_t req_bytes = cmd[4];
-    uint16_t inquiry_buf[18] = {0};
-    uint8_t *inquiry = (uint8_t*)inquiry_buf;
+    uint8_t inquiry[36] = {0};
     uint8_t count = 36;
     inquiry[ATAPI_INQUIRY_OFFSET_TYPE] = m_devinfo.devtype;
     inquiry[ATAPI_INQUIRY_REMOVABLE_MEDIA] = m_devinfo.removable ? 0x80 : 0;
@@ -296,7 +286,7 @@ bool IDEATAPIDevice::atapi_inquiry(const uint8_t *cmd)
     memcpy(&inquiry[ATAPI_INQUIRY_PRODUCT], "Product", 7);
 
     if (req_bytes < count) count = req_bytes;
-    atapi_send_data(inquiry_buf, count);
+    atapi_send_data(inquiry, count);
 
     return atapi_cmd_ok();
 }
@@ -327,7 +317,7 @@ bool IDEATAPIDevice::atapi_mode_sense(const uint8_t *cmd)
         resp_bytes += atapi_get_mode_page(page_ctrl, 0, &resp[resp_bytes], max_bytes - resp_bytes);
     }
 
-    atapi_send_data(m_buffer.word, resp_bytes);
+    atapi_send_data(m_buffer.bytes, resp_bytes);
 
     return atapi_cmd_ok();
 }
@@ -346,7 +336,7 @@ bool IDEATAPIDevice::atapi_request_sense(const uint8_t *cmd)
     resp[13] = m_atapi_state.sense_asc & 0xFF;
     
     if (req_bytes < sense_length) sense_length = req_bytes;
-    atapi_send_data(m_buffer.word, sense_length);
+    atapi_send_data(m_buffer.bytes, sense_length);
 
     return atapi_cmd_ok();
 }
@@ -370,7 +360,7 @@ bool IDEATAPIDevice::atapi_get_event_status_notification(const uint8_t *cmd)
         buf[5] = 0x01; // Power status
         buf[6] = 0; // Start slot
         buf[7] = 0; // End slot
-        if (!atapi_send_data(m_buffer.word, 8))
+        if (!atapi_send_data(m_buffer.bytes, 8))
         {
             return atapi_cmd_error(ATAPI_SENSE_ABORTED_CMD, 0);
         }
@@ -386,7 +376,7 @@ bool IDEATAPIDevice::atapi_get_event_status_notification(const uint8_t *cmd)
         buf[1] = 2; // EventDataLength
         buf[2] = 0x00; // Media status events
         buf[3] = 0x04; // Supported events
-        atapi_send_data(m_buffer.word, 4);
+        atapi_send_data(m_buffer.bytes, 4);
         return atapi_cmd_ok();
     }
 }
@@ -397,7 +387,7 @@ bool IDEATAPIDevice::atapi_read_capacity(const uint8_t *cmd)
 
     m_buffer.dword[0] = __builtin_bswap32(capacity / m_devinfo.bytes_per_sector);
     m_buffer.dword[1] = __builtin_bswap32(m_devinfo.bytes_per_sector);
-    atapi_send_data(m_buffer.word, 8);
+    atapi_send_data(m_buffer.bytes, 8);
 
     return atapi_cmd_ok();
 }
@@ -461,7 +451,7 @@ ssize_t IDEATAPIDevice::read_callback(const uint8_t *data, size_t bytes)
 {
     // TODO: Make this asynchronous for optimization
     bytes &= ~1;
-    if (!atapi_send_data((const uint16_t*)data, bytes))
+    if (!atapi_send_data(data, bytes))
     {
         return -1;
     }

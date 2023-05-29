@@ -20,9 +20,11 @@ public:
 
     virtual void poll();
 
-    virtual bool handle_command(ide_phy_msg_t *msg);
+    virtual bool handle_command(ide_registers_t *regs);
 
-    virtual void handle_event(ide_phy_msg_t *msg);
+    virtual void handle_event(ide_event_t event);
+
+    virtual bool is_packet_device() { return true; }
 
 protected:
     IDEImage *m_image;
@@ -54,14 +56,14 @@ protected:
     // ide_phy_msg_t m_transfer_reqs[ATAPI_TRANSFER_REQ_COUNT];
     
     // IDE command handlers
-    virtual bool cmd_set_features(ide_phy_msg_t *msg);
-    virtual bool cmd_identify_packet_device(ide_phy_msg_t *msg);
-    virtual bool cmd_packet(ide_phy_msg_t *msg);
+    virtual bool cmd_set_features(ide_registers_t *regs);
+    virtual bool cmd_identify_packet_device(ide_registers_t *regs);
+    virtual bool cmd_packet(ide_registers_t *regs);
     virtual bool set_packet_device_signature(uint8_t error);
     
     // Methods used by ATAPI command implementations
     bool set_atapi_byte_count(uint16_t byte_count);
-    bool atapi_send_data(const uint16_t *data, uint16_t byte_count);
+    bool atapi_send_data(const uint8_t *data, uint16_t byte_count);
     bool atapi_cmd_error(uint8_t sense_key, uint16_t sense_asc);
     bool atapi_cmd_ok();
 

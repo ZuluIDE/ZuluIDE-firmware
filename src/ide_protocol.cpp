@@ -17,11 +17,18 @@ static const char *get_ide_command_name(uint8_t cmd)
     }
 }
 
+static ide_phy_config_t g_ide_config;
 static IDEDevice *g_ide_devices[2];
 
 static void do_phy_reset()
 {
-    ide_phy_reset(g_ide_devices[0] != NULL, g_ide_devices[1] != NULL);
+    g_ide_config.enable_dev0 = (g_ide_devices[0] != NULL);
+    g_ide_config.enable_dev1 = (g_ide_devices[1] != NULL);
+    g_ide_config.enable_dev1_zeros = (g_ide_devices[0] != NULL)
+                                    && (g_ide_devices[1] == NULL)
+                                    && (g_ide_devices[0]->is_packet_device());
+
+    ide_phy_reset(&g_ide_config);
 }
 
 void ide_protocol_init(IDEDevice *primary, IDEDevice *secondary)
@@ -35,14 +42,17 @@ void ide_protocol_init(IDEDevice *primary, IDEDevice *secondary)
 
 void ide_protocol_poll()
 {
-    ide_phy_msg_t *msg = ide_phy_get_msg();
-
-    if (msg)
+    ide_event_t evt = ide_phy_get_events();
+    
+    if (evt != IDE_EVENT_NONE)
     {
-        if (msg->type == IDE_MSG_CMD_START)
+        if (evt == IDE_EVENT_CMD)
         {
-            uint8_t cmd = msg->payload.cmd_start.command;
-            int selected_device = (msg->payload.cmd_start.device >> 4) & 1;
+            ide_registers_t regs = {};
+            ide_phy_get_regs(&regs);
+
+            uint8_t cmd = regs.command;
+            int selected_device = (regs.device >> 4) & 1;
             dbgmsg("DEV", selected_device, " Command: ", cmd, " ", get_ide_command_name(cmd));
 
             IDEDevice *device = g_ide_devices[selected_device];
@@ -53,19 +63,13 @@ void ide_protocol_poll()
                 return;
             }
 
-            bool status = device->handle_command(msg);
+            bool status = device->handle_command(&regs);
             if (!status)
             {
-                dbgmsg("-- No command handler");
-                ide_phy_msg_t response = {};
-                response.type = IDE_MSG_DEVICE_RDY;
-                response.payload.device_rdy.error = IDE_ERROR_ABORT;
-                response.payload.device_rdy.assert_irq = true;
-                if (!ide_phy_send_msg(&response))
-                {
-                    logmsg("-- IDE PHY stuck on command ", cmd, "? Attempting reset");
-                    do_phy_reset();
-                }
+                dbgmsg("-- Command handler failed");
+                regs.error = IDE_ERROR_ABORT;
+                ide_phy_set_regs(&regs);
+                ide_phy_assert_irq(IDE_STATUS_DEVRDY | IDE_STATUS_ERR);
             }
             else
             {
@@ -74,14 +78,16 @@ void ide_protocol_poll()
         }
         else
         {
-            switch(msg->type)
+            switch(evt)
             {
-                case IDE_MSG_RESET: dbgmsg("Reset, device control ", msg->payload.reset.device_control); break;
-                default: dbgmsg("PHY EVENT: ", (uint8_t)msg->type); break;
+                case IDE_EVENT_HWRST: dbgmsg("IDE_EVENT_HWRST"); break;
+                case IDE_EVENT_SWRST: dbgmsg("IDE_EVENT_SWRST"); break;
+                case IDE_EVENT_DATA_TRANSFER_DONE: dbgmsg("IDE_EVENT_DATA_TRANSFER_DONE"); break;
+                default: dbgmsg("PHY EVENT: ", (int)evt); break;
             }
 
-            if (g_ide_devices[0]) g_ide_devices[0]->handle_event(msg);
-            if (g_ide_devices[1]) g_ide_devices[1]->handle_event(msg);
+            if (g_ide_devices[0]) g_ide_devices[0]->handle_event(evt);
+            if (g_ide_devices[1]) g_ide_devices[1]->handle_event(evt);
         }
     }
 }

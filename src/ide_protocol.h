@@ -16,11 +16,14 @@ public:
     // Called whenever new command is received from host.
     // The handler should use ide_phy_send_msg() to send response.
     // Returning false results in IDE_ERROR_ABORT response.
-    virtual bool handle_command(ide_phy_msg_t *msg) = 0;
+    virtual bool handle_command(ide_registers_t *regs) = 0;
 
     // Called for other PHY events than new commands
     // Implementation can be empty.
-    virtual void handle_event(ide_phy_msg_t *msg) = 0;
+    virtual void handle_event(ide_event_t event) = 0;
+
+    // Returns true if this device implements the ATAPI packet command set 
+    virtual bool is_packet_device() { return false; }
 };
 
 // Initialize the protocol layer with devices
