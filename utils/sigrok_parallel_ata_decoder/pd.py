@@ -234,8 +234,6 @@ class Decoder(srd.Decoder):
         self.reset()
 
     def reset(self):
-        self.ss_write = None
-        self.ss_read = None
         self.prev_cmd = None
         self.prev_atapi = None
         self.prev_data_transfer = None
@@ -420,16 +418,21 @@ class Decoder(srd.Decoder):
             ior = pins[Pins.IOR]
 
             if not iow:
-                self.ss_write = self.samplenum
+                start = self.samplenum
+
+                while not pins[Pins.IOW]:
+                    prev_pins = pins
+                    pins = self.wait()
+
+                self.handle_write(start, self.samplenum, prev_pins)
 
             elif not ior:
-                self.ss_read = self.samplenum
+                start = self.samplenum
 
-            elif self.ss_write is not None:
-                self.handle_write(self.ss_write, self.samplenum, pins)
-                self.ss_write = None
+                while not pins[Pins.IOR]:
+                    prev_pins = pins
+                    pins = self.wait()
 
-            elif self.ss_read is not None:
-                self.handle_read(self.ss_read, self.samplenum, pins)
-                self.ss_read = None
+                self.handle_read(start, self.samplenum, prev_pins)
+
 
