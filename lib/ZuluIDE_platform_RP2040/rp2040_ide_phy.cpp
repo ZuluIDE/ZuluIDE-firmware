@@ -87,6 +87,7 @@ ide_event_t ide_phy_get_events()
 void ide_phy_get_regs(ide_registers_t *regs)
 {
     fpga_rdcmd(FPGA_CMD_READ_IDE_REGS, (uint8_t*)regs, sizeof(*regs));
+    dbgmsg("ide_phy_get_regs(", bytearray((const uint8_t*)regs, sizeof(*regs)), ")");
 }
 
 // Set current state of IDE registers
@@ -94,13 +95,14 @@ void ide_phy_set_regs(const ide_registers_t *regs)
 {
     fpga_wrcmd(FPGA_CMD_WRITE_IDE_REGS, (const uint8_t*)regs, sizeof(*regs));
 
-    dbgmsg("ide_phy_set_regs ", bytearray((const uint8_t*)regs, sizeof(*regs)));
+    dbgmsg("ide_phy_set_regs(", bytearray((const uint8_t*)regs, sizeof(*regs)), ")");
     fpga_dump_ide_regs();
 }
 
 // Data writes to IDE bus
 void ide_phy_start_write(uint32_t blocklen)
 {
+    dbgmsg("ide_phy_start_write(", (int)blocklen, ")");
     g_ide_phy.blocklen = blocklen;
     uint16_t arg = blocklen - 1;
     fpga_wrcmd(FPGA_CMD_START_WRITE, (const uint8_t*)&arg, 2);
@@ -116,6 +118,7 @@ bool ide_phy_can_write_block()
 
 void ide_phy_write_block(const uint8_t *buf)
 {
+    dbgmsg("ide_phy_write_block(", bytearray(buf, g_ide_phy.blocklen), ")");
     fpga_wrcmd(FPGA_CMD_WRITE_DATABUF, buf, g_ide_phy.blocklen);
     g_ide_phy.transfer_running = true;
 }
@@ -125,15 +128,26 @@ bool ide_phy_is_write_finished()
     uint8_t status;
     fpga_rdcmd(FPGA_CMD_READ_STATUS, &status, 1);
     assert(status & FPGA_STATUS_DATA_DIR);
-    return (status & FPGA_STATUS_TX_DONE);
+    if (status & FPGA_STATUS_TX_DONE)
+    {
+        dbgmsg("ide_phy_is_write_finished() => true");
+        return true;
+    }
+    else
+    {
+        return false;
+    }
 }
 
 void ide_phy_start_read(uint32_t blocklen)
 {
+    dbgmsg("ide_phy_start_read(", (int)blocklen, ")");
     g_ide_phy.blocklen = blocklen;
     uint16_t arg = blocklen - 1;
-    fpga_wrcmd(FPGA_CMD_START_WRITE, (const uint8_t*)&arg, 2);
+    fpga_wrcmd(FPGA_CMD_START_READ, (const uint8_t*)&arg, 2);
     g_ide_phy.transfer_running = true;
+
+    ide_phy_assert_irq(IDE_STATUS_DEVRDY | IDE_STATUS_DATAREQ);
 }
 
 bool ide_phy_can_read_block()
@@ -147,6 +161,7 @@ bool ide_phy_can_read_block()
 void ide_phy_read_block(uint8_t *buf)
 {
     fpga_rdcmd(FPGA_CMD_READ_DATABUF, buf, g_ide_phy.blocklen);
+    dbgmsg("ide_phy_read_block(", bytearray(buf, g_ide_phy.blocklen), ")");
 }
 
 void ide_phy_stop_transfers()
@@ -155,12 +170,13 @@ void ide_phy_stop_transfers()
     g_ide_phy.blocklen = 0;
     uint16_t arg = 65535;
     fpga_wrcmd(FPGA_CMD_START_WRITE, (const uint8_t*)&arg, 2);
+    dbgmsg("ide_phy_stop_transfers()");
 }
 
 // Assert IDE interrupt and set status register
 void ide_phy_assert_irq(uint8_t ide_status)
 {
     fpga_wrcmd(FPGA_CMD_ASSERT_IRQ, &ide_status, 1);
-    dbgmsg("ide_phy_assert_irq ", ide_status);
+    dbgmsg("ide_phy_assert_irq(", ide_status, ")");
     fpga_dump_ide_regs();
 }

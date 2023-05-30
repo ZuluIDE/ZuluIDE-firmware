@@ -35,8 +35,9 @@
 //                                 2:  Data buffer ready for writing
 //                                 3:  Host has read all buffered data
 //                                 4:  IDE bus reset has occurred since last status read.
-//                                 5:  IDE command register has been written since last status read.
-//                                 6:  Any IDE register has been written since last status read.
+//                                 5:  IDE DEVICE_CONTROL software reset has occurred since last status read.
+//                                 6:  IDE command register has been written since last status read.
+//                                 7:  Any IDE register has been written since last status read.
 //                 Byte 1:   IDE status register
 //
 //     0x01:    Read IDE registers, response:

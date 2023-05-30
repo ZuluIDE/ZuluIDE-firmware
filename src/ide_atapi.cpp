@@ -202,7 +202,7 @@ bool IDEATAPIDevice::atapi_send_data(const uint8_t *data, uint16_t byte_count)
     // Set number bytes to transfer to registers
     ide_registers_t regs = {};
     ide_phy_get_regs(&regs);
-    regs.status = IDE_STATUS_DEVRDY | IDE_STATUS_BSY;
+    regs.status = IDE_STATUS_BSY;
     regs.sector_count = ATAPI_SCOUNT_TO_HOST; // Data transfer to host
     regs.lba_mid = (uint8_t)byte_count;
     regs.lba_high = (uint8_t)(byte_count >> 8);
