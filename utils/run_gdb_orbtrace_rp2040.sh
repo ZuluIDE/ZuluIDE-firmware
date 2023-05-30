@@ -8,7 +8,7 @@ sleep 0.2
 #orbtrace -T u -a 1000000
 #sleep 0.2
 pyocd gdbserver --target rp2040_core0 --persist &
-#sleep 0.2
+sleep 1
 #orbuculum &
 
 pidof orbuculum || orbuculum -O "-T u -a 1000000" -v3 > orbuculum.log 2>&1 &

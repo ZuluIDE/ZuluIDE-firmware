@@ -40,7 +40,7 @@ bool IDEATAPIDevice::handle_command(ide_registers_t *regs)
         case IDE_CMD_DEVICE_RESET:
         case IDE_CMD_READ_SECTORS:
         case IDE_CMD_READ_SECTORS_EXT:
-            return set_packet_device_signature(IDE_ERROR_ABORT);
+            return set_packet_device_signature(IDE_ERROR_ABORT, false);
 
         // Supported IDE commands
         case IDE_CMD_SET_FEATURES: return cmd_set_features(regs);
@@ -54,7 +54,7 @@ void IDEATAPIDevice::handle_event(ide_event_t evt)
 {
     if (evt == IDE_EVENT_HWRST || evt == IDE_EVENT_SWRST)
     {
-        set_packet_device_signature(0);
+        set_packet_device_signature(0, true);
     }
 }
 
@@ -169,18 +169,29 @@ bool IDEATAPIDevice::cmd_packet(ide_registers_t *regs)
 
 // Set the packet device signature values to PHY registers
 // See T13/1410D revision 3a section 9.12 Signature and persistence
-bool IDEATAPIDevice::set_packet_device_signature(uint8_t error)
+bool IDEATAPIDevice::set_packet_device_signature(uint8_t error, bool was_reset)
 {
     ide_registers_t regs = {};
+    ide_phy_get_regs(&regs);
+
     regs.error = error;
-    regs.device = 0x00;
     regs.lba_low = 0x01;
     regs.lba_mid = 0x14;
     regs.lba_high = 0xEB;
     regs.sector_count = 0x01;
     
+    if (was_reset)
+        regs.status = 0;
+    else
+        regs.status = IDE_STATUS_BSY;
     ide_phy_set_regs(&regs);
-    ide_phy_assert_irq(IDE_STATUS_DEVRDY);
+
+    if (!was_reset)
+    {
+        // Command complete
+        ide_phy_assert_irq(IDE_STATUS_DEVRDY);
+    }
+
     return true;
 }
 
@@ -190,6 +201,7 @@ bool IDEATAPIDevice::atapi_send_data(const uint8_t *data, uint16_t byte_count)
 
     // Set number bytes to transfer to registers
     ide_registers_t regs = {};
+    ide_phy_get_regs(&regs);
     regs.status = IDE_STATUS_DEVRDY | IDE_STATUS_BSY;
     regs.sector_count = ATAPI_SCOUNT_TO_HOST; // Data transfer to host
     regs.lba_mid = (uint8_t)byte_count;

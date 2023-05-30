@@ -117,6 +117,9 @@ void fpga_rddata_start(uint32_t *data, size_t num_words);
 // Wait for DMA data transfer to finish
 void fpga_transfer_finish();
 
+// Dump IDE register values and IDE register access trace log
+void fpga_dump_ide_regs();
+void fpga_dump_tracelog();
 
 #define FPGA_CMD_READ_STATUS            0x00
 #define FPGA_CMD_READ_IDE_REGS          0x01
@@ -136,5 +139,6 @@ void fpga_transfer_finish();
 #define FPGA_STATUS_TX_CANWRITE         0x04
 #define FPGA_STATUS_TX_DONE             0x08
 #define FPGA_STATUS_IDE_RST             0x10
-#define FPGA_STATUS_IDE_CMD             0x20
-#define FPGA_STATUS_IDE_WR              0x30
+#define FPGA_STATUS_IDE_SRST            0x20
+#define FPGA_STATUS_IDE_CMD             0x40
+#define FPGA_STATUS_IDE_WR              0x80

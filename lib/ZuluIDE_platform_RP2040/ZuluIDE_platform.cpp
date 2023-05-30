@@ -279,6 +279,8 @@ static void watchdog_callback(unsigned alarm_num)
                 p += 4;
             }
 
+            fpga_dump_tracelog();
+
             platform_emergency_log_save();
 
 #ifndef RP2040_DISABLE_BOOTLOADER

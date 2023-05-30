@@ -171,11 +171,13 @@ void fpga_wrcmd(uint8_t cmd, const uint8_t *payload, size_t payload_len, bool ke
 
     // Start transfer and write command byte
     fpga_start_cmd(cmd);
+    pio_sm_get_blocking(FPGA_QSPI_PIO, FPGA_QSPI_PIO_SM);
 
     // Transfer data, if any
     for (size_t i = 0; i < payload_len; i++)
     {
         pio_sm_put_blocking(FPGA_QSPI_PIO, FPGA_QSPI_PIO_SM, payload[i]);
+        pio_sm_get_blocking(FPGA_QSPI_PIO, FPGA_QSPI_PIO_SM);
     }
 
     if (!keep_active)
@@ -229,4 +231,84 @@ void fpga_rdcmd(uint8_t cmd, uint8_t *result, size_t result_len, bool keep_activ
                 &g_fpga_qspi.pio_cfg_qspi_transfer_32bit);
         pio_sm_set_enabled(FPGA_QSPI_PIO, FPGA_QSPI_PIO_SM, true);
     }
+}
+
+static const char *traceregname(uint8_t idx)
+{
+    // Matches ide_reg_addr_t on FPGA side
+    switch (idx & 15)
+    {
+        case  0: return "INVALID";
+        case  1: return "DATA";
+        case  2: return "ALT_STATUS";
+        case  3: return "STATUS";
+        case  4: return "COMMAND";
+        case  5: return "DEVICE";
+        case  6: return "DEVICE_CONTROL";
+        case  7: return "ERRORREG";
+        case  8: return "FEATURE";
+        case  9: return "SECTOR_COUNT";
+        case 10: return "LBA_LOW";
+        case 11: return "LBA_MID";
+        case 12: return "LBA_HIGH";
+        default: return "??";
+    }
+}
+
+void fpga_dump_ide_regs()
+{
+    uint8_t regs[10];
+    fpga_rdcmd(FPGA_CMD_READ_IDE_REGS, regs, 10);
+    dbgmsg("-- IDE registers:",
+        " STATUS:", regs[0],
+        " COMMAND:", regs[1],
+        " DEVICE:", regs[2],
+        " DEVICE_CONTROL:", regs[3],
+        " ERROR:", regs[4],
+        " FEATURE:", regs[5],
+        " SECTOR_COUNT:", regs[6],
+        " LBA_LOW:", regs[7],
+        " LBA_MID:", regs[8],
+        " LBA_HIGH:", regs[9]
+        );
+}
+
+void fpga_dump_tracelog()
+{
+    uint8_t tracebuf[257];
+    fpga_rdcmd(FPGA_CMD_READ_TRACEBUF, tracebuf, 257);
+
+    dbgmsg("-- FPGA trace begins");
+
+    uint8_t *p = tracebuf + 1;
+    while (p < tracebuf + sizeof(tracebuf))
+    {
+        uint8_t b = *p++;
+        if (b == 0x01)
+        {
+            dbgmsg("---- DATA READ");
+        }
+        else if (b == 0x02)
+        {
+            dbgmsg("---- DATA WRITE");
+        }
+        else if ((b >> 4) == 0x1)
+        {
+            uint8_t b2 = *p++;
+            dbgmsg("---- REG READ ", traceregname(b), " ", b2);
+        }
+        else if ((b >> 4) == 0x2)
+        {
+            uint8_t b2 = *p++;
+            dbgmsg("---- REG WRITE ", traceregname(b), " ", b2);
+        }
+        else if (b != 0x00)
+        {
+            dbgmsg("---- ", b);
+        }
+    }
+
+    dbgmsg("-- FPGA trace ends");
+
+    fpga_dump_ide_regs();
 }

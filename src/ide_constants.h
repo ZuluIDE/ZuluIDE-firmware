@@ -19,6 +19,11 @@
 #define IDE_ERROR_ABORT           0x04
 #define IDE_ERROR_NOMEDIA         0x01
 
+// Device control register bits
+#define IDE_DEVCTRL_nIEN    0x02
+#define IDE_DEVCTRL_SRST    0x04
+#define IDE_DEVCTRL_HOB     0x80
+
 // IDE command set defined as X-macro
 // These will be available as enum values named IDE_CMD_xxx
 #define IDE_COMMAND_LIST(X) \

@@ -59,7 +59,7 @@ protected:
     virtual bool cmd_set_features(ide_registers_t *regs);
     virtual bool cmd_identify_packet_device(ide_registers_t *regs);
     virtual bool cmd_packet(ide_registers_t *regs);
-    virtual bool set_packet_device_signature(uint8_t error);
+    virtual bool set_packet_device_signature(uint8_t error, bool was_reset);
     
     // Methods used by ATAPI command implementations
     bool set_atapi_byte_count(uint16_t byte_count);
