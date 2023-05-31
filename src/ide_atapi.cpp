@@ -1,6 +1,7 @@
 #include "ide_atapi.h"
 #include "atapi_constants.h"
 #include "ZuluIDE.h"
+#include "ZuluIDE_config.h"
 
 // Map from command index for command name for logging
 static const char *get_atapi_command_name(uint8_t cmd)
@@ -96,6 +97,18 @@ bool IDEATAPIDevice::cmd_set_features(ide_registers_t *regs)
     return true;
 }
 
+// "ATAPI devices shall swap bytes for ASCII fields to maintain compatibility with ATA."
+static void copy_id_string(uint16_t *dst, size_t maxwords, const char *src)
+{
+    for (size_t i = 0; i < maxwords; i++)
+    {
+        uint8_t b0 = (*src != 0) ? (*src++) : ' ';
+        uint8_t b1 = (*src != 0) ? (*src++) : ' ';
+
+        dst[i] = ((uint16_t)b0 << 8) | b1;
+    }
+}
+
 // Responds with 512 bytes of identification data
 bool IDEATAPIDevice::cmd_identify_packet_device(ide_registers_t *regs)
 {
@@ -107,6 +120,12 @@ bool IDEATAPIDevice::cmd_identify_packet_device(ide_registers_t *regs)
     idf[IDE_IDENTIFY_OFFSET_COMMAND_SET_SUPPORT_2] = 0x4000;
     idf[IDE_IDENTIFY_OFFSET_COMMAND_SET_SUPPORT_3] = 0x4000;
     idf[IDE_IDENTIFY_OFFSET_COMMAND_SET_ENABLED_1] = 0x0014;
+    idf[IDE_IDENTIFY_OFFSET_HARDWARE_RESET_RESULT] = 0x4049; // Diagnostics results
+
+    const char *fwrev = ZULU_FW_VERSION;
+    const char *model_name = "ZuluIDE CDROM";
+    copy_id_string(&idf[IDE_IDENTIFY_OFFSET_FIRMWARE_REV], 4, fwrev);
+    copy_id_string(&idf[IDE_IDENTIFY_OFFSET_MODEL_NUMBER], 20, model_name);
 
     // Calculate checksum
     // See 8.15.61 Word 255: Integrity word
