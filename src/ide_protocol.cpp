@@ -27,6 +27,8 @@ static void do_phy_reset()
     g_ide_config.enable_dev1_zeros = (g_ide_devices[0] != NULL)
                                     && (g_ide_devices[1] == NULL)
                                     && (g_ide_devices[0]->is_packet_device());
+    g_ide_config.atapi_dev0 = (g_ide_devices[0] != NULL) && (g_ide_devices[0]->is_packet_device());
+    g_ide_config.atapi_dev1 = (g_ide_devices[1] != NULL) && (g_ide_devices[1]->is_packet_device());
 
     ide_phy_reset(&g_ide_config);
 }
@@ -46,6 +48,8 @@ void ide_protocol_poll()
     
     if (evt != IDE_EVENT_NONE)
     {
+        LED_ON();
+
         if (evt == IDE_EVENT_CMD)
         {
             ide_registers_t regs = {};
@@ -89,5 +93,7 @@ void ide_protocol_poll()
             if (g_ide_devices[0]) g_ide_devices[0]->handle_event(evt);
             if (g_ide_devices[1]) g_ide_devices[1]->handle_event(evt);
         }
+
+        LED_OFF();
     }
 }

@@ -8,6 +8,7 @@
 #define IDE_STATUS_BSY      0x80
 #define IDE_STATUS_DEVRDY   0x40
 #define IDE_STATUS_DEVFAULT 0x20
+#define IDE_STATUS_SERVICE  0x10
 #define IDE_STATUS_DATAREQ  0x08
 #define IDE_STATUS_ERR      0x01
 

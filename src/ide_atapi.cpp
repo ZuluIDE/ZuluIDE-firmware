@@ -119,7 +119,7 @@ bool IDEATAPIDevice::cmd_identify_packet_device(ide_registers_t *regs)
     idf[IDE_IDENTIFY_OFFSET_INTEGRITY_WORD] = ((uint16_t)checksum << 8) | 0xA5;
 
     ide_phy_start_write(sizeof(idf));
-    ide_phy_write_block((uint8_t*)idf);
+    ide_phy_write_block((uint8_t*)idf, sizeof(idf));
     
     uint32_t start = millis();
     while (!ide_phy_is_write_finished())
@@ -141,15 +141,20 @@ bool IDEATAPIDevice::cmd_identify_packet_device(ide_registers_t *regs)
 bool IDEATAPIDevice::cmd_packet(ide_registers_t *regs)
 {
     // Host gives limit to bytecount in responses
+    m_atapi_state.data_state = ATAPI_DATA_IDLE;
     m_atapi_state.bytes_req = regs->lba_mid | ((uint16_t)regs->lba_high << 8);
 
-    // Report ready to receive command, keep BSY still high
-    regs->sector_count = ATAPI_SCOUNT_IS_CMD; // Command transfer to device
-    ide_phy_set_regs(regs);
-    
-    // Start the data transfer and clear BSY
-    uint8_t cmdbuf[12] = {0};
-    ide_phy_start_read(sizeof(cmdbuf));
+    // Check if PHY has already received command
+    if (!ide_phy_can_read_block() && (regs->status & IDE_STATUS_BSY))
+    {
+        dbgmsg("-- Starting ATAPI PACKET command read");
+        // Report ready to receive command, keep BSY still high
+        regs->sector_count = ATAPI_SCOUNT_IS_CMD; // Command transfer to device
+        ide_phy_set_regs(regs);
+
+        // Start the data transfer and clear BSY
+        ide_phy_start_read(12);
+    }
 
     uint32_t start = millis();
     while (!ide_phy_can_read_block())
@@ -162,8 +167,8 @@ bool IDEATAPIDevice::cmd_packet(ide_registers_t *regs)
         }
     }
 
-    ide_phy_read_block(cmdbuf);
-    
+    uint8_t cmdbuf[12] = {0};
+    ide_phy_read_block(cmdbuf, sizeof(cmdbuf));
     return handle_atapi_command(cmdbuf);
 }
 
@@ -195,32 +200,84 @@ bool IDEATAPIDevice::set_packet_device_signature(uint8_t error, bool was_reset)
     return true;
 }
 
-bool IDEATAPIDevice::atapi_send_data(const uint8_t *data, uint16_t byte_count)
+bool IDEATAPIDevice::atapi_send_data(const uint8_t *data, uint32_t byte_count)
 {
     dbgmsg("-- ATAPI send ", (int)byte_count, " bytes: ", bytearray((const uint8_t*)data, byte_count));
 
-    // Set number bytes to transfer to registers
-    ide_registers_t regs = {};
-    ide_phy_get_regs(&regs);
-    regs.status = IDE_STATUS_BSY;
-    regs.sector_count = ATAPI_SCOUNT_TO_HOST; // Data transfer to host
-    regs.lba_mid = (uint8_t)byte_count;
-    regs.lba_high = (uint8_t)(byte_count >> 8);
-    ide_phy_set_regs(&regs);
+    if (byte_count == 0) return true; // Nothing to do
 
-    // Start data transfer
-    ide_phy_start_write(byte_count);
-    ide_phy_write_block(data);
-    
+    // Transfer full blocks in streaming mode
+    uint32_t sent = 0;
+    uint32_t blocksize = ide_phy_get_max_blocksize();
+    while (byte_count >= sent + blocksize)
+    {
+        if (!atapi_send_data_block(data + sent, blocksize))
+        {
+            return false;
+        }
+        sent += blocksize;
+    }
+
+    // If there remains a smaller block, transfer it separately
+    if (byte_count > sent)
+    {
+        if (!atapi_send_data_block(data + sent, byte_count - sent))
+        {
+            return false;
+        }
+    }
+
+    // Wait for transfer to finish
     uint32_t start = millis();
     while (!ide_phy_is_write_finished())
     {
         if ((uint32_t)(millis() - start) > 10000)
         {
             logmsg("IDEATAPIDevice::atapi_send_data() data write timeout");
-            ide_phy_stop_transfers();
             return false;
         }
+    }
+
+    return true;
+}
+
+bool IDEATAPIDevice::atapi_send_data_block(const uint8_t *data, uint16_t blocksize)
+{
+    dbgmsg("Send data block ", (uint32_t)data, " ", (int)blocksize);
+
+    if (m_atapi_state.data_state != ATAPI_DATA_WRITE
+        || blocksize != m_atapi_state.blocksize)
+    {
+        m_atapi_state.blocksize = blocksize;
+        m_atapi_state.data_state = ATAPI_DATA_WRITE;
+
+        // Set number bytes to transfer to registers
+        ide_registers_t regs = {};
+        ide_phy_get_regs(&regs);
+        regs.status = IDE_STATUS_BSY;
+        regs.sector_count = ATAPI_SCOUNT_TO_HOST; // Data transfer to host
+        regs.lba_mid = (uint8_t)blocksize;
+        regs.lba_high = (uint8_t)(blocksize >> 8);
+        ide_phy_set_regs(&regs);
+
+        // Start data transfer
+        ide_phy_start_write(blocksize);
+        ide_phy_write_block(data, blocksize);
+    }
+    else
+    {
+        // Add block to existing transfer
+        uint32_t start = millis();
+        while (!ide_phy_can_write_block())
+        {
+            if ((uint32_t)(millis() - start) > 10000)
+            {
+                logmsg("IDEATAPIDevice::atapi_send_data_block() data write timeout");
+                return false;
+            }
+        }
+
+        ide_phy_write_block(data, blocksize);
     }
 
     return true;
@@ -253,6 +310,7 @@ bool IDEATAPIDevice::atapi_cmd_error(uint8_t sense_key, uint16_t sense_asc)
     dbgmsg("-- ATAPI error: ", sense_key, " ", sense_asc);
     m_atapi_state.sense_key = sense_key;
     m_atapi_state.sense_asc = sense_asc;
+    m_atapi_state.data_state = ATAPI_DATA_IDLE;
 
     ide_registers_t regs = {};
     ide_phy_get_regs(&regs);
@@ -269,6 +327,7 @@ bool IDEATAPIDevice::atapi_cmd_ok()
     dbgmsg("-- ATAPI success");
     m_atapi_state.sense_key = 0;
     m_atapi_state.sense_asc = 0;
+    m_atapi_state.data_state = ATAPI_DATA_IDLE;
 
     ide_registers_t regs = {};
     ide_phy_get_regs(&regs);

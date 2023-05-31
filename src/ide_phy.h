@@ -30,6 +30,8 @@ struct ide_phy_config_t {
     bool enable_dev0; // Answer to register reads for device 0 with actual data
     bool enable_dev1; // Answer to register reads for device 1 with actual data
     bool enable_dev1_zeros; // Answer to register reads for device 1 with zeros
+    bool atapi_dev0; // Automatically read command for ATAPI PACKET on device 0
+    bool atapi_dev1; // Automatically read command for ATAPI PACKET on device 1
 };
 
 // Reset the IDE phy
@@ -69,14 +71,16 @@ void ide_phy_set_regs(const ide_registers_t *regs);
 
 void ide_phy_start_write(uint32_t blocklen);
 bool ide_phy_can_write_block();
-void ide_phy_write_block(const uint8_t *buf);
+void ide_phy_write_block(const uint8_t *buf, uint32_t blocklen);
 bool ide_phy_is_write_finished();
 
 void ide_phy_start_read(uint32_t blocklen);
 bool ide_phy_can_read_block();
-void ide_phy_read_block(uint8_t *buf);
+void ide_phy_read_block(uint8_t *buf, uint32_t blocklen);
 
 void ide_phy_stop_transfers();
+
+uint32_t ide_phy_get_max_blocksize();
 
 // Assert IDE interrupt and set status register
 void ide_phy_assert_irq(uint8_t ide_status);

@@ -37,11 +37,19 @@ protected:
         uint8_t media_status_events;
     } m_devinfo;
     
+    enum atapi_data_state_t {
+        ATAPI_DATA_IDLE,
+        ATAPI_DATA_WRITE,
+        ATAPI_DATA_READ
+    };
+
     // ATAPI command state
     struct {
         uint16_t bytes_req; // Host requested bytes per transfer
         uint8_t sense_key; // Latest error class
         uint16_t sense_asc; // Latest error details
+        uint16_t blocksize; // Block size for data transfers
+        atapi_data_state_t data_state;
     } m_atapi_state;
     
     // Buffer used for responses, ide_phy code requires this to be aligned
@@ -63,7 +71,8 @@ protected:
     
     // Methods used by ATAPI command implementations
     bool set_atapi_byte_count(uint16_t byte_count);
-    bool atapi_send_data(const uint8_t *data, uint16_t byte_count);
+    bool atapi_send_data(const uint8_t *data, uint32_t byte_count);
+    bool atapi_send_data_block(const uint8_t *data, uint16_t blocksize);
     bool atapi_cmd_error(uint8_t sense_key, uint16_t sense_asc);
     bool atapi_cmd_ok();
 

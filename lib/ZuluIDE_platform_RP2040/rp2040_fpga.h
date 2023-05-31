@@ -67,6 +67,8 @@
 //                           Bit 0: Enable device 0 register reads
 //                               1: Enable device 1 register reads
 //                               2: Enable answering device 1 with zeros (ATAPI)
+//                               3: Enable ATAPI PACKET handling for device 0
+//                               4: Enable ATAPI PACKET handling for device 1
 //
 //     0x81:    Write IDE registers, payload:
 //                 Byte 0:   IDE STATUS

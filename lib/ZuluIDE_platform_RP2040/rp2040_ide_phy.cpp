@@ -6,7 +6,6 @@
 
 static struct {
     ide_phy_config_t config;
-    uint32_t blocklen;
     bool transfer_running;
 } g_ide_phy;
 
@@ -18,9 +17,11 @@ void ide_phy_reset(const ide_phy_config_t* config)
     fpga_init();
 
     uint8_t cfg = 0;
-    if (config->enable_dev0)       cfg |= 1;
-    if (config->enable_dev1)       cfg |= 2;
-    if (config->enable_dev1_zeros) cfg |= 4;
+    if (config->enable_dev0)       cfg |= 0x01;
+    if (config->enable_dev1)       cfg |= 0x02;
+    if (config->enable_dev1_zeros) cfg |= 0x04;
+    if (config->atapi_dev0)        cfg |= 0x08;
+    if (config->atapi_dev1)        cfg |= 0x10;
     fpga_wrcmd(FPGA_CMD_SET_IDE_PHY_CFG, &cfg, 1);
 }
 
@@ -87,23 +88,19 @@ ide_event_t ide_phy_get_events()
 void ide_phy_get_regs(ide_registers_t *regs)
 {
     fpga_rdcmd(FPGA_CMD_READ_IDE_REGS, (uint8_t*)regs, sizeof(*regs));
-    dbgmsg("ide_phy_get_regs(", bytearray((const uint8_t*)regs, sizeof(*regs)), ")");
+    // dbgmsg("ide_phy_get_regs(", bytearray((const uint8_t*)regs, sizeof(*regs)), ")");
 }
 
 // Set current state of IDE registers
 void ide_phy_set_regs(const ide_registers_t *regs)
 {
     fpga_wrcmd(FPGA_CMD_WRITE_IDE_REGS, (const uint8_t*)regs, sizeof(*regs));
-
-    dbgmsg("ide_phy_set_regs(", bytearray((const uint8_t*)regs, sizeof(*regs)), ")");
-    fpga_dump_ide_regs();
 }
 
 // Data writes to IDE bus
 void ide_phy_start_write(uint32_t blocklen)
 {
     dbgmsg("ide_phy_start_write(", (int)blocklen, ")");
-    g_ide_phy.blocklen = blocklen;
     uint16_t arg = blocklen - 1;
     fpga_wrcmd(FPGA_CMD_START_WRITE, (const uint8_t*)&arg, 2);
 }
@@ -116,10 +113,10 @@ bool ide_phy_can_write_block()
     return (status & FPGA_STATUS_TX_CANWRITE);
 }
 
-void ide_phy_write_block(const uint8_t *buf)
+void ide_phy_write_block(const uint8_t *buf, uint32_t blocklen)
 {
-    dbgmsg("ide_phy_write_block(", bytearray(buf, g_ide_phy.blocklen), ")");
-    fpga_wrcmd(FPGA_CMD_WRITE_DATABUF, buf, g_ide_phy.blocklen);
+    dbgmsg("ide_phy_write_block(", bytearray(buf, blocklen), ")");
+    fpga_wrcmd(FPGA_CMD_WRITE_DATABUF, buf, blocklen);
     g_ide_phy.transfer_running = true;
 }
 
@@ -142,7 +139,6 @@ bool ide_phy_is_write_finished()
 void ide_phy_start_read(uint32_t blocklen)
 {
     dbgmsg("ide_phy_start_read(", (int)blocklen, ")");
-    g_ide_phy.blocklen = blocklen;
     uint16_t arg = blocklen - 1;
     fpga_wrcmd(FPGA_CMD_START_READ, (const uint8_t*)&arg, 2);
     g_ide_phy.transfer_running = true;
@@ -158,19 +154,25 @@ bool ide_phy_can_read_block()
     return (status & FPGA_STATUS_RX_DONE);
 }
 
-void ide_phy_read_block(uint8_t *buf)
+void ide_phy_read_block(uint8_t *buf, uint32_t blocklen)
 {
-    fpga_rdcmd(FPGA_CMD_READ_DATABUF, buf, g_ide_phy.blocklen);
-    dbgmsg("ide_phy_read_block(", bytearray(buf, g_ide_phy.blocklen), ")");
+    fpga_rdcmd(FPGA_CMD_READ_DATABUF, buf, blocklen);
+    dbgmsg("ide_phy_read_block(", bytearray(buf, blocklen), ")");
 }
 
 void ide_phy_stop_transfers()
 {
     // Configure buffer in write mode but don't write any data => transfer stopped
-    g_ide_phy.blocklen = 0;
     uint16_t arg = 65535;
     fpga_wrcmd(FPGA_CMD_START_WRITE, (const uint8_t*)&arg, 2);
     dbgmsg("ide_phy_stop_transfers()");
+}
+
+uint32_t ide_phy_get_max_blocksize()
+{
+    // ICE5LP1K has 8 kB of RAM.
+    // Part of it is reserved for trace buffer, so we can fit at most 2x 2kB buffers.
+    return 2048;
 }
 
 // Assert IDE interrupt and set status register
@@ -178,5 +180,4 @@ void ide_phy_assert_irq(uint8_t ide_status)
 {
     fpga_wrcmd(FPGA_CMD_ASSERT_IRQ, &ide_status, 1);
     dbgmsg("ide_phy_assert_irq(", ide_status, ")");
-    fpga_dump_ide_regs();
 }
