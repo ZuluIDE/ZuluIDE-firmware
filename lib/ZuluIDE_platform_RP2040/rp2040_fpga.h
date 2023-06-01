@@ -34,10 +34,10 @@
 //                                 1:  Data buffer ready for reading
 //                                 2:  Data buffer ready for writing
 //                                 3:  Host has read all buffered data
-//                                 4:  IDE bus reset has occurred since last status read.
-//                                 5:  IDE DEVICE_CONTROL software reset has occurred since last status read.
-//                                 6:  IDE command register has been written since last status read.
-//                                 7:  Any IDE register has been written since last status read.
+//                                 4:  IDE bus reset has occurred (use 0x92 to clear)
+//                                 5:  IDE DEVICE_CONTROL software reset has occurred (use 0x92 to clear)
+//                                 6:  IDE command register has been written (use 0x92 to clear)
+//                                 7:  Any IDE register has been written (use 0x92 to clear)
 //                 Byte 1:   IDE status register
 //
 //     0x01:    Read IDE registers, response:
@@ -97,6 +97,14 @@
 //
 //     0x91:   Assert IDE interrupt (if enabled and selected) and write status register simultaneously
 //               Byte 0: IDE STATUS
+//
+//     0x92:   Clear FPGA status interrupt flags
+//                 Byte 0:   Mask of flags to clear
+//                             Bit 0-3: Don't care
+//                                 4:  Clear "IDE bus reset has occurred since last status read"
+//                                 5:  Clear "IDE DEVICE_CONTROL software reset has occurred"
+//                                 6:  Clear "IDE command register has been written"
+//                                 7:  Clear "Any IDE register has been written"
 
 #pragma once
 #include <stdint.h>
@@ -136,6 +144,7 @@ void fpga_dump_tracelog();
 #define FPGA_CMD_WRITE_DATABUF          0x84
 #define FPGA_CMD_WRITE_IDE_SIGNALS      0x90
 #define FPGA_CMD_ASSERT_IRQ             0x91
+#define FPGA_CMD_CLR_IRQ_FLAGS          0x92
 
 #define FPGA_STATUS_DATA_DIR            0x01
 #define FPGA_STATUS_RX_DONE             0x02

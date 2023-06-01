@@ -34,22 +34,16 @@ void ide_phy_reset_from_watchdog()
 // Returns IDE_EVENT_NONE if no new events.
 ide_event_t ide_phy_get_events()
 {
-    static uint8_t pending_status = 0;
     uint8_t status;
     fpga_rdcmd(FPGA_CMD_READ_STATUS, &status, 1);
 
-    pending_status |= status;
-    if (pending_status & FPGA_STATUS_IDE_RST)
+    if (status & FPGA_STATUS_IDE_RST)
     {
-        pending_status &= ~FPGA_STATUS_IDE_RST;
+        uint8_t clrmask = FPGA_STATUS_IDE_RST;
+        fpga_wrcmd(FPGA_CMD_CLR_IRQ_FLAGS, &clrmask, 1);
         return IDE_EVENT_HWRST;
     }
-    else if (pending_status & FPGA_STATUS_IDE_CMD)
-    {
-        pending_status &= ~FPGA_STATUS_IDE_CMD;
-        return IDE_EVENT_CMD;
-    }
-    else if (pending_status & FPGA_STATUS_IDE_SRST)
+    else if (status & FPGA_STATUS_IDE_SRST)
     {
         // Check if software reset state has ended
         ide_registers_t regs;
@@ -57,9 +51,16 @@ ide_event_t ide_phy_get_events()
 
         if (!(regs.device_control & IDE_DEVCTRL_SRST))
         {
-            pending_status &= ~FPGA_STATUS_IDE_SRST;
+            uint8_t clrmask = FPGA_STATUS_IDE_SRST;
+            fpga_wrcmd(FPGA_CMD_CLR_IRQ_FLAGS, &clrmask, 1);
             return IDE_EVENT_SWRST;
         }
+    }
+    else if (status & FPGA_STATUS_IDE_CMD)
+    {
+        uint8_t clrmask = FPGA_STATUS_IDE_CMD;
+        fpga_wrcmd(FPGA_CMD_CLR_IRQ_FLAGS, &clrmask, 1);
+        return IDE_EVENT_CMD;
     }
     else if (g_ide_phy.transfer_running)
     {
@@ -166,6 +167,7 @@ void ide_phy_stop_transfers()
     uint16_t arg = 65535;
     fpga_wrcmd(FPGA_CMD_START_WRITE, (const uint8_t*)&arg, 2);
     dbgmsg("ide_phy_stop_transfers()");
+    g_ide_phy.transfer_running = false;
 }
 
 uint32_t ide_phy_get_max_blocksize()
