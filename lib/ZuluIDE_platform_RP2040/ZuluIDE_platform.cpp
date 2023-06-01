@@ -12,6 +12,7 @@
 #include <hardware/flash.h>
 #include <platform/mbed_error.h>
 #include <multicore.h>
+#include <USB/PluggableUSBSerial.h>
 #include "rp2040_fpga.h"
 
 const char *g_platform_name = PLATFORM_NAME;
@@ -222,6 +223,83 @@ void mbed_error_hook(const mbed_error_ctx * error_context)
 /* Debug logging and watchdog            */
 /*****************************************/
 
+// Send log data to USB UART if USB is connected.
+// Data is retrieved from the shared log ring buffer and
+// this function sends as much as fits in USB CDC buffer.
+//
+// This is normally called by platform_reset_watchdog() in
+// the normal polling loop. If code hangs, the watchdog_callback()
+// also starts calling this after 2 seconds.
+// This ensures that log messages get passed even if code hangs,
+// but does not unnecessarily delay normal execution.
+static void usb_log_poll()
+{
+    static uint32_t logpos = 0;
+
+    if (_SerialUSB.ready())
+    {
+        // Retrieve pointer to log start and determine number of bytes available.
+        uint32_t available = 0;
+        const char *data = log_get_buffer(&logpos, &available);
+
+        // Limit to CDC packet size
+        uint32_t len = available;
+        if (len == 0) return;
+        if (len > CDC_MAX_PACKET_SIZE) len = CDC_MAX_PACKET_SIZE;
+
+        // Update log position by the actual number of bytes sent
+        // If USB CDC buffer is full, this may be 0
+        uint32_t actual = 0;
+        _SerialUSB.send_nb((uint8_t*)data, len, &actual);
+        logpos -= available - actual;
+    }
+}
+
+// Use ADC to implement supply voltage monitoring for the +3.0V rail.
+// This works by sampling the temperature sensor channel, which has
+// a voltage of 0.7 V, allowing to calculate the VDD voltage.
+static void adc_poll()
+{
+#if PLATFORM_VDD_WARNING_LIMIT_mV > 0
+    static bool initialized = false;
+    static int lowest_vdd_seen = PLATFORM_VDD_WARNING_LIMIT_mV;
+
+    if (!initialized)
+    {
+        adc_init();
+        adc_set_temp_sensor_enabled(true);
+        adc_set_clkdiv(65535); // Lowest samplerate, about 2 kHz
+        adc_select_input(4);
+        adc_fifo_setup(true, false, 0, false, false);
+        adc_run(true);
+        initialized = true;
+    }
+
+    int adc_value_max = 0;
+    while (!adc_fifo_is_empty())
+    {
+        int adc_value = adc_fifo_get();
+        if (adc_value > adc_value_max) adc_value_max = adc_value;
+    }
+
+    // adc_value = 700mV * 4096 / Vdd
+    // => Vdd = 700mV * 4096 / adc_value
+    // To avoid wasting time on division, compare against
+    // limit directly.
+    const int limit = (700 * 4096) / PLATFORM_VDD_WARNING_LIMIT_mV;
+    if (adc_value_max > limit)
+    {
+        // Warn once, and then again if we detect even a lower drop.
+        int vdd_mV = (700 * 4096) / adc_value_max;
+        if (vdd_mV < lowest_vdd_seen)
+        {
+            logmsg("WARNING: Detected supply voltage drop to ", vdd_mV, "mV. Verify power supply is adequate.");
+            lowest_vdd_seen = vdd_mV - 50; // Small hysteresis to avoid excessive warnings
+        }
+    }
+#endif
+}
+
 // This function is called for every log message.
 void platform_log(const char *s)
 {
@@ -240,6 +318,12 @@ void ide_phy_reset_from_watchdog();
 static void watchdog_callback(unsigned alarm_num)
 {
     g_watchdog_timeout -= 1000;
+
+    if (g_watchdog_timeout < WATCHDOG_CRASH_TIMEOUT - 1000)
+    {
+        // Been stuck for at least a second, start dumping USB log
+        usb_log_poll();
+    }
 
     if (g_watchdog_timeout <= WATCHDOG_CRASH_TIMEOUT - WATCHDOG_BUS_RESET_TIMEOUT)
     {
@@ -281,6 +365,7 @@ static void watchdog_callback(unsigned alarm_num)
 
             fpga_dump_tracelog();
 
+            usb_log_poll();
             platform_emergency_log_save();
 
 #ifndef RP2040_DISABLE_BOOTLOADER
@@ -308,6 +393,18 @@ void platform_reset_watchdog()
         hardware_alarm_set_target(3, delayed_by_ms(get_absolute_time(), 1000));
         g_watchdog_initialized = true;
     }
+
+    // USB log is polled here also to make sure any log messages in fault states
+    // get passed to USB.
+    usb_log_poll();
+}
+
+// Poll function that is called every few milliseconds.
+// Can be left empty or used for platform-specific processing.
+void platform_poll()
+{
+    usb_log_poll();
+    adc_poll();
 }
 
 /*****************************************/

@@ -76,6 +76,8 @@ bool IDEImageFile::read(uint64_t startpos, size_t num_bytes, IDEImage::Callback 
     size_t bytes_available = 0;
     while (bytes_done < num_bytes)
     {
+        platform_poll();
+
         // Check if we have buffer space to read more from SD card
         if (bytes_available < num_bytes &&
             bytes_available < bytes_done + m_buffer_size)

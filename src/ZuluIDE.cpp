@@ -254,6 +254,7 @@ void zuluide_main_loop(void)
     static uint32_t sd_card_check_time = 0;
 
     platform_reset_watchdog();
+    platform_poll();
 
     save_logfile();
 
