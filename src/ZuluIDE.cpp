@@ -152,6 +152,12 @@ static bool find_next_image(const char *directory, const char *prev_image, char 
             continue;
         }
 
+        if (!isalnum(candidate[0]))
+        {
+            // Skip names beginning with special character
+            continue;
+        }
+
         if (prev_image && strcasecmp(candidate, prev_image) <= 0)
         {
             // Alphabetically before the previous image
