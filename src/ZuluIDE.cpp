@@ -208,10 +208,12 @@ void load_image()
     }
 }
 
+// TODO: Build bitstream into firmware instead of loading from SD card.
+uint8_t fpga_bitstream[71337];
+
 void zuluide_setup(void)
 {
     platform_init();
-    platform_late_init();
 
     g_sdcard_present = mountSDCard();
 
@@ -239,6 +241,24 @@ void zuluide_setup(void)
 
         print_sd_info();
     }
+
+    FsFile bitstream = SD.open("ice5lp1k_top_bitmap.bin", O_RDONLY);
+    if (!bitstream.isOpen())
+    {
+        logmsg("Could not find bitstream file ice5lp1k_top_bitmap.bin!");
+        init_logfile();
+        while (1)
+        {
+            blinkStatus(2);
+            delay(2000);
+        }
+    }
+
+    bitstream.read(fpga_bitstream, sizeof(fpga_bitstream));
+    bitstream.close();
+    logmsg("Loaded bitstream from ice5lp1k_top_bitmap.bin to RAM, beginning FPGA load");
+
+    platform_late_init();
 
     load_image();
     logmsg("Initialization complete!");
