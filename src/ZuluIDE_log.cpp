@@ -1,5 +1,5 @@
 /** 
- * ZuluIDE™ - Copyright (c) 2022 Rabbit Hole Computing™
+ * ZuluIDE™ - Copyright (c) 2023 Rabbit Hole Computing™
  * 
  * ZuluIDE™ firmware is licensed under the GPL version 3 or any later version. 
  * 
