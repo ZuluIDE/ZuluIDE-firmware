@@ -36,6 +36,8 @@
 
 static struct {
     bool claimed;
+    bool bitstream_loaded;
+    bool license_done;
     uint32_t pio_offset_qspi_transfer;
     pio_sm_config pio_cfg_qspi_transfer_8bit;
     pio_sm_config pio_cfg_qspi_transfer_32bit;
@@ -134,10 +136,15 @@ bool fpga_init()
     clock_gpio_init(FPGA_CLK, CLOCKS_CLK_GPOUT0_CTRL_AUXSRC_VALUE_CLKSRC_PLL_SYS, 8);
 
     // Load bitstream
-    if (!fpga_load_bitstream())
+    if (!g_fpga_qspi.bitstream_loaded)
     {
-        logmsg("FPGA bitstream loading failed");
-        return false;
+        if (!fpga_load_bitstream())
+        {
+            logmsg("FPGA bitstream loading failed");
+            return false;
+        }
+
+        g_fpga_qspi.bitstream_loaded = true;
     }
     
     // Set pins to QSPI mode
@@ -146,17 +153,34 @@ bool fpga_init()
 
     // Test communication
     uint32_t result1, result2, result3;
-    fpga_rdcmd(0x7F, (uint8_t*)&result1, 4);
+    fpga_rdcmd(FPGA_CMD_COMMUNICATION_CHECK, (uint8_t*)&result1, 4);
     delay(1);
-    fpga_rdcmd(0x7F, (uint8_t*)&result2, 4);
+    fpga_rdcmd(FPGA_CMD_COMMUNICATION_CHECK, (uint8_t*)&result2, 4);
     delay(1);
-    fpga_rdcmd(0x7F, (uint8_t*)&result3, 4);
+    fpga_rdcmd(FPGA_CMD_COMMUNICATION_CHECK, (uint8_t*)&result3, 4);
     
     uint32_t expected = 0x03020100;
     if (result1 != expected || result2 != expected || result3 != expected)
     {
         logmsg("FPGA communication test failed, got ", result1, " ", result2, " ", result3, " expected ", expected);
         return false;
+    }
+
+    // Check protocol version
+    uint8_t version;
+    fpga_rdcmd(FPGA_CMD_PROTOCOL_VERSION, &version, 1);
+    if (version != FPGA_PROTOCOL_VERSION)
+    {
+        logmsg("WARNING: FPGA reports protocol version ", (int)version, ", firmware is built for version ", (int)FPGA_PROTOCOL_VERSION);
+    }
+
+    // Check FPGA license code
+    if (!g_fpga_qspi.license_done)
+    {
+        uint8_t license[17];
+        fpga_rdcmd(0x7E, license, 17);
+        logmsg("FPGA license code: ", bytearray(license + 1, 16));
+        g_fpga_qspi.license_done = true;
     }
 
     return true;

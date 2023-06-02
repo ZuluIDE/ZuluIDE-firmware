@@ -59,6 +59,15 @@
 //                 Byte 0: Trace buffer write counter index (can be used to determine number of new bytes)
 //                 Byte 1-256: Newest trace data
 //
+//     0x7D:    Read QSPI protocol version
+//                 Byte 0: QSPI protocol version (1-255)
+//
+//     0x7E:    Read license check status
+//                 Byte 0: 0x00: License check failed
+//                         0x01 to 0x10: License check passed
+//                         0xFF: License check in progress
+//                 Bytes 1-N: License request code
+//
 //     0x7F:    QSPI Communication check, response:
 //                 Byte 0-255: Values 0-255
 //
@@ -132,10 +141,14 @@ void fpga_transfer_finish();
 void fpga_dump_ide_regs();
 void fpga_dump_tracelog();
 
+#define FPGA_PROTOCOL_VERSION 1
+
 #define FPGA_CMD_READ_STATUS            0x00
 #define FPGA_CMD_READ_IDE_REGS          0x01
 #define FPGA_CMD_READ_DATABUF           0x02
 #define FPGA_CMD_READ_TRACEBUF          0x10
+#define FPGA_CMD_PROTOCOL_VERSION       0x7D
+#define FPGA_CMD_LICENSE_CHECK          0x7E
 #define FPGA_CMD_COMMUNICATION_CHECK    0x7F
 #define FPGA_CMD_SET_IDE_PHY_CFG        0x80
 #define FPGA_CMD_WRITE_IDE_REGS         0x81
