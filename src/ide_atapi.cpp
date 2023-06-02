@@ -115,6 +115,8 @@ bool IDEATAPIDevice::cmd_identify_packet_device(ide_registers_t *regs)
     uint16_t idf[256] = {0};
 
     idf[IDE_IDENTIFY_OFFSET_GENERAL_CONFIGURATION] = 0x8000 | (m_devinfo.devtype << 8) | (m_devinfo.removable ? 0x80 : 0); // Device type
+    idf[IDE_IDENTIFY_OFFSET_GENERAL_CONFIGURATION] |= (1 << 5); // Interrupt DRQ mode
+    idf[IDE_IDENTIFY_OFFSET_CAPABILITIES_1] = 0x0200; // LBA supported
     idf[IDE_IDENTIFY_OFFSET_STANDARD_VERSION_MAJOR] = 0x0078; // Version ATAPI-6
     idf[IDE_IDENTIFY_OFFSET_COMMAND_SET_SUPPORT_1] = 0x0014; // PACKET, Removable device command sets supported
     idf[IDE_IDENTIFY_OFFSET_COMMAND_SET_SUPPORT_2] = 0x4000;
