@@ -23,6 +23,9 @@ public:
         virtual ssize_t write_callback(uint8_t *data, size_t bytes) = 0;
     };
 
+    // Return filename or false if not file-backed
+    virtual bool get_filename(char *buf, size_t buflen);
+
     // Return image size in bytes
     virtual uint64_t capacity();
     
@@ -55,6 +58,7 @@ public:
 
     bool open_file(FsVolume *volume, const char *filename, bool read_only = false);
 
+    virtual bool get_filename(char *buf, size_t buflen);
     virtual uint64_t capacity();
     virtual bool writable();
     virtual bool read(uint64_t startpos, size_t num_bytes, IDEImage::Callback *callback);

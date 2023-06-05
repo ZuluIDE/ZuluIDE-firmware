@@ -47,6 +47,9 @@ void log_raw(const char *str);
 void log_raw(uint8_t value);
 
 // Log integer as hex
+void log_raw(uint16_t value);
+
+// Log integer as hex
 void log_raw(uint32_t value);
 
 // Log integer as hex

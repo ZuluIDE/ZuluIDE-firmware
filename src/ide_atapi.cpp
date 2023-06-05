@@ -288,7 +288,7 @@ bool IDEATAPIDevice::atapi_send_data(const uint8_t *data, uint32_t byte_count)
 
 bool IDEATAPIDevice::atapi_send_data_block(const uint8_t *data, uint16_t blocksize)
 {
-    dbgmsg("Send data block ", (uint32_t)data, " ", (int)blocksize);
+    // dbgmsg("---- Send data block ", (uint32_t)data, " ", (int)blocksize);
 
     if (m_atapi_state.data_state != ATAPI_DATA_WRITE
         || blocksize != m_atapi_state.blocksize)

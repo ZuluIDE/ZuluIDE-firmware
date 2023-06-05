@@ -163,9 +163,15 @@ static bool find_next_image(const char *directory, const char *prev_image, char 
         file.getName(candidate, sizeof(candidate));
         const char *extension = strrchr(candidate, '.');
 
-        if (strcasecmp(extension, ".iso") != 0)
+        if (strcasecmp(candidate, "ice5lp1k_top_bitmap.bin") == 0)
         {
-            // For now we only support ISO images
+            continue;
+        }
+
+        if (strcasecmp(extension, ".iso") != 0 &&
+            strcasecmp(extension, ".bin") != 0)
+        {
+            // Not a CD-ROM image
             continue;
         }
 

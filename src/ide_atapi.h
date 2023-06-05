@@ -52,7 +52,7 @@ protected:
         atapi_data_state_t data_state;
     } m_atapi_state;
     
-    // Buffer used for responses, ide_phy code requires this to be aligned
+    // Buffer used for responses, ide_phy code benefits from this being aligned to 32 bits
     union {
         uint32_t dword[128];
         uint16_t word[256];

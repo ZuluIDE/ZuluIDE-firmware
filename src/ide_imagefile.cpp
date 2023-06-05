@@ -74,6 +74,20 @@ bool IDEImageFile::open_file(FsVolume *volume, const char *filename, bool read_o
     return true;
 }
 
+bool IDEImageFile::get_filename(char *buf, size_t buflen)
+{
+    if (!m_file.isOpen())
+    {
+        buf[0] = '\0';
+        return false;
+    }
+    else
+    {
+        m_file.getName(buf, buflen);
+        return true;
+    }
+}
+
 uint64_t IDEImageFile::capacity()
 {
     return m_capacity;

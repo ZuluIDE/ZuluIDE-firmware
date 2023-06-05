@@ -19,8 +19,219 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
 **/
 
+/*
+ * CD-ROM command implementations in this file derive from:
+ *
+ * ZuluSCSI™ - Copyright (c) 2023 Rabbit Hole Computing™
+ * Major contributions by saybur <saybur@users.noreply.github.com>
+ *
+ * Some of the TOC structures are based on code from:
+ * 
+ * SCSI2SD V6 - Copyright (C) 2014 Michael McMaster <michael@codesrc.com>
+ */
+
 #include "ide_cdrom.h"
+#include "ide_utils.h"
 #include "atapi_constants.h"
+#include "ZuluIDE_log.h"
+#include "ZuluIDE_config.h"
+#include "ZuluIDE.h"
+#include <string.h>
+#include <strings.h>
+
+static const uint8_t DiscInformation[] =
+{
+    0x00,   //  0: disc info length, MSB
+    0x20,   //  1: disc info length, LSB
+    0x0E,   //  2: disc status (finalized, single session non-rewritable)
+    0x01,   //  3: first track number
+    0x01,   //  4: number of sessions (LSB)
+    0x01,   //  5: first track in last session (LSB)
+    0x01,   //  6: last track in last session (LSB)
+    0x00,   //  7: format status (0x00 = non-rewritable, no barcode, no disc id)
+    0x00,   //  8: disc type (0x00 = CD-ROM)
+    0x00,   //  9: number of sessions (MSB)
+    0x00,   // 10: first track in last session (MSB)
+    0x00,   // 11: last track in last session (MSB)
+    0x00,   // 12: disc ID (MSB)
+    0x00,   // 13: .
+    0x00,   // 14: .
+    0x00,   // 15: disc ID (LSB)
+    0x00,   // 16: last session lead-in start (MSB)
+    0x00,   // 17: .
+    0x00,   // 18: .
+    0x00,   // 19: last session lead-in start (LSB)
+    0x00,   // 20: last possible lead-out start (MSB)
+    0x00,   // 21: .
+    0x00,   // 22: .
+    0x00,   // 23: last possible lead-out start (LSB)
+    0x00,   // 24: disc bar code (MSB)
+    0x00,   // 25: .
+    0x00,   // 26: .
+    0x00,   // 27: .
+    0x00,   // 28: .
+    0x00,   // 29: .
+    0x00,   // 30: .
+    0x00,   // 31: disc bar code (LSB)
+    0x00,   // 32: disc application code
+    0x00,   // 33: number of opc tables
+};
+
+static const uint8_t SessionTOC[] =
+{
+    0x00, // toc length, MSB
+    0x0A, // toc length, LSB
+    0x01, // First session number
+    0x01, // Last session number,
+    // TRACK 1 Descriptor
+    0x00, // reserved
+    0x14, // Q sub-channel encodes current position, Digital track
+    0x01, // First track number in last complete session
+    0x00, // Reserved
+    0x00,0x00,0x00,0x00 // LBA of first track in last session
+};
+
+static const uint8_t FullTOCHeader[] =
+{
+    0x00, //  0: toc length, MSB
+    0x2E, //  1: toc length, LSB
+    0x01, //  2: First session number
+    0x01, //  3: Last session number,
+    // A0 Descriptor
+    0x01, //  4: session number
+    0x14, //  5: ADR/Control
+    0x00, //  6: TNO
+    0xA0, //  7: POINT
+    0x00, //  8: Min
+    0x00, //  9: Sec
+    0x00, // 10: Frame
+    0x00, // 11: Zero
+    0x01, // 12: First Track number.
+    0x00, // 13: Disc type 00 = Mode 1
+    0x00, // 14: PFRAME
+    // A1
+    0x01, // 15: session number
+    0x14, // 16: ADR/Control
+    0x00, // 17: TNO
+    0xA1, // 18: POINT
+    0x00, // 19: Min
+    0x00, // 20: Sec
+    0x00, // 21: Frame
+    0x00, // 22: Zero
+    0x01, // 23: Last Track number
+    0x00, // 24: PSEC
+    0x00, // 25: PFRAME
+    // A2
+    0x01, // 26: session number
+    0x14, // 27: ADR/Control
+    0x00, // 28: TNO
+    0xA2, // 29: POINT
+    0x00, // 30: Min
+    0x00, // 31: Sec
+    0x00, // 32: Frame
+    0x00, // 33: Zero
+    0x00, // 34: LEADOUT position
+    0x00, // 35: leadout PSEC
+    0x00, // 36: leadout PFRAME
+};
+
+// Convert logical block address to CD-ROM time
+static void LBA2MSF(int32_t LBA, uint8_t* MSF, bool relative)
+{
+    if (!relative) {
+        LBA += 150;
+    }
+    uint32_t ulba = LBA;
+    if (LBA < 0) {
+        ulba = LBA * -1;
+    }
+
+    MSF[2] = ulba % 75; // Frames
+    uint32_t rem = ulba / 75;
+
+    MSF[1] = rem % 60; // Seconds
+    MSF[0] = rem / 60; // Minutes
+}
+
+// Convert logical block address to CD-ROM time in binary coded decimal format
+static void LBA2MSFBCD(int32_t LBA, uint8_t* MSF, bool relative)
+{
+    LBA2MSF(LBA, MSF, relative);
+    MSF[0] = ((MSF[0] / 10) << 4) | (MSF[0] % 10);
+    MSF[1] = ((MSF[1] / 10) << 4) | (MSF[1] % 10);
+    MSF[2] = ((MSF[2] / 10) << 4) | (MSF[2] % 10);
+}
+
+// Convert CD-ROM time to logical block address
+static int32_t MSF2LBA(uint8_t m, uint8_t s, uint8_t f, bool relative)
+{
+    int32_t lba = (m * 60 + s) * 75 + f;
+    if (!relative) lba -= 150;
+    return lba;
+}
+
+// Format track info read from cue sheet into the format used by ReadTOC command.
+// Refer to T10/1545-D MMC-4 Revision 5a, "Response Format 0000b: Formatted TOC"
+static void formatTrackInfo(const CUETrackInfo *track, uint8_t *dest, bool use_MSF_time)
+{
+    uint8_t control_adr = 0x14; // Digital track
+
+    if (track->track_mode == CUETrack_AUDIO)
+    {
+        control_adr = 0x10; // Audio track
+    }
+
+    dest[0] = 0; // Reserved
+    dest[1] = control_adr;
+    dest[2] = track->track_number;
+    dest[3] = 0; // Reserved
+
+    if (use_MSF_time)
+    {
+        // Time in minute-second-frame format
+        dest[4] = 0;
+        LBA2MSF(track->data_start, &dest[5], false);
+    }
+    else
+    {
+        // Time as logical block address
+        dest[4] = (track->data_start >> 24) & 0xFF;
+        dest[5] = (track->data_start >> 16) & 0xFF;
+        dest[6] = (track->data_start >>  8) & 0xFF;
+        dest[7] = (track->data_start >>  0) & 0xFF;
+    }
+}
+
+// Format track info read from cue sheet into the format used by ReadFullTOC command.
+// Refer to T10/1545-D MMC-4 Revision 5a, "Response Format 0010b: Raw TOC"
+static void formatRawTrackInfo(const CUETrackInfo *track, uint8_t *dest, bool useBCD)
+{
+    uint8_t control_adr = 0x14; // Digital track
+
+    if (track->track_mode == CUETrack_AUDIO)
+    {
+        control_adr = 0x10; // Audio track
+    }
+
+    dest[0] = 0x01; // Session always 1
+    dest[1] = control_adr;
+    dest[2] = 0x00; // "TNO", always 0?
+    dest[3] = track->track_number; // "POINT", contains track number
+    // Next three are ATIME. The spec doesn't directly address how these
+    // should be reported in the TOC, just giving a description of Q-channel
+    // data from Red Book/ECMA-130. On all disks tested so far these are
+    // given as 00/00/00.
+    dest[4] = 0x00;
+    dest[5] = 0x00;
+    dest[6] = 0x00;
+    dest[7] = 0; // HOUR
+
+    if (useBCD) {
+        LBA2MSFBCD(track->data_start, &dest[8], false);
+    } else {
+        LBA2MSF(track->data_start, &dest[8], false);
+    }
+}
 
 IDECDROMDevice::IDECDROMDevice()
 {
@@ -29,3 +240,330 @@ IDECDROMDevice::IDECDROMDevice()
     m_devinfo.bytes_per_sector = 2048;
 }
 
+void IDECDROMDevice::set_image(IDEImage *image)
+{
+    IDEATAPIDevice::set_image(image);
+
+    char filename[MAX_FILE_PATH];
+    bool valid = false;
+
+    if (image &&
+        image->get_filename(filename, sizeof(filename)) &&
+        strncasecmp(filename + strlen(filename) - 4, ".bin", 4) == 0)
+    {
+        char cuesheetname[MAX_FILE_PATH + 1] = {0};
+        strncpy(cuesheetname, filename, strlen(filename) - 4);
+        strlcat(cuesheetname, ".cue", sizeof(cuesheetname));
+
+        valid = loadAndValidateCueSheet(cuesheetname);
+    }
+
+    if (!valid)
+    {
+        // No cue sheet or parsing failed, use as plain binary image.
+        strcpy(m_cuesheet, R"(
+            FILE "x" BINARY
+            TRACK 01 MODE1/2048
+            INDEX 01 00:00:00
+        )");
+        m_cueparser = CUEParser(m_cuesheet);
+    }
+}
+
+bool IDECDROMDevice::handle_atapi_command(const uint8_t *cmd)
+{
+    switch (cmd[0])
+    {
+        case ATAPI_CMD_READ_DISC_INFORMATION: return atapi_read_disc_information(cmd);
+        case ATAPI_CMD_READ_TOC: return atapi_read_toc(cmd);
+
+        default:
+            return IDEATAPIDevice::handle_atapi_command(cmd);
+    }
+}
+
+bool IDECDROMDevice::atapi_read_disc_information(const uint8_t *cmd)
+{
+    uint16_t allocationLength = parse_be16(&cmd[7]);
+
+    // Take the hardcoded header as base
+    uint8_t *buf = m_buffer.bytes;
+    uint32_t len = sizeof(DiscInformation);
+    memcpy(buf, DiscInformation, len);
+
+    // Find first and last track number
+    CUETrackInfo first, last;
+    if (!getFirstLastTrackInfo(first, last))
+    {
+        logmsg("atapi_read_disc_information() failed to get track info");
+        return atapi_cmd_error(ATAPI_SENSE_ABORTED_CMD, ATAPI_ASC_NO_MEDIUM);
+    }
+
+    buf[3] = first.track_number;
+    buf[5] = first.track_number;
+    buf[6] = last.track_number;
+
+    atapi_send_data(buf, std::min<uint32_t>(allocationLength, len));
+    return atapi_cmd_ok();
+}
+
+bool IDECDROMDevice::atapi_read_toc(const uint8_t *cmd)
+{
+    bool MSF = (cmd[1] & 0x02);
+    uint8_t track = cmd[6];
+    uint16_t allocationLength = parse_be16(&cmd[7]);
+
+    // The "format" field is reserved for SCSI-2
+    uint8_t format = cmd[2] & 0x0F;
+
+    // Matshita SCSI-2 drives appear to use the high 2 bits of the CDB
+    // control byte to switch on session info (0x40) and full toc (0x80)
+    // responses that are very similar to the standard formats described
+    // in MMC-1. These vendor flags must have been pretty common because
+    // even a modern SATA drive (ASUS DRW-24B1ST j) responds to them
+    // (though it always replies in hex rather than bcd)
+    //
+    // The session information page is identical to MMC. The full TOC page
+    // is identical _except_ it returns addresses in bcd rather than hex.
+    bool useBCD = false;
+    if (format == 0 && cmd[9] == 0x80)
+    {
+        format = 2;
+        useBCD = true;
+    }
+    else if (format == 0 && cmd[9] == 0x40)
+    {
+        format = 1;
+    }
+
+    switch (format)
+    {
+        case 0: return doReadTOC(MSF, track, allocationLength); break; // SCSI-2
+        case 1: return doReadSessionInfo(MSF, allocationLength); break; // MMC2
+        case 2: return doReadFullTOC(track, allocationLength, useBCD); break; // MMC2
+        default: return atapi_cmd_error(ATAPI_SENSE_ILLEGAL_REQ, ATAPI_ASC_INVALID_FIELD);
+    }
+}
+
+bool IDECDROMDevice::doReadTOC(bool MSF, uint8_t track, uint16_t allocationLength)
+{
+    uint8_t *buf = m_buffer.bytes;
+
+    // Format track info
+    uint8_t *trackdata = &buf[4];
+    int trackcount = 0;
+    int firsttrack = -1;
+    CUETrackInfo lasttrack = {0};
+    const CUETrackInfo *trackinfo;
+    m_cueparser.restart();
+    while ((trackinfo = m_cueparser.next_track()) != NULL)
+    {
+        if (firsttrack < 0) firsttrack = trackinfo->track_number;
+        lasttrack = *trackinfo;
+
+        if (track <= trackinfo->track_number)
+        {
+            formatTrackInfo(trackinfo, &trackdata[8 * trackcount], MSF);
+            trackcount += 1;
+        }
+    }
+
+    // Format lead-out track info
+    CUETrackInfo leadout = {};
+    leadout.track_number = 0xAA;
+    leadout.track_mode = (lasttrack.track_number != 0) ? lasttrack.track_mode : CUETrack_MODE1_2048;
+    leadout.data_start = getLeadOutLBA(&lasttrack);
+    formatTrackInfo(&leadout, &trackdata[8 * trackcount], MSF);
+    trackcount += 1;
+
+    // Format response header
+    uint16_t toc_length = 2 + trackcount * 8;
+    buf[0] = toc_length >> 8;
+    buf[1] = toc_length & 0xFF;
+    buf[2] = firsttrack;
+    buf[3] = lasttrack.track_number;
+
+    if (track != 0xAA && trackcount < 2)
+    {
+        // Unknown track requested
+        return atapi_cmd_error(ATAPI_SENSE_ILLEGAL_REQ, ATAPI_ASC_INVALID_FIELD);
+    }
+    else
+    {
+        uint32_t len = 2 + toc_length;
+        atapi_send_data(buf, std::min<uint32_t>(allocationLength, len));
+        return atapi_cmd_ok();
+    }
+}
+
+bool IDECDROMDevice::doReadSessionInfo(bool MSF, uint16_t allocationLength)
+{
+    uint32_t len = sizeof(SessionTOC);
+    uint8_t *buf = m_buffer.bytes;
+    memcpy(buf, SessionTOC, len);
+
+    // Replace first track info in the session table
+    // based on data from CUE sheet.
+    m_cueparser.restart();
+    const CUETrackInfo *trackinfo = m_cueparser.next_track();
+    if (trackinfo)
+    {
+        formatTrackInfo(trackinfo, &buf[4], false);
+    }
+
+    atapi_send_data(buf, std::min<uint32_t>(allocationLength, len));
+    return atapi_cmd_ok();
+}
+
+bool IDECDROMDevice::doReadFullTOC(uint8_t session, uint16_t allocationLength, bool useBCD)
+{
+    // We only support session 1.
+    if (session > 1)
+    {
+        return atapi_cmd_error(ATAPI_SENSE_ILLEGAL_REQ, ATAPI_ASC_INVALID_FIELD);
+    }
+
+    // Take basic header as the base
+    uint8_t *buf = m_buffer.bytes;
+    uint32_t len = sizeof(FullTOCHeader);
+    memcpy(buf, FullTOCHeader, len);
+
+    // Add track descriptors
+    int trackcount = 0;
+    int firsttrack = -1;
+    CUETrackInfo lasttrack = {0};
+    const CUETrackInfo *trackinfo;
+    m_cueparser.restart();
+    while ((trackinfo = m_cueparser.next_track()) != NULL)
+    {
+        if (firsttrack < 0)
+        {
+            firsttrack = trackinfo->track_number;
+            if (trackinfo->track_mode == CUETrack_AUDIO)
+            {
+                buf[5] = 0x10;
+            }
+        }
+        lasttrack = *trackinfo;
+
+        formatRawTrackInfo(trackinfo, &buf[len], useBCD);
+        trackcount += 1;
+        len += 11;
+    }
+
+    // First and last track numbers
+    buf[12] = firsttrack;
+    if (lasttrack.track_number != 0)
+    {
+        buf[23] = lasttrack.track_number;
+        if (lasttrack.track_mode == CUETrack_AUDIO)
+        {
+            buf[16] = 0x10;
+            buf[27] = 0x10;
+        }
+    }
+
+    // Leadout track position
+    if (useBCD) {
+        LBA2MSFBCD(getLeadOutLBA(&lasttrack), &buf[34], false);
+    } else {
+        LBA2MSF(getLeadOutLBA(&lasttrack), &buf[34], false);
+    }
+
+    // Correct the record length in header
+    uint16_t toclen = len - 2;
+    buf[0] = toclen >> 8;
+    buf[1] = toclen & 0xFF;
+
+    atapi_send_data(buf, std::min<uint32_t>(allocationLength, len));
+    return atapi_cmd_ok();
+}
+
+bool IDECDROMDevice::loadAndValidateCueSheet(const char *cuesheetname)
+{
+    FsFile cuesheetfile = SD.open(cuesheetname, O_RDONLY);
+    if (!cuesheetfile.isOpen())
+    {
+        logmsg("---- No CUE sheet found at ", cuesheetname, ", using as plain binary image");
+        return false;
+    }
+
+    if (cuesheetfile.size() > sizeof(m_cuesheet))
+    {
+        logmsg("---- WARNING: CUE sheet length ", (int)cuesheetfile.size(), " exceeds maximum ",
+                (int)sizeof(m_cuesheet), " bytes");
+    }
+
+    int len = cuesheetfile.read(m_cuesheet, sizeof(m_cuesheet));
+    cuesheetfile.close();
+    if (len <= 0)
+    {
+        m_cuesheet[0] = 0;
+        logmsg("---- Failed to read cue sheet from ", cuesheetname);
+        return false;
+    }
+
+    m_cuesheet[len] = 0;
+    m_cueparser = CUEParser(m_cuesheet);
+
+    const CUETrackInfo *trackinfo;
+    int trackcount = 0;
+    while ((trackinfo = m_cueparser.next_track()) != NULL)
+    {
+        trackcount++;
+
+        if (trackinfo->track_mode != CUETrack_AUDIO &&
+            trackinfo->track_mode != CUETrack_MODE1_2048 &&
+            trackinfo->track_mode != CUETrack_MODE1_2352)
+        {
+            logmsg("---- Warning: track ", trackinfo->track_number, " has unsupported mode ", (int)trackinfo->track_mode);
+        }
+
+        if (trackinfo->file_mode != CUEFile_BINARY)
+        {
+            logmsg("---- Unsupported CUE data file mode ", (int)trackinfo->file_mode);
+        }
+    }
+
+    if (trackcount == 0)
+    {
+        logmsg("---- Opened cue sheet ", cuesheetname, " but no valid tracks found");
+        return false;
+    }
+
+    logmsg("---- Cue sheet ", cuesheetname, " loaded with ", (int)trackcount, " tracks");
+    return true;
+}
+
+bool IDECDROMDevice::getFirstLastTrackInfo(CUETrackInfo &first, CUETrackInfo &last)
+{
+    m_cueparser.restart();
+
+    const CUETrackInfo *trackinfo;
+    bool got_track = false;
+    while ((trackinfo = m_cueparser.next_track()) != NULL)
+    {
+        if (!got_track)
+        {
+            first = *trackinfo;
+            got_track = true;
+        }
+
+        last = *trackinfo;
+    }
+
+    return got_track;
+}
+
+uint32_t IDECDROMDevice::getLeadOutLBA(const CUETrackInfo* lasttrack)
+{
+    if (lasttrack != nullptr && lasttrack->track_number != 0 && m_image != nullptr)
+    {
+        uint32_t lastTrackBlocks = (m_image->capacity() - lasttrack->file_offset) / lasttrack->sector_length;
+        return lasttrack->track_start + lastTrackBlocks + 1;
+    }
+    else
+    {
+        return 1;
+    }
+}
