@@ -20,6 +20,7 @@
 **/
 
 #include "ide_atapi.h"
+#include "ide_utils.h"
 #include "atapi_constants.h"
 #include "ZuluIDE.h"
 #include "ZuluIDE_config.h"
@@ -211,6 +212,8 @@ bool IDEATAPIDevice::cmd_packet(ide_registers_t *regs)
 
     uint8_t cmdbuf[12] = {0};
     ide_phy_read_block(cmdbuf, sizeof(cmdbuf));
+
+    dbgmsg("-- ATAPI command: ", get_atapi_command_name(cmdbuf[0]), " ", bytearray(cmdbuf, 12));
     return handle_atapi_command(cmdbuf);
 }
 
@@ -327,8 +330,6 @@ bool IDEATAPIDevice::atapi_send_data_block(const uint8_t *data, uint16_t blocksi
 
 bool IDEATAPIDevice::handle_atapi_command(const uint8_t *cmd)
 {
-    dbgmsg("-- ATAPI command: ", get_atapi_command_name(cmd[0]), " ", bytearray(cmd, 12));
-
     switch (cmd[0])
     {
         case ATAPI_CMD_TEST_UNIT_READY: return atapi_test_unit_ready(cmd);
@@ -408,7 +409,7 @@ bool IDEATAPIDevice::atapi_mode_sense(const uint8_t *cmd)
 {
     uint8_t page_ctrl = cmd[2] >> 6;
     uint8_t page_idx = cmd[2] & 0x3F;
-    uint8_t req_bytes = ((uint16_t)cmd[7] << 8) | cmd[8];
+    uint8_t req_bytes = parse_be16(&cmd[7]);
 
     uint8_t *resp = m_buffer.bytes;
     size_t max_bytes = sizeof(m_buffer);
@@ -445,8 +446,7 @@ bool IDEATAPIDevice::atapi_request_sense(const uint8_t *cmd)
     resp[0] = 0x80 | (m_atapi_state.sense_key != 0 ? 0x70 : 0);
     resp[2] = m_atapi_state.sense_key;
     resp[7] = sense_length - 7;
-    resp[12] = m_atapi_state.sense_asc >> 8;
-    resp[13] = m_atapi_state.sense_asc & 0xFF;
+    write_be16(&resp[12], m_atapi_state.sense_asc);
     
     if (req_bytes < sense_length) sense_length = req_bytes;
     atapi_send_data(m_buffer.bytes, sense_length);
@@ -497,10 +497,10 @@ bool IDEATAPIDevice::atapi_get_event_status_notification(const uint8_t *cmd)
 bool IDEATAPIDevice::atapi_read_capacity(const uint8_t *cmd)
 {
     uint64_t capacity = (m_image ? m_image->capacity() : 0);
-
-    m_buffer.dword[0] = __builtin_bswap32(capacity / m_devinfo.bytes_per_sector);
-    m_buffer.dword[1] = __builtin_bswap32(m_devinfo.bytes_per_sector);
-    atapi_send_data(m_buffer.bytes, 8);
+    uint8_t *buf = m_buffer.bytes;
+    write_be32(&buf[0], capacity / m_devinfo.bytes_per_sector);
+    write_be32(&buf[4], m_devinfo.bytes_per_sector);
+    atapi_send_data(buf, 8);
 
     return atapi_cmd_ok();
 }
@@ -510,25 +510,17 @@ bool IDEATAPIDevice::atapi_read(const uint8_t *cmd)
     uint32_t lba, transfer_len;
     if (cmd[0] == ATAPI_CMD_READ10)
     {
-        lba = ((uint32_t)cmd[2] << 24)
-            | ((uint32_t)cmd[3] << 16)
-            | ((uint32_t)cmd[4] << 8)
-            | ((uint32_t)cmd[5] << 0);
-        
-        transfer_len = ((uint32_t)cmd[7] << 8)
-                     | ((uint32_t)cmd[8] << 0);
+        lba = parse_be32(&cmd[2]);
+        transfer_len = parse_be16(&cmd[7]);
+    }
+    else if (cmd[0] == ATAPI_CMD_READ12)
+    {
+        lba = parse_be32(&cmd[2]);
+        transfer_len = parse_be32(&cmd[6]);
     }
     else
     {
-        lba = ((uint32_t)cmd[2] << 24)
-            | ((uint32_t)cmd[3] << 16)
-            | ((uint32_t)cmd[4] << 8)
-            | ((uint32_t)cmd[5] << 0);
-        
-        transfer_len = ((uint32_t)cmd[6] << 24)
-                     | ((uint32_t)cmd[7] << 16)
-                     | ((uint32_t)cmd[8] << 8)
-                     | ((uint32_t)cmd[9] << 0);
+        assert(false);
     }
 
     if (!m_image)
