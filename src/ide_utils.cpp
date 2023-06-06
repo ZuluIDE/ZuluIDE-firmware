@@ -28,9 +28,9 @@ uint16_t parse_be16(const uint8_t *src)
 
 uint32_t parse_be24(const uint8_t *src)
 {
-    return ((uint32_t)src[1] << 16) |
-           ((uint32_t)src[2] << 8) |
-           ((uint32_t)src[3]);
+    return ((uint32_t)src[0] << 16) |
+           ((uint32_t)src[1] << 8) |
+           ((uint32_t)src[2]);
 }
 
 uint32_t parse_be32(const uint8_t *src)

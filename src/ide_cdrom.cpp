@@ -283,7 +283,7 @@ bool IDECDROMDevice::handle_atapi_command(const uint8_t *cmd)
         case ATAPI_CMD_READ_TOC:                return atapi_read_toc(cmd);
         case ATAPI_CMD_READ_HEADER:             return atapi_read_header(cmd);
         case ATAPI_CMD_READ_CD:                 return atapi_read_cd(cmd);
-        case ATAPI_CMD_READ_CD_MSF:             return atapi_read_cd(cmd);
+        case ATAPI_CMD_READ_CD_MSF:             return atapi_read_cd_msf(cmd);
 
         default:
             return IDEATAPIDevice::handle_atapi_command(cmd);
