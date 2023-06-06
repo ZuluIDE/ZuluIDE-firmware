@@ -11,16 +11,18 @@ public:
     {
     public:
         // Callback for data that has been read from image file.
-        // data:    Pointer to data that has been read from SD card
-        // bytes:   Number of bytes available
-        // returns: Number of bytes processed (buffer can be reused) or negative on error
-        virtual ssize_t read_callback(const uint8_t *data, size_t bytes) = 0;
+        // data:        Pointer to data that has been read from SD card
+        // blocksize:   Block size passed to read() call
+        // num_blocks:  Number of blocks available at data pointer
+        // returns:     Number of blocks processed (buffer can be reused) or negative on error
+        virtual ssize_t read_callback(const uint8_t *data, size_t blocksize, size_t num_blocks) = 0;
 
         // Callback for getting data for writing to image file.
-        // data:    Pointer where data should be written
-        // bytes:   Number of bytes that can be written to 'data'
-        // returns: Number of bytes available at 'data' or negative on error
-        virtual ssize_t write_callback(uint8_t *data, size_t bytes) = 0;
+        // data:        Pointer where data should be written
+        // blocksize:   Block size passed to read() call
+        // num_blocks:  Maximum number of blocks that can be written to data.
+        // returns:     Number of blocks written to 'data' or negative on error
+        virtual ssize_t write_callback(uint8_t *data, size_t blocksize, size_t num_blocks) = 0;
     };
 
     // Return filename or false if not file-backed
@@ -33,20 +35,26 @@ public:
     virtual bool writable();
 
     // Read data from image file using a callback interface.
-    // The callback function is passed a data pointer and number of bytes available.
-    // It will return the number of bytes it has processed - any unprocessed bytes
-    // will be given again on next call. Once bytes have been processed the buffer
+    // The callback function is passed a data pointer and number of blocks available.
+    // It will return the number of blocks it has processed - any unprocessed blocks
+    // will be given again on next call. Once blocks have been processed the buffer
     // may be reused.
-    // Typical usage is that first callback starts a transfer and returns 0, and
-    // a later callback will return the count once the transfer has completed.
-    virtual bool read(uint64_t startpos, size_t num_bytes, Callback *callback) = 0;
+    //
+    // Transfers can be performed byte-per-byte, in which case blocksize = 1.
+    // If blocksize > 1, the callback is provided integer number of blocks at a time.
+    //
+    // Typical usages:
+    //   1. Synchronous handling of data: callback will pass forward the data, wait
+    //      for it to be transferred and return the number of blocks transferred.
+    //
+    //   2. Asynchronous handling of data: callback will start a transfer, return 0,
+    //      and on next call return the number of blocks handled.
+    virtual bool read(uint64_t startpos, size_t blocksize, size_t num_blocks, Callback *callback) = 0;
 
     // Write data to image file using a callback interface.
-    // The callback function is passed data pointer and number of bytes requested.
-    // It will return the number of bytes available at data.
-    // Typical usage is that first callback starts a transfer and returns 0, and
-    // a later callback will return the count once the transfer has completed.
-    virtual bool write(uint64_t startpos, size_t num_bytes, Callback *callback) = 0;
+    // The callback function is passed data pointer and number of blocks requested.
+    // It will return the number of blocks available at data.
+    virtual bool write(uint64_t startpos, size_t blocksize, size_t num_blocks, Callback *callback) = 0;
 };
 
 // Implementation for SD-card based image files
@@ -61,8 +69,8 @@ public:
     virtual bool get_filename(char *buf, size_t buflen);
     virtual uint64_t capacity();
     virtual bool writable();
-    virtual bool read(uint64_t startpos, size_t num_bytes, IDEImage::Callback *callback);
-    virtual bool write(uint64_t startpos, size_t num_bytes, IDEImage::Callback *callback);
+    virtual bool read(uint64_t startpos, size_t blocksize, size_t num_blocks, Callback *callback);
+    virtual bool write(uint64_t startpos, size_t blocksize, size_t num_blocks, Callback *callback);
 
 protected:
     FsFile m_file;
@@ -75,5 +83,18 @@ protected:
     bool m_read_only;
     uint8_t *m_buffer;
     size_t m_buffer_size;
-    size_t m_buffer_size_mask;
+
+    struct sd_cb_state_t {
+        IDEImage::Callback *callback;
+        bool error;
+        uint8_t *buffer;
+        size_t num_blocks;
+        size_t blocksize;
+        size_t bufsize_blocks;
+        size_t blocks_done;
+        size_t blocks_available;
+    };
+    static sd_cb_state_t sd_cb_state;
+    static void sd_read_callback(uint32_t bytes_complete);
+    static void sd_write_callback(uint32_t bytes_complete);
 };

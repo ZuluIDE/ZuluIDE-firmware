@@ -53,10 +53,11 @@ protected:
     } m_atapi_state;
     
     // Buffer used for responses, ide_phy code benefits from this being aligned to 32 bits
+    // Enough for any inquiry/mode response and for up to one CD sector.
     union {
-        uint32_t dword[128];
-        uint16_t word[256];
-        uint8_t bytes[512];
+        uint32_t dword[588];
+        uint16_t word[1176];
+        uint8_t bytes[2352];
     } m_buffer;
 
     // // Data transfer state
@@ -71,8 +72,9 @@ protected:
     
     // Methods used by ATAPI command implementations
     bool set_atapi_byte_count(uint16_t byte_count);
-    bool atapi_send_data(const uint8_t *data, uint32_t byte_count);
+    bool atapi_send_data(const uint8_t *data, size_t blocksize, size_t num_blocks = 1, bool wait_finish = true);
     bool atapi_send_data_block(const uint8_t *data, uint16_t blocksize);
+    bool atapi_send_wait_finish();
     bool atapi_cmd_error(uint8_t sense_key, uint16_t sense_asc);
     bool atapi_cmd_ok();
 
@@ -84,14 +86,15 @@ protected:
     virtual bool atapi_request_sense(const uint8_t *cmd);
     virtual bool atapi_get_event_status_notification(const uint8_t *cmd);
     virtual bool atapi_read_capacity(const uint8_t *cmd);
+    virtual bool atapi_read(const uint8_t *cmd);
+    virtual bool atapi_write(const uint8_t *cmd);
     
     // Read handlers
-    virtual bool atapi_read(const uint8_t *cmd);
-    virtual ssize_t read_callback(const uint8_t *data, size_t bytes);
+    virtual bool doRead(uint32_t lba, uint32_t transfer_len);
+    virtual ssize_t read_callback(const uint8_t *data, size_t blocksize, size_t num_blocks);
     
     // Write handlers
-    virtual bool atapi_write(const uint8_t *cmd);
-    virtual ssize_t write_callback(uint8_t *data, size_t bytes);
+    virtual ssize_t write_callback(uint8_t *data, size_t blocksize, size_t num_blocks);
 
     // ATAPI mode pages
     virtual size_t atapi_get_mode_page(uint8_t page_ctrl, uint8_t page_idx, uint8_t *buffer, size_t max_bytes);

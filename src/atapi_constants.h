@@ -14,6 +14,7 @@
 X(ATAPI_CMD_TEST_UNIT_READY               , 0x00) \
 X(ATAPI_CMD_REQUEST_SENSE                 , 0x03) \
 X(ATAPI_CMD_FORMAT_UNIT                   , 0x04) \
+X(ATAPI_CMD_READ6                         , 0x08) \
 X(ATAPI_CMD_INQUIRY                       , 0x12) \
 X(ATAPI_CMD_START_STOP_UNIT               , 0x1B) \
 X(ATAPI_CMD_PREVENT_ALLOW_MEDIUM_REMOVAL  , 0x1E) \
@@ -28,6 +29,7 @@ X(ATAPI_CMD_SYNCHRONIZE_CACHE             , 0x35) \
 X(ATAPI_CMD_WRITE_BUFFER                  , 0x3B) \
 X(ATAPI_CMD_READ_BUFFER                   , 0x3C) \
 X(ATAPI_CMD_READ_TOC                      , 0x43) \
+X(ATAPI_CMD_READ_HEADER                   , 0x44) \
 X(ATAPI_CMD_GET_CONFIGURATION             , 0x46) \
 X(ATAPI_CMD_GET_EVENT_STATUS_NOTIFICATION , 0x4A) \
 X(ATAPI_CMD_READ_DISC_INFORMATION         , 0x51) \
@@ -92,10 +94,12 @@ ATAPI_COMMAND_LIST(ATAPI_ENUM_ENTRY)
 #define ATAPI_SENSE_ABORTED_CMD     0x0B
 #define ATAPI_SENSE_MISCOMPARE      0x0E
 
-#define ATAPI_ASC_INVALID_CMD       0x2000
-#define ATAPI_ASC_INVALID_FIELD     0x2400
-#define ATAPI_ASC_WRITE_PROTECTED   0x2700
-#define ATAPI_ASC_NO_MEDIUM         0x3A00
+#define ATAPI_ASC_INVALID_CMD               0x2000
+#define ATAPI_ASC_LBA_OUT_OF_RANGE          0x2100
+#define ATAPI_ASC_INVALID_FIELD             0x2400
+#define ATAPI_ASC_WRITE_PROTECTED           0x2700
+#define ATAPI_ASC_NO_MEDIUM                 0x3A00
+#define ATAPI_ASC_ILLEGAL_MODE_FOR_TRACK    0x6400
 
 // ATAPI INQUIRY response format
 #define ATAPI_INQUIRY_OFFSET_TYPE       0

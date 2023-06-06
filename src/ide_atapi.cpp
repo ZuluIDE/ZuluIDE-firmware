@@ -245,45 +245,37 @@ bool IDEATAPIDevice::set_packet_device_signature(uint8_t error, bool was_reset)
     return true;
 }
 
-bool IDEATAPIDevice::atapi_send_data(const uint8_t *data, uint32_t byte_count)
+bool IDEATAPIDevice::atapi_send_data(const uint8_t *data, size_t blocksize, size_t num_blocks, bool wait_finish)
 {
-    dbgmsg("-- ATAPI send ", (int)byte_count, " bytes: ", bytearray((const uint8_t*)data, byte_count));
+    dbgmsg("---- ATAPI send ", (int)num_blocks, "x", (int)blocksize, " bytes: ",
+           bytearray((const uint8_t*)data, blocksize * num_blocks));
 
-    if (byte_count == 0) return true; // Nothing to do
-
-    // Transfer full blocks in streaming mode
-    uint32_t sent = 0;
-    uint32_t blocksize = ide_phy_get_max_blocksize();
-    while (byte_count >= sent + blocksize)
+    size_t max_blocksize = ide_phy_get_max_blocksize();
+    if (blocksize > max_blocksize)
     {
-        if (!atapi_send_data_block(data + sent, blocksize))
-        {
-            return false;
-        }
-        sent += blocksize;
+        // Have to split the blocks for phy
+        size_t split = (blocksize + max_blocksize - 1) / max_blocksize;
+        assert(blocksize % split == 0);
+        blocksize /= split;
+        num_blocks *= split;
     }
 
-    // If there remains a smaller block, transfer it separately
-    if (byte_count > sent)
+    for (size_t i = 0; i < num_blocks; i++)
     {
-        if (!atapi_send_data_block(data + sent, byte_count - sent))
+        if (!atapi_send_data_block(data + blocksize * i, blocksize))
         {
             return false;
         }
     }
 
-    // Wait for transfer to finish
-    uint32_t start = millis();
-    while (!ide_phy_is_write_finished())
+    if (wait_finish)
     {
-        if ((uint32_t)(millis() - start) > 10000)
-        {
-            logmsg("IDEATAPIDevice::atapi_send_data() data write timeout");
-            return false;
-        }
+        return atapi_send_wait_finish();
     }
-
-    return true;
+    else
+    {
+        return true;
+    }
 }
 
 bool IDEATAPIDevice::atapi_send_data_block(const uint8_t *data, uint16_t blocksize)
@@ -315,6 +307,7 @@ bool IDEATAPIDevice::atapi_send_data_block(const uint8_t *data, uint16_t blocksi
         uint32_t start = millis();
         while (!ide_phy_can_write_block())
         {
+            platform_poll();
             if ((uint32_t)(millis() - start) > 10000)
             {
                 logmsg("IDEATAPIDevice::atapi_send_data_block() data write timeout");
@@ -323,6 +316,23 @@ bool IDEATAPIDevice::atapi_send_data_block(const uint8_t *data, uint16_t blocksi
         }
 
         ide_phy_write_block(data, blocksize);
+    }
+
+    return true;
+}
+
+bool IDEATAPIDevice::atapi_send_wait_finish()
+{
+    // Wait for transfer to finish
+    uint32_t start = millis();
+    while (!ide_phy_is_write_finished())
+    {
+        platform_poll();
+        if ((uint32_t)(millis() - start) > 10000)
+        {
+            logmsg("IDEATAPIDevice::atapi_send_wait_finish() data write timeout");
+            return false;
+        }
     }
 
     return true;
@@ -338,6 +348,7 @@ bool IDEATAPIDevice::handle_atapi_command(const uint8_t *cmd)
         case ATAPI_CMD_REQUEST_SENSE:   return atapi_request_sense(cmd);
         case ATAPI_CMD_GET_EVENT_STATUS_NOTIFICATION: return atapi_get_event_status_notification(cmd);
         case ATAPI_CMD_READ_CAPACITY:   return atapi_read_capacity(cmd);
+        case ATAPI_CMD_READ6:           return atapi_read(cmd);
         case ATAPI_CMD_READ10:          return atapi_read(cmd);
         case ATAPI_CMD_READ12:          return atapi_read(cmd);
         case ATAPI_CMD_WRITE10:         return atapi_write(cmd);
@@ -508,7 +519,13 @@ bool IDEATAPIDevice::atapi_read_capacity(const uint8_t *cmd)
 bool IDEATAPIDevice::atapi_read(const uint8_t *cmd)
 {
     uint32_t lba, transfer_len;
-    if (cmd[0] == ATAPI_CMD_READ10)
+    if (cmd[0] == ATAPI_CMD_READ6)
+    {
+        lba = parse_be24(&cmd[1]) & 0x1FFFFF;
+        transfer_len = cmd[4];
+        if (transfer_len == 0) transfer_len = 256;
+    }
+    else if (cmd[0] == ATAPI_CMD_READ10)
     {
         lba = parse_be32(&cmd[2]);
         transfer_len = parse_be16(&cmd[7]);
@@ -529,7 +546,11 @@ bool IDEATAPIDevice::atapi_read(const uint8_t *cmd)
     }
 
     dbgmsg("-- Read ", (int)transfer_len, " sectors starting at ", (int)lba);
+    return doRead(lba, transfer_len);
+}
 
+bool IDEATAPIDevice::doRead(uint32_t lba, uint32_t transfer_len)
+{
     // TODO: asynchronous transfer
     // for (int i = 0; i < ATAPI_TRANSFER_REQ_COUNT; i++)
     // {
@@ -539,12 +560,12 @@ bool IDEATAPIDevice::atapi_read(const uint8_t *cmd)
     // }
 
     bool status = m_image->read((uint64_t)lba * m_devinfo.bytes_per_sector,
-                                transfer_len * m_devinfo.bytes_per_sector,
+                                m_devinfo.bytes_per_sector, transfer_len,
                                 this);
     
     if (status)
     {
-        return atapi_cmd_ok();
+        return atapi_send_wait_finish() && atapi_cmd_ok();
     }
     else
     {
@@ -552,17 +573,16 @@ bool IDEATAPIDevice::atapi_read(const uint8_t *cmd)
     }
 }
 
-ssize_t IDEATAPIDevice::read_callback(const uint8_t *data, size_t bytes)
+ssize_t IDEATAPIDevice::read_callback(const uint8_t *data, size_t blocksize, size_t num_blocks)
 {
-    // TODO: Make this asynchronous for optimization
-    bytes &= ~1;
-    if (!atapi_send_data(data, bytes))
+    platform_poll();
+    if (!atapi_send_data(data, blocksize, num_blocks, false))
     {
         return -1;
     }
     else
     {
-        return bytes;
+        return num_blocks;
     }
 }
 
@@ -571,7 +591,7 @@ bool IDEATAPIDevice::atapi_write(const uint8_t *cmd)
     return atapi_cmd_error(ATAPI_SENSE_ABORTED_CMD, ATAPI_ASC_WRITE_PROTECTED);
 }
 
-ssize_t IDEATAPIDevice::write_callback(uint8_t *data, size_t bytes)
+ssize_t IDEATAPIDevice::write_callback(uint8_t *data, size_t blocksize, size_t num_blocks)
 {
     assert(false);
     return -1;

@@ -274,8 +274,11 @@ bool IDECDROMDevice::handle_atapi_command(const uint8_t *cmd)
 {
     switch (cmd[0])
     {
-        case ATAPI_CMD_READ_DISC_INFORMATION: return atapi_read_disc_information(cmd);
-        case ATAPI_CMD_READ_TOC: return atapi_read_toc(cmd);
+        case ATAPI_CMD_READ_DISC_INFORMATION:   return atapi_read_disc_information(cmd);
+        case ATAPI_CMD_READ_TOC:                return atapi_read_toc(cmd);
+        case ATAPI_CMD_READ_HEADER:             return atapi_read_header(cmd);
+        case ATAPI_CMD_READ_CD:                 return atapi_read_cd(cmd);
+        case ATAPI_CMD_READ_CD_MSF:             return atapi_read_cd(cmd);
 
         default:
             return IDEATAPIDevice::handle_atapi_command(cmd);
@@ -343,6 +346,64 @@ bool IDECDROMDevice::atapi_read_toc(const uint8_t *cmd)
         case 2: return doReadFullTOC(track, allocationLength, useBCD); break; // MMC2
         default: return atapi_cmd_error(ATAPI_SENSE_ILLEGAL_REQ, ATAPI_ASC_INVALID_FIELD);
     }
+}
+
+// SCSI-3 MMC Read Header command, seems to be deprecated in later standards.
+// Refer to ANSI X3.304-1997
+// The spec is vague, but based on experimentation with a Matshita drive this
+// command should return the sector header absolute time (see ECMA-130 21).
+// Given 2048-byte block sizes this effectively is 1:1 with the provided LBA.
+bool IDECDROMDevice::atapi_read_header(const uint8_t *cmd)
+{
+    bool MSF = (cmd[1] & 0x02);
+    uint32_t lba = 0; // IGNORED for now
+    uint16_t allocationLength = parse_be16(&cmd[7]);
+
+    // Track mode (audio / data)
+    CUETrackInfo trackinfo = getTrackFromLBA(lba);
+    uint8_t mode = (trackinfo.track_mode == CUETrack_AUDIO) ? 0 : 1;
+
+    uint8_t *buf = m_buffer.bytes;
+    buf[0] = mode;
+    buf[1] = 0; // reserved
+    buf[2] = 0; // reserved
+    buf[3] = 0; // reserved
+
+    // Track start
+    if (MSF)
+    {
+        buf[4] = 0;
+        LBA2MSF(lba, &buf[5], false);
+    }
+    else
+    {
+        write_be32(&buf[4], lba);
+    }
+
+    uint8_t len = 8;
+    atapi_send_data(buf, std::min<uint32_t>(allocationLength, len));
+    return atapi_cmd_ok();
+}
+
+bool IDECDROMDevice::atapi_read_cd(const uint8_t *cmd)
+{
+    uint8_t sector_type = (cmd[1] >> 2) & 7;
+    uint32_t lba = parse_be32(&cmd[2]);
+    uint32_t blocks = parse_be24(&cmd[6]);
+    uint8_t main_channel = cmd[9];
+    uint8_t sub_channel = cmd[10];
+
+    return doReadCD(lba, blocks, sector_type, main_channel, sub_channel, false);
+}
+
+bool IDECDROMDevice::atapi_read_cd_msf(const uint8_t *cmd)
+{
+    uint8_t sector_type = (cmd[1] >> 2) & 7;
+    uint32_t start = MSF2LBA(cmd[3], cmd[4], cmd[5], false);
+    uint32_t end   = MSF2LBA(cmd[6], cmd[7], cmd[8], false);
+    uint8_t main_channel = cmd[9];
+    uint8_t sub_channel = cmd[10];
+    return doReadCD(start, end - start, sector_type, main_channel, sub_channel, false);
 }
 
 bool IDECDROMDevice::doReadTOC(bool MSF, uint8_t track, uint16_t allocationLength)
@@ -479,6 +540,223 @@ bool IDECDROMDevice::doReadFullTOC(uint8_t session, uint16_t allocationLength, b
     return atapi_cmd_ok();
 }
 
+bool IDECDROMDevice::doRead(uint32_t lba, uint32_t transfer_len)
+{
+    // Override IDEATAPIDevice::doRead() in case the CD image uses different sector length
+    return doReadCD(lba, transfer_len, 0, 0x10, 0, true);
+}
+
+bool IDECDROMDevice::doReadCD(uint32_t lba, uint32_t length, uint8_t sector_type,
+                              uint8_t main_channel, uint8_t sub_channel, bool data_only)
+{
+    CUETrackInfo trackinfo = getTrackFromLBA(lba);
+
+    if (!m_image)
+    {
+        return atapi_cmd_error(ATAPI_SENSE_NOT_READY, ATAPI_ASC_NO_MEDIUM);
+    }
+
+    // Figure out the data offset in the file
+    uint64_t offset = trackinfo.file_offset + trackinfo.sector_length * (lba - trackinfo.track_start);
+    dbgmsg("---- Read CD: ", (int)length, " sectors starting at ", (int)lba,
+           ", track number ", trackinfo.track_number, ", sector size ", (int)trackinfo.sector_length,
+           ", main channel ", main_channel, ", sub channel ", sub_channel,
+           ", data offset in file ", (int)offset);
+
+    // Ensure read is not out of range of the image
+    uint64_t readend = offset + trackinfo.sector_length * length;
+    uint64_t capacity = m_image->capacity();
+    if (readend > capacity)
+    {
+        logmsg("WARNING: Host attempted CD read at sector ", lba, "+", length,
+              ", exceeding image size ", capacity);
+        return atapi_cmd_error(ATAPI_SENSE_ILLEGAL_REQ, ATAPI_ASC_LBA_OUT_OF_RANGE);
+    }
+
+    // Verify sector type
+    if (sector_type != 0)
+    {
+        bool sector_type_ok = false;
+        if (sector_type == 1 && trackinfo.track_mode == CUETrack_AUDIO)
+        {
+            sector_type_ok = true;
+        }
+        else if (sector_type == 2 && trackinfo.track_mode == CUETrack_MODE1_2048)
+        {
+            sector_type_ok = true;
+        }
+
+        if (!sector_type_ok)
+        {
+            dbgmsg("---- Failed sector type check, host requested ", (int)sector_type, " CUE file has ", (int)trackinfo.track_mode);
+            return atapi_cmd_error(ATAPI_SENSE_ILLEGAL_REQ, ATAPI_ASC_ILLEGAL_MODE_FOR_TRACK);
+        }
+    }
+
+    // Select fields to transfer
+    // Refer to table 351 in T10/1545-D MMC-4 Revision 5a
+    // Only the mandatory cases are supported.
+    m_cd_read_format.sector_length_file = 2048;
+    m_cd_read_format.sector_length_out = 2048;
+    m_cd_read_format.sector_data_skip = 0;
+    m_cd_read_format.sector_data_length = 2048;
+    m_cd_read_format.add_fake_headers = false;
+    m_cd_read_format.field_q_subchannel = false;
+    m_cd_read_format.start_lba = lba;
+    m_cd_read_format.sectors_done = 0;
+
+    if (main_channel == 0)
+    {
+        // No actual data requested, just sector type check or subchannel
+        m_cd_read_format.sector_length_file = 0;
+        m_cd_read_format.sector_data_length = 0;
+    }
+    else if (trackinfo.track_mode == CUETrack_AUDIO)
+    {
+        // Transfer whole 2352 byte audio sectors from file to host
+        m_cd_read_format.sector_length_file = 2352;
+        m_cd_read_format.sector_data_length = 2352;
+        m_cd_read_format.sector_length_out = 2352;
+    }
+    else if (trackinfo.track_mode == CUETrack_MODE1_2048 && main_channel == 0x10)
+    {
+        // Transfer whole 2048 byte data sectors from file to host
+        m_cd_read_format.sector_length_file = 2048;
+        m_cd_read_format.sector_data_length = 2048;
+        m_cd_read_format.sector_length_out = 2048;
+    }
+    else if (trackinfo.track_mode == CUETrack_MODE1_2048 && (main_channel & 0xB8) == 0xB8)
+    {
+        // Transfer 2048 bytes of data from file and fake the headers
+        m_cd_read_format.sector_length_file = 2048;
+        m_cd_read_format.sector_data_length = 2048;
+        m_cd_read_format.sector_length_out = 2048 + 304;
+        m_cd_read_format.add_fake_headers = true;
+        dbgmsg("------ Host requested ECC data but image file lacks it, replacing with zeros");
+    }
+    else if (trackinfo.track_mode == CUETrack_MODE1_2352 && main_channel == 0x10)
+    {
+        // Transfer the 2048 byte payload of data sector to host.
+        m_cd_read_format.sector_length_file = 2352;
+        m_cd_read_format.sector_data_skip = 16;
+        m_cd_read_format.sector_data_length = 2048;
+        m_cd_read_format.sector_length_out = 2048;
+    }
+    else if (trackinfo.track_mode == CUETrack_MODE1_2352 && (main_channel & 0xB8) == 0xB8)
+    {
+        // Transfer whole 2352 byte data sector with ECC to host
+        m_cd_read_format.sector_length_file = 2352;
+        m_cd_read_format.sector_data_length = 2352;
+        m_cd_read_format.sector_length_out = 2352;
+    }
+    else
+    {
+        dbgmsg("---- Unsupported channel request for track type ", (int)trackinfo.track_mode);
+        return atapi_cmd_error(ATAPI_SENSE_ILLEGAL_REQ, ATAPI_ASC_ILLEGAL_MODE_FOR_TRACK);
+    }
+
+    if (data_only && m_cd_read_format.sector_length_out != 2048)
+    {
+        dbgmsg("------ Host tried to read non-data sector with standard READ command");
+        return atapi_cmd_error(ATAPI_SENSE_ILLEGAL_REQ, ATAPI_ASC_ILLEGAL_MODE_FOR_TRACK);
+    }
+
+    if (sub_channel == 2)
+    {
+        // Include position information in Q subchannel
+        m_cd_read_format.field_q_subchannel = true;
+        m_cd_read_format.sector_length_out += 16;
+    }
+    else if (sub_channel != 0)
+    {
+        dbgmsg("---- Unsupported subchannel request");
+        return atapi_cmd_error(ATAPI_SENSE_ILLEGAL_REQ, ATAPI_ASC_INVALID_FIELD);
+    }
+
+    if (m_cd_read_format.sector_length_file == 0)
+    {
+        // No actual data needed, just send headers
+        read_callback(nullptr, 0, length);
+        return atapi_send_wait_finish() && atapi_cmd_ok();
+    }
+    else if (m_image->read(offset, m_cd_read_format.sector_length_file, length, this))
+    {
+        return atapi_send_wait_finish() && atapi_cmd_ok();
+    }
+    else
+    {
+        return atapi_cmd_error(ATAPI_SENSE_MEDIUM_ERROR, 0);
+    }
+}
+
+ssize_t IDECDROMDevice::read_callback(const uint8_t *data, size_t blocksize, size_t num_blocks)
+{
+    if (m_cd_read_format.sector_length_file == m_cd_read_format.sector_length_out)
+    {
+        // Simple case, send data directly
+        atapi_send_data(data, blocksize, num_blocks, false);
+        return num_blocks;
+    }
+
+    // Reformat sector data for transmission
+    assert(sizeof(m_buffer) >= m_cd_read_format.sector_length_out);
+    for (size_t i = 0; i < num_blocks; i++)
+    {
+        uint8_t *buf = m_buffer.bytes;
+        uint32_t current_lba = m_cd_read_format.start_lba + m_cd_read_format.sectors_done;
+
+        if (m_cd_read_format.add_fake_headers)
+        {
+            // 12-byte data sector sync pattern
+            *buf++ = 0x00;
+            for (int i = 0; i < 10; i++)
+            {
+                *buf++ = 0xFF;
+            }
+            *buf++ = 0x00;
+
+            // 4-byte data sector header
+            LBA2MSFBCD(current_lba, buf, false);
+            buf += 3;
+            *buf++ = 0x01; // Mode 1
+        }
+
+        if (m_cd_read_format.sector_data_length > 0)
+        {
+            const uint8_t *data_start = data + blocksize * i + m_cd_read_format.sector_data_skip;
+            size_t data_length = m_cd_read_format.sector_data_length;
+            memcpy(buf, data_start, data_length);
+            buf += data_length;
+        }
+
+        if (m_cd_read_format.field_q_subchannel)
+        {
+            // Formatted Q subchannel data
+            // Refer to table 354 in T10/1545-D MMC-4 Revision 5a
+            // and ECMA-130 22.3.3
+            *buf++ = (m_cd_read_format.trackinfo.track_mode == CUETrack_AUDIO ? 0x10 : 0x14); // Control & ADR
+            *buf++ = m_cd_read_format.trackinfo.track_number;
+            *buf++ = (current_lba >= m_cd_read_format.trackinfo.data_start) ? 1 : 0; // Index number (0 = pregap)
+            int32_t rel = (int32_t)(current_lba) - (int32_t)m_cd_read_format.trackinfo.data_start;
+            LBA2MSF(rel, buf, true); buf += 3;
+            *buf++ = 0;
+            LBA2MSF(current_lba, buf, false); buf += 3;
+            *buf++ = 0; *buf++ = 0; // CRC (optional)
+            *buf++ = 0; *buf++ = 0; *buf++ = 0; // (pad)
+            *buf++ = 0; // No P subchannel
+        }
+
+        assert(buf == m_buffer.bytes + m_cd_read_format.sector_length_out);
+        if (!atapi_send_data(m_buffer.bytes, m_cd_read_format.sector_length_out, 1, false))
+        {
+            return -1;
+        }
+        m_cd_read_format.sectors_done += 1;
+    }
+
+    return num_blocks;
+}
+
 bool IDECDROMDevice::loadAndValidateCueSheet(const char *cuesheetname)
 {
     FsFile cuesheetfile = SD.open(cuesheetname, O_RDONLY);
@@ -566,4 +844,25 @@ uint32_t IDECDROMDevice::getLeadOutLBA(const CUETrackInfo* lasttrack)
     {
         return 1;
     }
+}
+
+// Fetch track info based on LBA
+CUETrackInfo IDECDROMDevice::getTrackFromLBA(uint32_t lba)
+{
+    CUETrackInfo result = {};
+    const CUETrackInfo *tmptrack;
+    m_cueparser.restart();
+    while ((tmptrack = m_cueparser.next_track()) != NULL)
+    {
+        if (tmptrack->track_start <= lba)
+        {
+            result = *tmptrack;
+        }
+        else
+        {
+            break;
+        }
+    }
+
+    return result;
 }

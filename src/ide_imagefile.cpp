@@ -22,8 +22,10 @@
 #include "ide_imagefile.h"
 #include "ZuluIDE.h"
 #include <assert.h>
+#include <algorithm>
 
-#define SD_BLOCKSIZE 512
+// SD card callbacks from platform code use global state
+IDEImageFile::sd_cb_state_t IDEImageFile::sd_cb_state;
 
 IDEImageFile::IDEImageFile(): IDEImageFile(nullptr, 0)
 {
@@ -34,9 +36,6 @@ IDEImageFile::IDEImageFile(uint8_t *buffer, size_t buffer_size):
     m_blockdev(nullptr), m_contiguous(false), m_first_sector(0), m_capacity(0),
     m_read_only(false), m_buffer(buffer), m_buffer_size(buffer_size)
 {
-    // Buffer size must be power of 2
-    m_buffer_size_mask = (m_buffer_size - 1);
-    assert((m_buffer_size & m_buffer_size_mask) == 0);
 }
 
 bool IDEImageFile::open_file(FsVolume *volume, const char *filename, bool read_only)
@@ -102,47 +101,87 @@ bool IDEImageFile::writable()
 /* Data transfer from SD card */
 /******************************/
 
-// TODO: optimize with SD callbacks
-bool IDEImageFile::read(uint64_t startpos, size_t num_bytes, IDEImage::Callback *callback)
+bool IDEImageFile::read(uint64_t startpos, size_t blocksize, size_t num_blocks, Callback *callback)
 {
     if (!m_file.seek(startpos)) return false;
 
-    size_t bytes_done = 0;
-    size_t bytes_available = 0;
-    while (bytes_done < num_bytes)
+    assert(blocksize <= m_buffer_size);
+
+    sd_cb_state.callback = callback;
+    sd_cb_state.error = false;
+    sd_cb_state.buffer = m_buffer;
+    sd_cb_state.num_blocks = num_blocks;
+    sd_cb_state.blocksize = blocksize;
+    sd_cb_state.blocks_done = 0;
+    sd_cb_state.blocks_available = 0;
+    sd_cb_state.bufsize_blocks = m_buffer_size / blocksize;
+
+    while (sd_cb_state.blocks_done < num_blocks && !sd_cb_state.error)
     {
         platform_poll();
 
         // Check if we have buffer space to read more from SD card
-        if (bytes_available < num_bytes &&
-            bytes_available < bytes_done + m_buffer_size)
+        if (sd_cb_state.blocks_available < num_blocks &&
+            sd_cb_state.blocks_available < sd_cb_state.blocks_done + sd_cb_state.bufsize_blocks)
         {
-            size_t start_idx = bytes_available & m_buffer_size_mask;
-            size_t max_read = num_bytes - bytes_available;
-            if (start_idx + max_read > m_buffer_size) max_read = m_buffer_size - start_idx;
+            // Check how many contiguous blocks we have space available for.
+            // Limit by:
+            // 1. Total requested transfer size
+            // 2. Number of free slots in buffer
+            // 3. Space until wrap point of the buffer
+            size_t start_idx = sd_cb_state.blocks_available % sd_cb_state.bufsize_blocks;
+            size_t max_read = std::min({
+                num_blocks - sd_cb_state.blocks_available,
+                sd_cb_state.blocks_done + sd_cb_state.bufsize_blocks - sd_cb_state.blocks_available,
+                sd_cb_state.bufsize_blocks - start_idx
+            });
 
-            if (m_file.read(m_buffer + start_idx, max_read) != max_read)
-            {
-                return false;
-            }
+            // Read from SD card and process callbacks
+            uint8_t *buf = m_buffer + blocksize * start_idx;
+            platform_set_sd_callback(&IDEImageFile::sd_read_callback, buf);
+            int status = m_file.read(buf, blocksize * max_read);
+            platform_set_sd_callback(nullptr, nullptr);
 
-            bytes_available += max_read;
+            // Check status of SD card read
+            if (status != blocksize * max_read)
+                sd_cb_state.error = true;
+            else
+                sd_cb_state.blocks_available += max_read;
         }
 
-        // Pass data to callback
-        if (bytes_done <= bytes_available)
+        // Provide callbacks until all blocks have been processed,
+        // even if SD card read is done.
+        if (sd_cb_state.blocks_done < sd_cb_state.blocks_available)
         {
-            size_t start_idx = bytes_done & m_buffer_size_mask;
-            size_t max_write = bytes_available - bytes_done;
-            if (start_idx + max_write > m_buffer_size) max_write = m_buffer_size - start_idx;
-            
-            ssize_t status = callback->read_callback(m_buffer + start_idx, max_write);
-            if (status < 0) return false;
-            bytes_done += status;
+            sd_read_callback(0);
         }
     }
 
-    return true;
+    return !sd_cb_state.error;
+}
+
+void IDEImageFile::sd_read_callback(uint32_t bytes_complete)
+{
+    // Update number of blocks available by the latest callback status.
+    // sd_cb_state.blocks_available will be updated when SD card read() returns.
+    size_t blocks_available = sd_cb_state.blocks_available + bytes_complete / sd_cb_state.blocksize;
+
+    // Check how many contiguous blocks are available to process.
+    size_t start_idx = sd_cb_state.blocks_done % sd_cb_state.bufsize_blocks;
+    size_t max_write = std::min({
+        blocks_available - sd_cb_state.blocks_done,
+        sd_cb_state.bufsize_blocks - start_idx
+    });
+
+    if (max_write > 0)
+    {
+        uint8_t *data_start = sd_cb_state.buffer + start_idx * sd_cb_state.blocksize;
+        ssize_t status = sd_cb_state.callback->read_callback(data_start, sd_cb_state.blocksize, max_write);
+        if (status < 0)
+            sd_cb_state.error = true;
+        else
+            sd_cb_state.blocks_done += status;
+    }
 }
 
 /******************************/
@@ -150,47 +189,85 @@ bool IDEImageFile::read(uint64_t startpos, size_t num_bytes, IDEImage::Callback 
 /******************************/
 
 // For now this uses simple blocking access, because we don't need CD-ROM write yet.
-bool IDEImageFile::write(uint64_t startpos, size_t num_bytes, IDEImage::Callback *callback)
+bool IDEImageFile::write(uint64_t startpos, size_t blocksize, size_t num_blocks, Callback *callback)
 {
     if (!m_file.seek(startpos)) return false;
 
-    size_t bytes_done = 0;
-    size_t bytes_available = 0;
-    while (bytes_done < num_bytes)
-    {
-        // Check if callback can provide more data
-        if (bytes_available < num_bytes &&
-            bytes_available < bytes_done + m_buffer_size)
-        {
-            size_t start_idx = bytes_available & m_buffer_size_mask;
-            size_t max_read = num_bytes - bytes_available;
-            
-            // Limit to buffer wrap point
-            if (start_idx + max_read > m_buffer_size)
-            {
-                max_read = m_buffer_size - start_idx;
-            }
-            
-            // Receive data from callback
-            ssize_t status = callback->write_callback(m_buffer + start_idx, max_read);
-            if (status < 0) return false;
-            bytes_available += status;
-        }
+    assert(blocksize <= m_buffer_size);
 
-        // Check if we have received a complete block
-        if (bytes_available >= bytes_done + SD_BLOCKSIZE || bytes_available == num_bytes)
+    sd_cb_state.callback = callback;
+    sd_cb_state.error = false;
+    sd_cb_state.buffer = m_buffer;
+    sd_cb_state.num_blocks = num_blocks;
+    sd_cb_state.blocksize = blocksize;
+    sd_cb_state.blocks_done = 0;
+    sd_cb_state.blocks_available = 0;
+    sd_cb_state.bufsize_blocks = m_buffer_size / blocksize;
+
+    while (sd_cb_state.blocks_done < num_blocks && !sd_cb_state.error)
+    {
+        platform_poll();
+
+        // Check if callback can provide more data
+        sd_write_callback(0);
+
+        // Check if there is data to be written to SD card
+        if (sd_cb_state.blocks_done < sd_cb_state.blocks_available)
         {
-            // Complete block available, write it to SD card
-            size_t start_idx = bytes_done & m_buffer_size_mask;
-            size_t max_write = bytes_available - bytes_done;
-            if (start_idx + max_write > m_buffer_size) max_write = m_buffer_size - start_idx;
-            if (m_file.write(m_buffer + start_idx, max_write) != max_write)
-            {
-                return false;
-            }
-            bytes_done += max_write;
+            // Check how many contiguous blocks are available to process.
+            size_t start_idx = sd_cb_state.blocks_done % sd_cb_state.bufsize_blocks;
+            size_t max_write = std::min({
+                sd_cb_state.blocks_available - sd_cb_state.blocks_done,
+                sd_cb_state.bufsize_blocks - start_idx
+            });
+            
+            // Write data to SD card and process callbacks
+            uint8_t *buf = m_buffer + blocksize * start_idx;
+            platform_set_sd_callback(&IDEImageFile::sd_write_callback, buf);
+            int status = m_file.write(buf, blocksize * max_write);
+            platform_set_sd_callback(nullptr, nullptr);
+
+            // Check status of SD card read
+            if (status != blocksize * max_write)
+                sd_cb_state.error = true;
+            else
+                sd_cb_state.blocks_available += max_write;
         }
     }
 
     return true;
+}
+
+void IDEImageFile::sd_write_callback(uint32_t bytes_complete)
+{
+    // Update number of blocks done by the latest callback status.
+    // sd_cb_state.blocks_done will be updated when SD card write() returns.
+    size_t blocks_done = sd_cb_state.blocks_done + bytes_complete / sd_cb_state.blocksize;
+
+    if (sd_cb_state.blocks_available < sd_cb_state.num_blocks &&
+        sd_cb_state.blocks_available < blocks_done + sd_cb_state.bufsize_blocks)
+    {
+        // Check how many contiguous blocks we have space available for.
+        // Limit by:
+        // 1. Total requested transfer size
+        // 2. Number of free slots in buffer
+        // 3. Space until wrap point of the buffer
+        size_t start_idx = sd_cb_state.blocks_available % sd_cb_state.bufsize_blocks;
+        size_t max_read = std::min({
+            sd_cb_state.num_blocks - sd_cb_state.blocks_available,
+            sd_cb_state.blocks_done + sd_cb_state.bufsize_blocks - sd_cb_state.blocks_available,
+            sd_cb_state.bufsize_blocks - start_idx
+        });
+
+        if (max_read > 0)
+        {
+            // Receive data from callback
+            uint8_t *data_start = sd_cb_state.buffer + start_idx * sd_cb_state.blocksize;
+            ssize_t status = sd_cb_state.callback->write_callback(data_start, sd_cb_state.blocksize, max_read);
+            if (status < 0)
+                sd_cb_state.error = true;
+            else
+                sd_cb_state.blocks_available += status;
+        }
+    }
 }
