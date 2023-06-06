@@ -238,6 +238,11 @@ IDECDROMDevice::IDECDROMDevice()
     m_devinfo.devtype = ATAPI_DEVTYPE_CDROM;
     m_devinfo.removable = true;
     m_devinfo.bytes_per_sector = 2048;
+    strncpy(m_devinfo.ide_vendor, "ZuluIDE", sizeof(m_devinfo.ide_vendor));
+    strncpy(m_devinfo.ide_product, "CD-ROM", sizeof(m_devinfo.ide_product));
+    strncpy(m_devinfo.ide_revision, ZULU_FW_VERSION, sizeof(m_devinfo.ide_revision));
+    strncpy(m_devinfo.atapi_model, "ZuluIDE CD-ROM", sizeof(m_devinfo.atapi_model));
+    strncpy(m_devinfo.atapi_revision, ZULU_FW_VERSION, sizeof(m_devinfo.atapi_revision));
 }
 
 void IDECDROMDevice::set_image(IDEImage *image)
@@ -838,7 +843,7 @@ uint32_t IDECDROMDevice::getLeadOutLBA(const CUETrackInfo* lasttrack)
     if (lasttrack != nullptr && lasttrack->track_number != 0 && m_image != nullptr)
     {
         uint32_t lastTrackBlocks = (m_image->capacity() - lasttrack->file_offset) / lasttrack->sector_length;
-        return lasttrack->track_start + lastTrackBlocks + 1;
+        return lasttrack->track_start + lastTrackBlocks;
     }
     else
     {

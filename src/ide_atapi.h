@@ -35,6 +35,11 @@ protected:
         bool removable;
         uint32_t bytes_per_sector;
         uint8_t media_status_events;
+        char ide_vendor[8];
+        char ide_product[16];
+        char ide_revision[4];
+        char atapi_model[20];
+        char atapi_revision[4];
     } m_devinfo;
     
     enum atapi_data_state_t {

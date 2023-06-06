@@ -80,7 +80,9 @@ void ide_phy_read_block(uint8_t *buf, uint32_t blocklen);
 
 void ide_phy_stop_transfers();
 
-uint32_t ide_phy_get_max_blocksize();
-
 // Assert IDE interrupt and set status register
 void ide_phy_assert_irq(uint8_t ide_status);
+
+// Query what is supported by the IDE PHY
+uint32_t ide_phy_get_max_blocksize();
+uint32_t ide_phy_get_min_pio_cycletime_ns();

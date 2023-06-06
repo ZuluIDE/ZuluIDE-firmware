@@ -91,7 +91,7 @@ void ide_protocol_poll()
             bool status = device->handle_command(&regs);
             if (!status)
             {
-                dbgmsg("-- Command handler failed");
+                logmsg("-- Command handler failed for ", get_ide_command_name(cmd));
                 regs.error = IDE_ERROR_ABORT;
                 ide_phy_set_regs(&regs);
                 ide_phy_assert_irq(IDE_STATUS_DEVRDY | IDE_STATUS_ERR);

@@ -90,7 +90,22 @@ bool IDEATAPIDevice::cmd_set_features(ide_registers_t *regs)
     if (feature == IDE_SET_FEATURE_TRANSFER_MODE)
     {
         uint8_t mode = regs->sector_count;
-        dbgmsg("-- Set transfer mode ", mode);
+        uint8_t mode_major = mode >> 3;
+        uint8_t mode_minor = mode & 7;
+
+        if (mode_major == 0)
+        {
+            dbgmsg("-- Set PIO default transfer mode");
+        }
+        else if (mode_major == 1 && mode_minor <= 2)
+        {
+            dbgmsg("-- Set PIO transfer mode ", (int)mode_minor);
+        }
+        else
+        {
+            dbgmsg("-- Unsupported mode ", mode);
+            regs->error = IDE_ERROR_ABORT;
+        }
     }
     else if (feature == IDE_SET_FEATURE_DISABLE_REVERT_TO_POWERON)
     {
@@ -140,16 +155,22 @@ bool IDEATAPIDevice::cmd_identify_packet_device(ide_registers_t *regs)
     idf[IDE_IDENTIFY_OFFSET_GENERAL_CONFIGURATION] |= (1 << 5); // Interrupt DRQ mode
     idf[IDE_IDENTIFY_OFFSET_CAPABILITIES_1] = 0x0200; // LBA supported
     idf[IDE_IDENTIFY_OFFSET_STANDARD_VERSION_MAJOR] = 0x0078; // Version ATAPI-6
+    idf[IDE_IDENTIFY_OFFSET_STANDARD_VERSION_MINOR] = 0x0019; // Minor version rev 3a
     idf[IDE_IDENTIFY_OFFSET_COMMAND_SET_SUPPORT_1] = 0x0014; // PACKET, Removable device command sets supported
     idf[IDE_IDENTIFY_OFFSET_COMMAND_SET_SUPPORT_2] = 0x4000;
     idf[IDE_IDENTIFY_OFFSET_COMMAND_SET_SUPPORT_3] = 0x4000;
     idf[IDE_IDENTIFY_OFFSET_COMMAND_SET_ENABLED_1] = 0x0014;
     idf[IDE_IDENTIFY_OFFSET_HARDWARE_RESET_RESULT] = 0x4049; // Diagnostics results
 
-    const char *fwrev = ZULU_FW_VERSION;
-    const char *model_name = "ZuluIDE CDROM";
-    copy_id_string(&idf[IDE_IDENTIFY_OFFSET_FIRMWARE_REV], 4, fwrev);
-    copy_id_string(&idf[IDE_IDENTIFY_OFFSET_MODEL_NUMBER], 20, model_name);
+    uint32_t pio_time = ide_phy_get_min_pio_cycletime_ns();
+    idf[IDE_IDENTIFY_OFFSET_PIO_MODE_ATA1] = pio_time << 8;
+    idf[IDE_IDENTIFY_OFFSET_MODE_INFO_VALID] |= 0x02; // PIO support word valid
+    idf[IDE_IDENTIFY_OFFSET_MODEINFO_PIO] = 0; // PIO3 not supported
+    idf[IDE_IDENTIFY_OFFSET_PIO_CYCLETIME_MIN] = pio_time;
+    idf[IDE_IDENTIFY_OFFSET_PIO_CYCLETIME_IORDY] = pio_time;
+
+    copy_id_string(&idf[IDE_IDENTIFY_OFFSET_FIRMWARE_REV], 4, m_devinfo.atapi_revision);
+    copy_id_string(&idf[IDE_IDENTIFY_OFFSET_MODEL_NUMBER], 20, m_devinfo.atapi_model);
 
     // Calculate checksum
     // See 8.15.61 Word 255: Integrity word
@@ -231,9 +252,14 @@ bool IDEATAPIDevice::set_packet_device_signature(uint8_t error, bool was_reset)
     regs.sector_count = 0x01;
     
     if (was_reset)
+    {
+        regs.error = 1; // Diagnostics ok
         regs.status = 0;
+    }
     else
+    {
         regs.status = IDE_STATUS_BSY;
+    }
     ide_phy_set_regs(&regs);
 
     if (!was_reset)
@@ -247,10 +273,13 @@ bool IDEATAPIDevice::set_packet_device_signature(uint8_t error, bool was_reset)
 
 bool IDEATAPIDevice::atapi_send_data(const uint8_t *data, size_t blocksize, size_t num_blocks, bool wait_finish)
 {
-    dbgmsg("---- ATAPI send ", (int)num_blocks, "x", (int)blocksize, " bytes: ",
-           bytearray((const uint8_t*)data, blocksize * num_blocks));
+    if (blocksize < 600 && wait_finish)
+    {
+        dbgmsg("---- ATAPI send ", (int)num_blocks, "x", (int)blocksize, " bytes: ",
+            bytearray((const uint8_t*)data, blocksize * num_blocks));
+    }
 
-    size_t max_blocksize = ide_phy_get_max_blocksize();
+    size_t max_blocksize = std::min<size_t>(ide_phy_get_max_blocksize(), m_atapi_state.bytes_req);
     if (blocksize > max_blocksize)
     {
         // Have to split the blocks for phy
@@ -355,6 +384,7 @@ bool IDEATAPIDevice::handle_atapi_command(const uint8_t *cmd)
         case ATAPI_CMD_WRITE12:         return atapi_write(cmd);
 
         default:
+            logmsg("-- WARNING: Unsupported ATAPI command ", get_atapi_command_name(cmd[0]));
             return atapi_cmd_error(ATAPI_SENSE_ILLEGAL_REQ, ATAPI_ASC_INVALID_CMD);
     }
 }
@@ -407,8 +437,9 @@ bool IDEATAPIDevice::atapi_inquiry(const uint8_t *cmd)
     inquiry[ATAPI_INQUIRY_REMOVABLE_MEDIA] = m_devinfo.removable ? 0x80 : 0;
     inquiry[ATAPI_INQUIRY_ATAPI_VERSION] = 0x21;
     inquiry[ATAPI_INQUIRY_EXTRA_LENGTH] = count - 5;
-    memcpy(&inquiry[ATAPI_INQUIRY_VENDOR], "Vendor", 6);
-    memcpy(&inquiry[ATAPI_INQUIRY_PRODUCT], "Product", 7);
+    strncpy((char*)&inquiry[ATAPI_INQUIRY_VENDOR], m_devinfo.ide_vendor, 8);
+    strncpy((char*)&inquiry[ATAPI_INQUIRY_PRODUCT], m_devinfo.ide_product, 16);
+    strncpy((char*)&inquiry[ATAPI_INQUIRY_REVISION], m_devinfo.ide_revision, 4);
 
     if (req_bytes < count) count = req_bytes;
     atapi_send_data(inquiry, count);
@@ -508,8 +539,9 @@ bool IDEATAPIDevice::atapi_get_event_status_notification(const uint8_t *cmd)
 bool IDEATAPIDevice::atapi_read_capacity(const uint8_t *cmd)
 {
     uint64_t capacity = (m_image ? m_image->capacity() : 0);
+    uint32_t last_lba = capacity / m_devinfo.bytes_per_sector - 1;
     uint8_t *buf = m_buffer.bytes;
-    write_be32(&buf[0], capacity / m_devinfo.bytes_per_sector);
+    write_be32(&buf[0], last_lba);
     write_be32(&buf[4], m_devinfo.bytes_per_sector);
     atapi_send_data(buf, 8);
 

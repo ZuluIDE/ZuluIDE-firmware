@@ -192,6 +192,13 @@ void ide_phy_stop_transfers()
     g_ide_phy.transfer_running = false;
 }
 
+// Assert IDE interrupt and set status register
+void ide_phy_assert_irq(uint8_t ide_status)
+{
+    fpga_wrcmd(FPGA_CMD_ASSERT_IRQ, &ide_status, 1);
+    // dbgmsg("ide_phy_assert_irq(", ide_status, ")");
+}
+
 uint32_t ide_phy_get_max_blocksize()
 {
     // ICE5LP1K has 8 kB of RAM.
@@ -199,9 +206,7 @@ uint32_t ide_phy_get_max_blocksize()
     return 2048;
 }
 
-// Assert IDE interrupt and set status register
-void ide_phy_assert_irq(uint8_t ide_status)
+uint32_t ide_phy_get_min_pio_cycletime_ns()
 {
-    fpga_wrcmd(FPGA_CMD_ASSERT_IRQ, &ide_status, 1);
-    // dbgmsg("ide_phy_assert_irq(", ide_status, ")");
+    return 240; // PIO2 mode
 }
