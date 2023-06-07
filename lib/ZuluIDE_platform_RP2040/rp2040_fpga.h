@@ -141,7 +141,7 @@ void fpga_transfer_finish();
 void fpga_dump_ide_regs();
 void fpga_dump_tracelog();
 
-#define FPGA_PROTOCOL_VERSION 1
+#define FPGA_PROTOCOL_VERSION 2
 
 #define FPGA_CMD_READ_STATUS            0x00
 #define FPGA_CMD_READ_IDE_REGS          0x01

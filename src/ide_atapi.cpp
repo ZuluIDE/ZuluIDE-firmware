@@ -92,18 +92,19 @@ bool IDEATAPIDevice::cmd_set_features(ide_registers_t *regs)
         uint8_t mode = regs->sector_count;
         uint8_t mode_major = mode >> 3;
         uint8_t mode_minor = mode & 7;
+        const ide_phy_capabilities_t *phy_caps = ide_phy_get_capabilities();
 
         if (mode_major == 0)
         {
             dbgmsg("-- Set PIO default transfer mode");
         }
-        else if (mode_major == 1 && mode_minor <= 2)
+        else if (mode_major == 1 && mode_minor <= phy_caps->max_pio_mode)
         {
             dbgmsg("-- Set PIO transfer mode ", (int)mode_minor);
         }
         else
         {
-            dbgmsg("-- Unsupported mode ", mode);
+            dbgmsg("-- Unsupported mode ", mode, " (major ", (int)mode_major, " minor ", (int)mode_minor, ")");
             regs->error = IDE_ERROR_ABORT;
         }
     }
@@ -162,12 +163,13 @@ bool IDEATAPIDevice::cmd_identify_packet_device(ide_registers_t *regs)
     idf[IDE_IDENTIFY_OFFSET_COMMAND_SET_ENABLED_1] = 0x0014;
     idf[IDE_IDENTIFY_OFFSET_HARDWARE_RESET_RESULT] = 0x4049; // Diagnostics results
 
-    uint32_t pio_time = ide_phy_get_min_pio_cycletime_ns();
-    idf[IDE_IDENTIFY_OFFSET_PIO_MODE_ATA1] = pio_time << 8;
+    const ide_phy_capabilities_t *phy_caps = ide_phy_get_capabilities();
+    if (phy_caps->supports_iordy) idf[IDE_IDENTIFY_OFFSET_CAPABILITIES_1] |= (1 << 11);
+    idf[IDE_IDENTIFY_OFFSET_PIO_MODE_ATA1] = (phy_caps->max_pio_mode << 8);
     idf[IDE_IDENTIFY_OFFSET_MODE_INFO_VALID] |= 0x02; // PIO support word valid
-    idf[IDE_IDENTIFY_OFFSET_MODEINFO_PIO] = 0; // PIO3 not supported
-    idf[IDE_IDENTIFY_OFFSET_PIO_CYCLETIME_MIN] = pio_time;
-    idf[IDE_IDENTIFY_OFFSET_PIO_CYCLETIME_IORDY] = pio_time;
+    idf[IDE_IDENTIFY_OFFSET_MODEINFO_PIO] = (phy_caps->max_pio_mode >= 3) ? 1 : 0; // PIO3 supported?
+    idf[IDE_IDENTIFY_OFFSET_PIO_CYCLETIME_MIN] = phy_caps->min_pio_cycletime_no_iordy; // Without IORDY
+    idf[IDE_IDENTIFY_OFFSET_PIO_CYCLETIME_IORDY] = phy_caps->min_pio_cycletime_with_iordy; // With IORDY
 
     copy_id_string(&idf[IDE_IDENTIFY_OFFSET_FIRMWARE_REV], 4, m_devinfo.atapi_revision);
     copy_id_string(&idf[IDE_IDENTIFY_OFFSET_MODEL_NUMBER], 20, m_devinfo.atapi_model);
@@ -279,7 +281,8 @@ bool IDEATAPIDevice::atapi_send_data(const uint8_t *data, size_t blocksize, size
             bytearray((const uint8_t*)data, blocksize * num_blocks));
     }
 
-    size_t max_blocksize = std::min<size_t>(ide_phy_get_max_blocksize(), m_atapi_state.bytes_req);
+    size_t phy_max_blocksize = ide_phy_get_capabilities()->max_blocksize;
+    size_t max_blocksize = std::min<size_t>(phy_max_blocksize, m_atapi_state.bytes_req);
     if (blocksize > max_blocksize)
     {
         // Have to split the blocks for phy

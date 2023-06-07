@@ -30,6 +30,18 @@ static struct {
     bool transfer_running;
 } g_ide_phy;
 
+static ide_phy_capabilities_t g_ide_phy_capabilities = {
+    // ICE5LP1K has 8 kB of RAM.
+    // Part of it is reserved for trace buffer.
+    // 2x 2560 byte buffers is enough for transferring whole raw 2352 byte CD-ROM sectors
+    .max_blocksize = 2560,
+
+    .supports_iordy = true,
+    .max_pio_mode = 3,
+    .min_pio_cycletime_no_iordy = 240,
+    .min_pio_cycletime_with_iordy = 180
+};
+
 // Reset the IDE phy
 void ide_phy_reset(const ide_phy_config_t* config)
 {
@@ -199,14 +211,7 @@ void ide_phy_assert_irq(uint8_t ide_status)
     // dbgmsg("ide_phy_assert_irq(", ide_status, ")");
 }
 
-uint32_t ide_phy_get_max_blocksize()
+const ide_phy_capabilities_t *ide_phy_get_capabilities()
 {
-    // ICE5LP1K has 8 kB of RAM.
-    // Part of it is reserved for trace buffer, so we can fit at most 2x 2kB buffers.
-    return 2048;
-}
-
-uint32_t ide_phy_get_min_pio_cycletime_ns()
-{
-    return 240; // PIO2 mode
+    return &g_ide_phy_capabilities;
 }

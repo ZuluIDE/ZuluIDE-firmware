@@ -84,5 +84,13 @@ void ide_phy_stop_transfers();
 void ide_phy_assert_irq(uint8_t ide_status);
 
 // Query what is supported by the IDE PHY
-uint32_t ide_phy_get_max_blocksize();
-uint32_t ide_phy_get_min_pio_cycletime_ns();
+struct ide_phy_capabilities_t
+{
+    uint32_t max_blocksize;
+    bool supports_iordy;
+    int max_pio_mode;
+    int min_pio_cycletime_no_iordy;
+    int min_pio_cycletime_with_iordy;
+};
+
+const ide_phy_capabilities_t *ide_phy_get_capabilities();
