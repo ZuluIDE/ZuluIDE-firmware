@@ -15,6 +15,7 @@ public:
 protected:
     
     virtual bool handle_atapi_command(const uint8_t *cmd);
+    virtual bool atapi_prevent_allow_removal(const uint8_t *cmd);
     virtual bool atapi_read_disc_information(const uint8_t *cmd);
     virtual bool atapi_read_toc(const uint8_t *cmd);
     virtual bool atapi_read_header(const uint8_t *cmd);
@@ -51,4 +52,7 @@ protected:
     bool getFirstLastTrackInfo(CUETrackInfo &first, CUETrackInfo &last);
     uint32_t getLeadOutLBA(const CUETrackInfo* lasttrack);
     CUETrackInfo getTrackFromLBA(uint32_t lba);
+
+    // ATAPI configuration pages
+    virtual size_t atapi_get_configuration(uint16_t feature, uint8_t *buffer, size_t max_bytes);
 };

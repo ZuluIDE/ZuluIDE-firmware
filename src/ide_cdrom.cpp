@@ -240,9 +240,12 @@ IDECDROMDevice::IDECDROMDevice()
     m_devinfo.bytes_per_sector = 2048;
     strncpy(m_devinfo.ide_vendor, "ZuluIDE", sizeof(m_devinfo.ide_vendor));
     strncpy(m_devinfo.ide_product, "CD-ROM", sizeof(m_devinfo.ide_product));
-    strncpy(m_devinfo.ide_revision, ZULU_FW_VERSION, sizeof(m_devinfo.ide_revision));
+    memcpy(m_devinfo.ide_revision, ZULU_FW_VERSION, sizeof(m_devinfo.ide_revision));
     strncpy(m_devinfo.atapi_model, "ZuluIDE CD-ROM", sizeof(m_devinfo.atapi_model));
-    strncpy(m_devinfo.atapi_revision, ZULU_FW_VERSION, sizeof(m_devinfo.atapi_revision));
+    memcpy(m_devinfo.atapi_revision, ZULU_FW_VERSION, sizeof(m_devinfo.atapi_revision));
+    m_devinfo.num_profiles = 1;
+    m_devinfo.profiles[0] = ATAPI_PROFILE_CDROM;
+    m_devinfo.current_profile = ATAPI_PROFILE_CDROM;
 }
 
 void IDECDROMDevice::set_image(IDEImage *image)
@@ -279,6 +282,7 @@ bool IDECDROMDevice::handle_atapi_command(const uint8_t *cmd)
 {
     switch (cmd[0])
     {
+        case ATAPI_CMD_PREVENT_ALLOW_MEDIUM_REMOVAL: return atapi_prevent_allow_removal(cmd);
         case ATAPI_CMD_READ_DISC_INFORMATION:   return atapi_read_disc_information(cmd);
         case ATAPI_CMD_READ_TOC:                return atapi_read_toc(cmd);
         case ATAPI_CMD_READ_HEADER:             return atapi_read_header(cmd);
@@ -288,6 +292,16 @@ bool IDECDROMDevice::handle_atapi_command(const uint8_t *cmd)
         default:
             return IDEATAPIDevice::handle_atapi_command(cmd);
     }
+}
+
+bool IDECDROMDevice::atapi_prevent_allow_removal(const uint8_t *cmd)
+{
+    bool prevent = cmd[4] & 1;
+    bool persistent = cmd[4] & 2;
+
+    // We can't actually prevent SD card from being removed
+    dbgmsg("-- Host requested prevent=", (int)prevent, " persistent=", (int)persistent);
+    return atapi_cmd_ok();
 }
 
 bool IDECDROMDevice::atapi_read_disc_information(const uint8_t *cmd)
@@ -690,6 +704,7 @@ bool IDECDROMDevice::doReadCD(uint32_t lba, uint32_t length, uint8_t sector_type
     }
     else
     {
+        dbgmsg("-- CD read failed, starting offset ", (int)offset, " length ", (int)length);
         return atapi_cmd_error(ATAPI_SENSE_MEDIUM_ERROR, 0);
     }
 }
@@ -754,6 +769,7 @@ ssize_t IDECDROMDevice::read_callback(const uint8_t *data, size_t blocksize, siz
         assert(buf == m_buffer.bytes + m_cd_read_format.sector_length_out);
         if (!atapi_send_data(m_buffer.bytes, m_cd_read_format.sector_length_out, 1, false))
         {
+            dbgmsg("-- IDECDROMDevice atapi_send_data failed, length ", (int)m_cd_read_format.sector_length_out);
             return -1;
         }
         m_cd_read_format.sectors_done += 1;
@@ -870,4 +886,21 @@ CUETrackInfo IDECDROMDevice::getTrackFromLBA(uint32_t lba)
     }
 
     return result;
+}
+
+size_t IDECDROMDevice::atapi_get_configuration(uint16_t feature, uint8_t *buffer, size_t max_bytes)
+{
+    if (feature == ATAPI_FEATURE_CDREAD)
+    {
+        write_be16(&buffer[0], feature);
+        buffer[2] = 0x0B;
+        buffer[3] = 4;
+        buffer[4] = 0; // CD-ROM extra features not supported
+        buffer[5] = 0;
+        buffer[6] = 0;
+        buffer[7] = 0;
+        return 8;
+    }
+
+    return IDEATAPIDevice::atapi_get_configuration(feature, buffer, max_bytes);
 }

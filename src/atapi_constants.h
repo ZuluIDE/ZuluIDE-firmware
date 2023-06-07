@@ -114,3 +114,13 @@ ATAPI_COMMAND_LIST(ATAPI_ENUM_ENTRY)
 // ATAPI device types
 #define ATAPI_DEVTYPE_DIRECT_ACCESS     0
 #define ATAPI_DEVTYPE_CDROM             5
+
+// GET_CONFIGURATION profiles
+#define ATAPI_PROFILE_CDROM             0x0008
+
+// GET_CONFIGURATION features
+#define ATAPI_FEATURE_PROFILES          0x0000
+#define ATAPI_FEATURE_CORE              0x0001
+#define ATAPI_FEATURE_REMOVABLE         0x0003
+#define ATAPI_FEATURE_CDREAD            0x001E
+#define ATAPI_FEATURE_MAX               0x0032

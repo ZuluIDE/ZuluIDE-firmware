@@ -375,9 +375,11 @@ bool IDEATAPIDevice::handle_atapi_command(const uint8_t *cmd)
     switch (cmd[0])
     {
         case ATAPI_CMD_TEST_UNIT_READY: return atapi_test_unit_ready(cmd);
+        case ATAPI_CMD_START_STOP_UNIT: return atapi_start_stop_unit(cmd);
         case ATAPI_CMD_INQUIRY:         return atapi_inquiry(cmd);
         case ATAPI_CMD_MODE_SENSE10:    return atapi_mode_sense(cmd);
         case ATAPI_CMD_REQUEST_SENSE:   return atapi_request_sense(cmd);
+        case ATAPI_CMD_GET_CONFIGURATION: return atapi_get_configuration(cmd);
         case ATAPI_CMD_GET_EVENT_STATUS_NOTIFICATION: return atapi_get_event_status_notification(cmd);
         case ATAPI_CMD_READ_CAPACITY:   return atapi_read_capacity(cmd);
         case ATAPI_CMD_READ6:           return atapi_read(cmd);
@@ -392,9 +394,27 @@ bool IDEATAPIDevice::handle_atapi_command(const uint8_t *cmd)
     }
 }
 
+static const char *atapi_sense_to_str(uint8_t sense_key)
+{
+    switch (sense_key)
+    {
+        case ATAPI_SENSE_NO_SENSE:          return "NO_SENSE";
+        case ATAPI_SENSE_RECOVERED:         return "RECOVERED";
+        case ATAPI_SENSE_NOT_READY:         return "NOT_READY";
+        case ATAPI_SENSE_MEDIUM_ERROR:      return "MEDIUM_ERROR";
+        case ATAPI_SENSE_HARDWARE_ERROR:    return "HARDWARE_ERROR";
+        case ATAPI_SENSE_ILLEGAL_REQ:       return "ILLEGAL_REQ";
+        case ATAPI_SENSE_UNIT_ATTENTION:    return "UNIT_ATTENTION";
+        case ATAPI_SENSE_DATA_PROTECT:      return "DATA_PROTECT";
+        case ATAPI_SENSE_ABORTED_CMD:       return "ABORTED_CMD";
+        case ATAPI_SENSE_MISCOMPARE:        return "MISCOMPARE";
+        default:                            return "UNKNOWN_SENSE";
+    }
+}
+
 bool IDEATAPIDevice::atapi_cmd_error(uint8_t sense_key, uint16_t sense_asc)
 {
-    dbgmsg("-- ATAPI error: ", sense_key, " ", sense_asc);
+    dbgmsg("-- ATAPI error: ", sense_key, " ", sense_asc, " (", atapi_sense_to_str(sense_key), ")");
     m_atapi_state.sense_key = sense_key;
     m_atapi_state.sense_asc = sense_asc;
     m_atapi_state.data_state = ATAPI_DATA_IDLE;
@@ -428,6 +448,12 @@ bool IDEATAPIDevice::atapi_cmd_ok()
 
 bool IDEATAPIDevice::atapi_test_unit_ready(const uint8_t *cmd)
 {
+    return atapi_cmd_ok();
+}
+
+bool IDEATAPIDevice::atapi_start_stop_unit(const uint8_t *cmd)
+{
+    // TODO: medium ejection
     return atapi_cmd_ok();
 }
 
@@ -476,6 +502,7 @@ bool IDEATAPIDevice::atapi_mode_sense(const uint8_t *cmd)
         resp_bytes += atapi_get_mode_page(page_ctrl, 0, &resp[resp_bytes], max_bytes - resp_bytes);
     }
 
+    if (resp_bytes > req_bytes) resp_bytes = req_bytes;
     atapi_send_data(m_buffer.bytes, resp_bytes);
 
     return atapi_cmd_ok();
@@ -495,6 +522,57 @@ bool IDEATAPIDevice::atapi_request_sense(const uint8_t *cmd)
     
     if (req_bytes < sense_length) sense_length = req_bytes;
     atapi_send_data(m_buffer.bytes, sense_length);
+
+    return atapi_cmd_ok();
+}
+
+bool IDEATAPIDevice::atapi_get_configuration(const uint8_t *cmd)
+{
+    uint8_t type = cmd[1] & 3;
+    uint16_t starting_feature = parse_be16(&cmd[2]);
+    uint16_t req_bytes = parse_be16(&cmd[7]);
+
+    uint8_t *resp = m_buffer.bytes;
+    size_t max_bytes = sizeof(m_buffer);
+    size_t resp_bytes = 8; // Reserve space for feature header
+
+    if (type == 0)
+    {
+        // All supported features
+        for (uint16_t i = starting_feature; i <= ATAPI_FEATURE_MAX && resp_bytes < max_bytes; i++)
+        {
+            resp_bytes += atapi_get_configuration(i, &resp[resp_bytes], max_bytes - resp_bytes);
+        }
+    }
+    else if (type == 1)
+    {
+        // Only current features
+        for (uint16_t i = starting_feature; i <= ATAPI_FEATURE_MAX && resp_bytes < max_bytes; i++)
+        {
+            size_t len = atapi_get_configuration(i, &resp[resp_bytes], max_bytes - resp_bytes);
+            if (len > 0 && (resp[resp_bytes + 2] & 1))
+            {
+                resp_bytes += len;
+            }
+        }
+    }
+    else if (type == 2)
+    {
+        // Single feature
+        resp_bytes += atapi_get_configuration(starting_feature, &resp[resp_bytes], max_bytes - resp_bytes);
+    }
+
+    // Fill in feature header
+    write_be32(resp, resp_bytes);
+    resp[4] = 0;
+    resp[5] = 0;
+    if (is_medium_present())
+        write_be16(&resp[6], m_devinfo.current_profile);
+    else
+        write_be16(&resp[6], 0);
+
+    if (resp_bytes > req_bytes) resp_bytes = req_bytes;
+    atapi_send_data(m_buffer.bytes, resp_bytes);
 
     return atapi_cmd_ok();
 }
@@ -634,5 +712,40 @@ ssize_t IDEATAPIDevice::write_callback(uint8_t *data, size_t blocksize, size_t n
 
 size_t IDEATAPIDevice::atapi_get_mode_page(uint8_t page_ctrl, uint8_t page_idx, uint8_t *buffer, size_t max_bytes)
 {
+    return 0;
+}
+
+size_t IDEATAPIDevice::atapi_get_configuration(uint16_t feature, uint8_t *buffer, size_t max_bytes)
+{
+    if (feature == ATAPI_FEATURE_PROFILES)
+    {
+        // List of profiles supported by device
+        write_be16(&buffer[0], feature);
+        buffer[2] = 0x03; // Version, Persistent, Current
+        buffer[3] = m_devinfo.num_profiles * 4;
+
+        for (int i = 0; i < m_devinfo.num_profiles; i++)
+        {
+            write_be16(&buffer[4 + i * 4], m_devinfo.profiles[i]);
+            buffer[2] = (is_medium_present() ? 1 : 0);
+            buffer[3] = 0;
+        }
+
+        return 4 + m_devinfo.num_profiles * 4;
+    }
+
+    if (feature == ATAPI_FEATURE_CORE)
+    {
+        write_be16(&buffer[0], feature);
+        buffer[2] = 0x07;
+        buffer[3] = 8;
+        write_be32(&buffer[4], 2); // ATAPI standard
+        buffer[8] = 0; // DBE not supported
+        buffer[9] = 0;
+        buffer[10] = 0;
+        buffer[11] = 0;
+        return 12;
+    }
+
     return 0;
 }

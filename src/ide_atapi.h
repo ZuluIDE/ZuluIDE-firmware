@@ -26,6 +26,8 @@ public:
 
     virtual bool is_packet_device() { return true; }
 
+    virtual bool is_medium_present() { return m_image != nullptr; }
+
 protected:
     IDEImage *m_image;
 
@@ -35,11 +37,20 @@ protected:
         bool removable;
         uint32_t bytes_per_sector;
         uint8_t media_status_events;
+
+        // Response to INQUIRY
         char ide_vendor[8];
         char ide_product[16];
         char ide_revision[4];
+
+        // Response to IDENTIFY PACKET DEVICE
         char atapi_model[20];
         char atapi_revision[4];
+
+        // Profiles reported to GET CONFIGURATION
+        uint16_t num_profiles;
+        uint16_t profiles[8];
+        uint16_t current_profile;
     } m_devinfo;
     
     enum atapi_data_state_t {
@@ -86,9 +97,11 @@ protected:
     // ATAPI command handlers
     virtual bool handle_atapi_command(const uint8_t *cmd);
     virtual bool atapi_test_unit_ready(const uint8_t *cmd);
+    virtual bool atapi_start_stop_unit(const uint8_t *cmd);
     virtual bool atapi_inquiry(const uint8_t *cmd);
     virtual bool atapi_mode_sense(const uint8_t *cmd);
     virtual bool atapi_request_sense(const uint8_t *cmd);
+    virtual bool atapi_get_configuration(const uint8_t *cmd);
     virtual bool atapi_get_event_status_notification(const uint8_t *cmd);
     virtual bool atapi_read_capacity(const uint8_t *cmd);
     virtual bool atapi_read(const uint8_t *cmd);
@@ -103,6 +116,9 @@ protected:
 
     // ATAPI mode pages
     virtual size_t atapi_get_mode_page(uint8_t page_ctrl, uint8_t page_idx, uint8_t *buffer, size_t max_bytes);
+
+    // ATAPI get_configuration responses
+    virtual size_t atapi_get_configuration(uint16_t feature, uint8_t *buffer, size_t max_bytes);
 };
 
 
