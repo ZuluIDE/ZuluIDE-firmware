@@ -37,7 +37,7 @@ static ide_phy_capabilities_t g_ide_phy_capabilities = {
     .max_blocksize = 2560,
 
     .supports_iordy = true,
-    .max_pio_mode = 3,
+    .max_pio_mode = 2, // PIO3 seems to have timing problems
     .min_pio_cycletime_no_iordy = 240,
     .min_pio_cycletime_with_iordy = 180
 };
