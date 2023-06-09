@@ -137,9 +137,8 @@ void fpga_rddata_start(uint32_t *data, size_t num_words);
 // Wait for DMA data transfer to finish
 void fpga_transfer_finish();
 
-// Dump IDE register values and IDE register access trace log
+// Dump IDE register values
 void fpga_dump_ide_regs();
-void fpga_dump_tracelog();
 
 #define FPGA_PROTOCOL_VERSION 2
 

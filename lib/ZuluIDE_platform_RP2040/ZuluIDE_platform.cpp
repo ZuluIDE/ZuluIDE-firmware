@@ -384,7 +384,7 @@ static void watchdog_callback(unsigned alarm_num)
                 p += 4;
             }
 
-            fpga_dump_tracelog();
+            fpga_dump_ide_regs();
 
             usb_log_poll();
             platform_emergency_log_save();
