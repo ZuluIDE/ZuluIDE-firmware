@@ -68,7 +68,7 @@ static ide_phy_capabilities_t g_ide_phy_capabilities = {
     .min_pio_cycletime_no_iordy = 240,
     .min_pio_cycletime_with_iordy = 180,
 
-    .max_udma_mode = 0,
+    .max_udma_mode = -1, // TODO: Enable UDMA0
 };
 
 // Reset the IDE phy
