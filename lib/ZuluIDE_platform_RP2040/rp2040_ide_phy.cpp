@@ -28,7 +28,36 @@
 static struct {
     ide_phy_config_t config;
     bool transfer_running;
+    int udma_mode;
+    volatile bool watchdog_error;
+
+    int crc_errors;
+    uint32_t block_crc0;
+    uint32_t block_crc1;
 } g_ide_phy;
+
+#define BLOCK_CRC_VALID 0x10000
+
+// Compare the CRC we calculated with DMA when writing to FPGA
+// against the CRC received from the host in UltraDMA mode.
+static void verify_crc(uint32_t *block_crc)
+{
+    uint16_t host_crc = 0;
+    fpga_rdcmd(FPGA_CMD_READ_UDMA_CRC, (uint8_t*)&host_crc, 2);
+
+    if (!(*block_crc & BLOCK_CRC_VALID))
+    {
+        // This was a 1-block transfer, the READ_UDMA_CRC command above
+        // is still needed to read out the block CRCs from FPGA.
+    }
+    else if ((uint16_t)*block_crc != host_crc)
+    {
+        logmsg("WARNING: UltraDMA CRC mismatch, calculated ", (uint16_t)*block_crc, ", host sent ", host_crc);
+        g_ide_phy.crc_errors++;
+    }
+
+    *block_crc = 0;
+}
 
 static ide_phy_capabilities_t g_ide_phy_capabilities = {
     // ICE5LP1K has 8 kB of RAM, we use it as 2x 4096 byte buffers
@@ -46,6 +75,7 @@ static ide_phy_capabilities_t g_ide_phy_capabilities = {
 void ide_phy_reset(const ide_phy_config_t* config)
 {
     g_ide_phy.config = *config;
+    g_ide_phy.watchdog_error = false;
 
     fpga_init();
 
@@ -60,7 +90,7 @@ void ide_phy_reset(const ide_phy_config_t* config)
 
 void ide_phy_reset_from_watchdog()
 {
-    ide_phy_reset(&g_ide_phy.config);
+    g_ide_phy.watchdog_error = true;
 }
 
 // Poll for new events.
@@ -70,7 +100,12 @@ ide_event_t ide_phy_get_events()
     uint8_t status;
     fpga_rdcmd(FPGA_CMD_READ_STATUS, &status, 1);
 
-    if (status & FPGA_STATUS_IDE_RST)
+    if (g_ide_phy.watchdog_error)
+    {
+        ide_phy_reset(&g_ide_phy.config);
+        return IDE_EVENT_HWRST;
+    }
+    else if (status & FPGA_STATUS_IDE_RST)
     {
         uint8_t clrmask = FPGA_STATUS_IDE_RST;
         fpga_wrcmd(FPGA_CMD_CLR_IRQ_FLAGS, &clrmask, 1);
@@ -135,11 +170,14 @@ void ide_phy_set_regs(const ide_registers_t *regs)
 void ide_phy_start_write(uint32_t blocklen, int udma_mode)
 {
     // dbgmsg("ide_phy_start_write(", (int)blocklen, ", ", udma_mode, ")");
+    g_ide_phy.crc_errors = 0;
+    g_ide_phy.block_crc1 = g_ide_phy.block_crc0 = 0;
     assert((blocklen & 1) == 0);
     uint16_t last_word_idx = blocklen / 2 - 1;
     if (udma_mode < 0)
     {
         fpga_wrcmd(FPGA_CMD_START_WRITE, (const uint8_t*)&last_word_idx, 2);
+        g_ide_phy.udma_mode = -1;
     }
     else
     {
@@ -147,6 +185,7 @@ void ide_phy_start_write(uint32_t blocklen, int udma_mode)
                           (uint8_t)(last_word_idx),
                           (uint8_t)((last_word_idx) >> 8)};
         fpga_wrcmd(FPGA_CMD_START_UDMA_WRITE, arg, 3);
+        g_ide_phy.udma_mode = udma_mode;
     }
 }
 
@@ -161,8 +200,20 @@ bool ide_phy_can_write_block()
 void ide_phy_write_block(const uint8_t *buf, uint32_t blocklen)
 {
     // dbgmsg("ide_phy_write_block(", bytearray(buf, blocklen), ")");
-    fpga_wrcmd(FPGA_CMD_WRITE_DATABUF, buf, blocklen);
+
+    if (g_ide_phy.udma_mode >= 0 && (g_ide_phy.block_crc1 & BLOCK_CRC_VALID))
+    {
+        // Verify the CRC of the previous block before overwriting it
+        verify_crc(&g_ide_phy.block_crc1);
+    }
+
+    uint16_t crc = 0;
+    fpga_wrcmd(FPGA_CMD_WRITE_DATABUF, buf, blocklen, &crc);
     g_ide_phy.transfer_running = true;
+
+    // There can be up to two blocks in FPGA buffers, so store their CRCs separately.
+    g_ide_phy.block_crc1 = g_ide_phy.block_crc0;
+    g_ide_phy.block_crc0 = crc | BLOCK_CRC_VALID;
 }
 
 bool ide_phy_is_write_finished()
@@ -172,6 +223,14 @@ bool ide_phy_is_write_finished()
     if (!(status & FPGA_STATUS_DATA_DIR) || (status & FPGA_STATUS_TX_DONE))
     {
         // dbgmsg("ide_phy_is_write_finished() => true");
+
+        if (g_ide_phy.udma_mode >= 0)
+        {
+            // Verify CRC of last two blocks
+            verify_crc(&g_ide_phy.block_crc1);
+            verify_crc(&g_ide_phy.block_crc0);
+        }
+
         g_ide_phy.transfer_running = false;
         return true;
     }
@@ -184,10 +243,13 @@ bool ide_phy_is_write_finished()
 void ide_phy_start_read(uint32_t blocklen, int udma_mode)
 {
     // dbgmsg("ide_phy_start_read(", (int)blocklen, ")");
+    g_ide_phy.crc_errors = 0;
+    g_ide_phy.block_crc1 = g_ide_phy.block_crc0 = 0;
     assert((blocklen & 1) == 0);
     uint16_t last_word_idx = blocklen / 2 - 1;
     fpga_wrcmd(FPGA_CMD_START_READ, (const uint8_t*)&last_word_idx, 2);
     g_ide_phy.transfer_running = true;
+    g_ide_phy.udma_mode = -1; // Not supported for read yet
 
     ide_phy_assert_irq(IDE_STATUS_DEVRDY | IDE_STATUS_DATAREQ);
 }
@@ -206,13 +268,16 @@ void ide_phy_read_block(uint8_t *buf, uint32_t blocklen)
     // dbgmsg("ide_phy_read_block(", bytearray(buf, blocklen), ")");
 }
 
-void ide_phy_stop_transfers()
+void ide_phy_stop_transfers(int *crc_errors)
 {
     // Configure buffer in write mode but don't write any data => transfer stopped
     uint16_t arg = 65535;
     fpga_wrcmd(FPGA_CMD_START_WRITE, (const uint8_t*)&arg, 2);
     // dbgmsg("ide_phy_stop_transfers()");
     g_ide_phy.transfer_running = false;
+    g_ide_phy.udma_mode = -1;
+
+    if (crc_errors) *crc_errors = g_ide_phy.crc_errors;
 }
 
 // Assert IDE interrupt and set status register

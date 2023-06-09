@@ -238,7 +238,7 @@ static void fpga_release()
     pio_sm_set_consecutive_pindirs(FPGA_QSPI_PIO, FPGA_QSPI_PIO_SM, FPGA_QSPI_D0, 4, false);
 }
 
-void fpga_wrcmd(uint8_t cmd, const uint8_t *payload, size_t payload_len)
+void fpga_wrcmd(uint8_t cmd, const uint8_t *payload, size_t payload_len, uint16_t *crc)
 {
     // Expecting a write-mode command
     assert(cmd & 0x80);
@@ -280,9 +280,12 @@ void fpga_wrcmd(uint8_t cmd, const uint8_t *payload, size_t payload_len)
             &cfg_dummy_rx, &dummy, &FPGA_QSPI_PIO->rxf[FPGA_QSPI_PIO_SM],
             num_words, true);
 
+        dma_hw->sniff_data = 0x4ABA; // ATA CRC16 initialization value
         dma_channel_configure(FPGA_QSPI_DMA_TX,
             &g_fpga_qspi.dma_tx_cfg, &FPGA_QSPI_PIO->txf[FPGA_QSPI_PIO_SM], payload,
-            num_words, true);
+            num_words, false);
+        dma_sniffer_enable(FPGA_QSPI_DMA_TX, 0x03, true);
+        dma_channel_start(FPGA_QSPI_DMA_TX);
 
         uint32_t start = millis();
         while (dma_channel_is_busy(FPGA_QSPI_DMA_RX))
@@ -296,12 +299,15 @@ void fpga_wrcmd(uint8_t cmd, const uint8_t *payload, size_t payload_len)
 
         dma_channel_abort(FPGA_QSPI_DMA_RX);
         dma_channel_abort(FPGA_QSPI_DMA_TX);
+        dma_sniffer_disable();
+
+        if (crc) *crc = dma_hw->sniff_data;
     }
 
     fpga_release();
 }
 
-void fpga_rdcmd(uint8_t cmd, uint8_t *result, size_t result_len)
+void fpga_rdcmd(uint8_t cmd, uint8_t *result, size_t result_len, uint16_t *crc)
 {
     // Expecting a read-mode command
     assert(!(cmd & 0x80));
@@ -341,9 +347,12 @@ void fpga_rdcmd(uint8_t cmd, uint8_t *result, size_t result_len)
 
         // Receive 32 bits at a time using DMA
         uint32_t num_words = result_len / 4;
+        dma_hw->sniff_data = 0x4ABA; // ATA CRC16 initialization value
         dma_channel_configure(FPGA_QSPI_DMA_RX,
             &g_fpga_qspi.dma_rx_cfg, result, &FPGA_QSPI_PIO->rxf[FPGA_QSPI_PIO_SM],
-            num_words, true);
+            num_words, false);
+        dma_sniffer_enable(FPGA_QSPI_DMA_RX, 0x03, true);
+        dma_channel_start(FPGA_QSPI_DMA_RX);
 
         uint32_t dummy = 0;
         dma_channel_config cfg_dummy_tx = g_fpga_qspi.dma_tx_cfg;
@@ -364,6 +373,9 @@ void fpga_rdcmd(uint8_t cmd, uint8_t *result, size_t result_len)
 
         dma_channel_abort(FPGA_QSPI_DMA_RX);
         dma_channel_abort(FPGA_QSPI_DMA_TX);
+        dma_sniffer_disable();
+
+        if (crc) *crc = dma_hw->sniff_data;
     }
 
     fpga_release();

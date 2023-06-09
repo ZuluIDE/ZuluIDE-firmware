@@ -126,10 +126,10 @@
 bool fpga_init();
 
 // Send a write command to FPGA through QSPI bus
-void fpga_wrcmd(uint8_t cmd, const uint8_t *payload, size_t payload_len);
+void fpga_wrcmd(uint8_t cmd, const uint8_t *payload, size_t payload_len, uint16_t *crc = nullptr);
 
 // Send a read command to FPGA through QSPI bus
-void fpga_rdcmd(uint8_t cmd, uint8_t *result, size_t result_len);
+void fpga_rdcmd(uint8_t cmd, uint8_t *result, size_t result_len, uint16_t *crc = nullptr);
 
 // Dump IDE register values
 void fpga_dump_ide_regs();

@@ -229,6 +229,7 @@ bool IDEATAPIDevice::cmd_packet(ide_registers_t *regs)
     m_atapi_state.data_state = ATAPI_DATA_IDLE;
     m_atapi_state.bytes_req = regs->lba_mid | ((uint16_t)regs->lba_high << 8);
     m_atapi_state.dma_requested = regs->feature & 0x01;
+    m_atapi_state.crc_errors = 0;
 
     // Check if PHY has already received command
     if (!ide_phy_can_read_block() && (regs->status & IDE_STATUS_BSY))
@@ -389,6 +390,9 @@ bool IDEATAPIDevice::atapi_send_wait_finish()
         }
     }
 
+    // Check for any CRC errors
+    ide_phy_stop_transfers(&m_atapi_state.crc_errors);
+
     return true;
 }
 
@@ -471,6 +475,12 @@ bool IDEATAPIDevice::atapi_cmd_error(uint8_t sense_key, uint16_t sense_asc)
 
 bool IDEATAPIDevice::atapi_cmd_ok()
 {
+    if (m_atapi_state.crc_errors > 0)
+    {
+        logmsg("-- Detected ", m_atapi_state.crc_errors, " CRC errors during transfer, reporting error to host");
+        return atapi_cmd_error(ATAPI_SENSE_HARDWARE_ERROR, ATAPI_ASC_CRC_ERROR);
+    }
+
     dbgmsg("-- ATAPI success");
     m_atapi_state.sense_key = 0;
     m_atapi_state.sense_asc = 0;
@@ -706,14 +716,6 @@ bool IDEATAPIDevice::atapi_read(const uint8_t *cmd)
 
 bool IDEATAPIDevice::doRead(uint32_t lba, uint32_t transfer_len)
 {
-    // TODO: asynchronous transfer
-    // for (int i = 0; i < ATAPI_TRANSFER_REQ_COUNT; i++)
-    // {
-    //     m_transfer_reqs[i] = ide_phy_msg_t{};
-    //     m_transfer_reqs[i].status = &m_transfer_req_status[i];
-    //     m_transfer_reqs[i].type = IDE_MSG_SEND_DATA;
-    // }
-
     bool status = m_image->read((uint64_t)lba * m_devinfo.bytes_per_sector,
                                 m_devinfo.bytes_per_sector, transfer_len,
                                 this);
