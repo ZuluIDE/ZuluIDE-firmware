@@ -77,6 +77,8 @@ void IDEATAPIDevice::handle_event(ide_event_t evt)
 {
     if (evt == IDE_EVENT_HWRST || evt == IDE_EVENT_SWRST)
     {
+        m_atapi_state.udma_mode = -1;
+        m_atapi_state.unit_attention = true;
         set_packet_device_signature(0, true);
     }
 }
@@ -96,11 +98,18 @@ bool IDEATAPIDevice::cmd_set_features(ide_registers_t *regs)
 
         if (mode_major == 0)
         {
+            m_atapi_state.udma_mode = -1;
             dbgmsg("-- Set PIO default transfer mode");
         }
         else if (mode_major == 1 && mode_minor <= phy_caps->max_pio_mode)
         {
+            m_atapi_state.udma_mode = -1;
             dbgmsg("-- Set PIO transfer mode ", (int)mode_minor);
+        }
+        else if (mode_major == 8 && mode_minor <= phy_caps->max_udma_mode)
+        {
+            m_atapi_state.udma_mode = mode_minor;
+            dbgmsg("-- Set UDMA transfer mode ", (int)mode_minor);
         }
         else
         {
@@ -163,6 +172,7 @@ bool IDEATAPIDevice::cmd_identify_packet_device(ide_registers_t *regs)
     idf[IDE_IDENTIFY_OFFSET_COMMAND_SET_ENABLED_1] = 0x0014;
     idf[IDE_IDENTIFY_OFFSET_HARDWARE_RESET_RESULT] = 0x4049; // Diagnostics results
 
+    // Supported PIO modes
     const ide_phy_capabilities_t *phy_caps = ide_phy_get_capabilities();
     if (phy_caps->supports_iordy) idf[IDE_IDENTIFY_OFFSET_CAPABILITIES_1] |= (1 << 11);
     idf[IDE_IDENTIFY_OFFSET_PIO_MODE_ATA1] = (phy_caps->max_pio_mode << 8);
@@ -170,6 +180,15 @@ bool IDEATAPIDevice::cmd_identify_packet_device(ide_registers_t *regs)
     idf[IDE_IDENTIFY_OFFSET_MODEINFO_PIO] = (phy_caps->max_pio_mode >= 3) ? 1 : 0; // PIO3 supported?
     idf[IDE_IDENTIFY_OFFSET_PIO_CYCLETIME_MIN] = phy_caps->min_pio_cycletime_no_iordy; // Without IORDY
     idf[IDE_IDENTIFY_OFFSET_PIO_CYCLETIME_IORDY] = phy_caps->min_pio_cycletime_with_iordy; // With IORDY
+
+    // Supported UDMA modes
+    idf[IDE_IDENTIFY_OFFSET_MODE_INFO_VALID] |= 0x04; // UDMA support word valid
+    if (phy_caps->max_udma_mode >= 0)
+    {
+        idf[IDE_IDENTIFY_OFFSET_CAPABILITIES_1] |= (1 << 8);
+        idf[IDE_IDENTIFY_OFFSET_MODEINFO_ULTRADMA] = 0x0001;
+        if (m_atapi_state.udma_mode == 0) idf[IDE_IDENTIFY_OFFSET_MODEINFO_ULTRADMA] |= (1 << 8);
+    }
 
     copy_id_string(&idf[IDE_IDENTIFY_OFFSET_FIRMWARE_REV], 4, m_devinfo.atapi_revision);
     copy_id_string(&idf[IDE_IDENTIFY_OFFSET_MODEL_NUMBER], 20, m_devinfo.atapi_model);
@@ -209,6 +228,7 @@ bool IDEATAPIDevice::cmd_packet(ide_registers_t *regs)
     // Host gives limit to bytecount in responses
     m_atapi_state.data_state = ATAPI_DATA_IDLE;
     m_atapi_state.bytes_req = regs->lba_mid | ((uint16_t)regs->lba_high << 8);
+    m_atapi_state.dma_requested = regs->feature & 0x01;
 
     // Check if PHY has already received command
     if (!ide_phy_can_read_block() && (regs->status & IDE_STATUS_BSY))
@@ -312,11 +332,12 @@ bool IDEATAPIDevice::atapi_send_data(const uint8_t *data, size_t blocksize, size
 
 bool IDEATAPIDevice::atapi_send_data_block(const uint8_t *data, uint16_t blocksize)
 {
-    // dbgmsg("---- Send data block ", (uint32_t)data, " ", (int)blocksize);
+    // dbgmsg("---- Send data block ", (uint32_t)data, " ", (int)blocksize, " udma_mode:", m_atapi_state.udma_mode);
 
     if (m_atapi_state.data_state != ATAPI_DATA_WRITE
         || blocksize != m_atapi_state.blocksize)
     {
+        atapi_send_wait_finish();
         m_atapi_state.blocksize = blocksize;
         m_atapi_state.data_state = ATAPI_DATA_WRITE;
 
@@ -330,7 +351,8 @@ bool IDEATAPIDevice::atapi_send_data_block(const uint8_t *data, uint16_t blocksi
         ide_phy_set_regs(&regs);
 
         // Start data transfer
-        ide_phy_start_write(blocksize);
+        int udma_mode = (m_atapi_state.dma_requested ? m_atapi_state.udma_mode : -1);
+        ide_phy_start_write(blocksize, udma_mode);
         ide_phy_write_block(data, blocksize);
     }
     else
@@ -372,13 +394,23 @@ bool IDEATAPIDevice::atapi_send_wait_finish()
 
 bool IDEATAPIDevice::handle_atapi_command(const uint8_t *cmd)
 {
+    // INQUIRY and REQUEST SENSE bypass unit attention
+    switch (cmd[0])
+    {
+        case ATAPI_CMD_INQUIRY:         return atapi_inquiry(cmd);
+        case ATAPI_CMD_REQUEST_SENSE:   return atapi_request_sense(cmd);
+    }
+
+    if (m_atapi_state.unit_attention)
+    {
+        return atapi_cmd_error(ATAPI_SENSE_UNIT_ATTENTION, 0);
+    }
+
     switch (cmd[0])
     {
         case ATAPI_CMD_TEST_UNIT_READY: return atapi_test_unit_ready(cmd);
         case ATAPI_CMD_START_STOP_UNIT: return atapi_start_stop_unit(cmd);
-        case ATAPI_CMD_INQUIRY:         return atapi_inquiry(cmd);
         case ATAPI_CMD_MODE_SENSE10:    return atapi_mode_sense(cmd);
-        case ATAPI_CMD_REQUEST_SENSE:   return atapi_request_sense(cmd);
         case ATAPI_CMD_GET_CONFIGURATION: return atapi_get_configuration(cmd);
         case ATAPI_CMD_GET_EVENT_STATUS_NOTIFICATION: return atapi_get_event_status_notification(cmd);
         case ATAPI_CMD_READ_CAPACITY:   return atapi_read_capacity(cmd);
@@ -414,7 +446,15 @@ static const char *atapi_sense_to_str(uint8_t sense_key)
 
 bool IDEATAPIDevice::atapi_cmd_error(uint8_t sense_key, uint16_t sense_asc)
 {
-    dbgmsg("-- ATAPI error: ", sense_key, " ", sense_asc, " (", atapi_sense_to_str(sense_key), ")");
+    if (sense_key == ATAPI_SENSE_UNIT_ATTENTION)
+    {
+        dbgmsg("-- Reporting UNIT_ATTENTION condition after reset/medium change");
+    }
+    else
+    {
+        dbgmsg("-- ATAPI error: ", sense_key, " ", sense_asc, " (", atapi_sense_to_str(sense_key), ")");
+    }
+
     m_atapi_state.sense_key = sense_key;
     m_atapi_state.sense_asc = sense_asc;
     m_atapi_state.data_state = ATAPI_DATA_IDLE;
@@ -522,6 +562,8 @@ bool IDEATAPIDevice::atapi_request_sense(const uint8_t *cmd)
     
     if (req_bytes < sense_length) sense_length = req_bytes;
     atapi_send_data(m_buffer.bytes, sense_length);
+
+    m_atapi_state.unit_attention = false;
 
     return atapi_cmd_ok();
 }

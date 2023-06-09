@@ -66,6 +66,9 @@ protected:
         uint16_t sense_asc; // Latest error details
         uint16_t blocksize; // Block size for data transfers
         atapi_data_state_t data_state;
+        int udma_mode;  // Negotiated udma mode, or negative if not enabled
+        bool dma_requested; // Host requests to use DMA transfer for current command
+        bool unit_attention;
     } m_atapi_state;
     
     // Buffer used for responses, ide_phy code benefits from this being aligned to 32 bits

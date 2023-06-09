@@ -78,7 +78,13 @@ void ide_protocol_poll()
 
             uint8_t cmd = regs.command;
             int selected_device = (regs.device >> 4) & 1;
-            dbgmsg("DEV", selected_device, " Command: ", cmd, " ", get_ide_command_name(cmd));
+            dbgmsg("IDE Command for DEV", selected_device, ": ", cmd, " ", get_ide_command_name(cmd),
+                " (device ", regs.device,
+                ", dev_ctrl ", regs.device_control,
+                ", feature ", regs.feature,
+                ", sector_count ", regs.sector_count,
+                ", lba ", regs.lba_high, " ", regs.lba_mid, " ", regs.lba_low, ")"
+                );
 
             IDEDevice *device = g_ide_devices[selected_device];
 
