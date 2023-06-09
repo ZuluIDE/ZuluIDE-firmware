@@ -68,13 +68,15 @@ void ide_phy_set_regs(const ide_registers_t *regs);
 // 4. Device implementation calls ide_phy_read_block().
 //
 // Calling ide_phy_stop_transfers() stops any previously started transfer.
+//
+// If udma_mode is 0 or larger, the PHY may use UDMA transfers if they are supported.
 
-void ide_phy_start_write(uint32_t blocklen);
+void ide_phy_start_write(uint32_t blocklen, int udma_mode = -1);
 bool ide_phy_can_write_block();
 void ide_phy_write_block(const uint8_t *buf, uint32_t blocklen);
 bool ide_phy_is_write_finished();
 
-void ide_phy_start_read(uint32_t blocklen);
+void ide_phy_start_read(uint32_t blocklen, int udma_mode = -1);
 bool ide_phy_can_read_block();
 void ide_phy_read_block(uint8_t *buf, uint32_t blocklen);
 
@@ -91,6 +93,7 @@ struct ide_phy_capabilities_t
     int max_pio_mode;
     int min_pio_cycletime_no_iordy;
     int min_pio_cycletime_with_iordy;
+    int max_udma_mode; // -1 if UDMA not supported
 };
 
 const ide_phy_capabilities_t *ide_phy_get_capabilities();

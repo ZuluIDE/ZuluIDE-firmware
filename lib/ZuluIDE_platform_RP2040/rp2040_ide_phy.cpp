@@ -31,15 +31,15 @@ static struct {
 } g_ide_phy;
 
 static ide_phy_capabilities_t g_ide_phy_capabilities = {
-    // ICE5LP1K has 8 kB of RAM.
-    // Part of it is reserved for trace buffer.
-    // 2x 2560 byte buffers is enough for transferring whole raw 2352 byte CD-ROM sectors
-    .max_blocksize = 2560,
+    // ICE5LP1K has 8 kB of RAM, we use it as 2x 4096 byte buffers
+    .max_blocksize = 4096,
 
     .supports_iordy = true,
     .max_pio_mode = 2, // PIO3 seems to have timing problems
     .min_pio_cycletime_no_iordy = 240,
-    .min_pio_cycletime_with_iordy = 180
+    .min_pio_cycletime_with_iordy = 180,
+
+    .max_udma_mode = 0,
 };
 
 // Reset the IDE phy
@@ -132,11 +132,22 @@ void ide_phy_set_regs(const ide_registers_t *regs)
 }
 
 // Data writes to IDE bus
-void ide_phy_start_write(uint32_t blocklen)
+void ide_phy_start_write(uint32_t blocklen, int udma_mode)
 {
-    // dbgmsg("ide_phy_start_write(", (int)blocklen, ")");
-    uint16_t arg = blocklen - 1;
-    fpga_wrcmd(FPGA_CMD_START_WRITE, (const uint8_t*)&arg, 2);
+    // dbgmsg("ide_phy_start_write(", (int)blocklen, ", ", udma_mode, ")");
+    assert((blocklen & 1) == 0);
+    uint16_t last_word_idx = blocklen / 2 - 1;
+    if (udma_mode < 0)
+    {
+        fpga_wrcmd(FPGA_CMD_START_WRITE, (const uint8_t*)&last_word_idx, 2);
+    }
+    else
+    {
+        uint8_t arg[3] = {(uint8_t)udma_mode,
+                          (uint8_t)(last_word_idx),
+                          (uint8_t)((last_word_idx) >> 8)};
+        fpga_wrcmd(FPGA_CMD_START_UDMA_WRITE, arg, 3);
+    }
 }
 
 bool ide_phy_can_write_block()
@@ -158,8 +169,7 @@ bool ide_phy_is_write_finished()
 {
     uint8_t status;
     fpga_rdcmd(FPGA_CMD_READ_STATUS, &status, 1);
-    assert(status & FPGA_STATUS_DATA_DIR);
-    if (status & FPGA_STATUS_TX_DONE)
+    if (!(status & FPGA_STATUS_DATA_DIR) || (status & FPGA_STATUS_TX_DONE))
     {
         // dbgmsg("ide_phy_is_write_finished() => true");
         g_ide_phy.transfer_running = false;
@@ -171,11 +181,12 @@ bool ide_phy_is_write_finished()
     }
 }
 
-void ide_phy_start_read(uint32_t blocklen)
+void ide_phy_start_read(uint32_t blocklen, int udma_mode)
 {
     // dbgmsg("ide_phy_start_read(", (int)blocklen, ")");
-    uint16_t arg = blocklen - 1;
-    fpga_wrcmd(FPGA_CMD_START_READ, (const uint8_t*)&arg, 2);
+    assert((blocklen & 1) == 0);
+    uint16_t last_word_idx = blocklen / 2 - 1;
+    fpga_wrcmd(FPGA_CMD_START_READ, (const uint8_t*)&last_word_idx, 2);
     g_ide_phy.transfer_running = true;
 
     ide_phy_assert_irq(IDE_STATUS_DEVRDY | IDE_STATUS_DATAREQ);

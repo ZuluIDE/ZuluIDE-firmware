@@ -55,9 +55,8 @@
 //     0x02:    Read received data block from buffer (length set by 0x83)
 //                 Byte 0-N: Data bytes received from IDE host
 //
-//     0x10:    Read latest 256 bytes of IDE register trace
-//                 Byte 0: Trace buffer write counter index (can be used to determine number of new bytes)
-//                 Byte 1-256: Newest trace data
+//     0x0A:    Read 16-bit CRC of latest transferred UltraDMA block
+//                 Byte 0-1: CRC
 //
 //     0x7D:    Read QSPI protocol version
 //                 Byte 0: QSPI protocol version (1-255)
@@ -92,13 +91,17 @@
 //                 Byte 9:   LBA_HIGH
 //
 //     0x82:   Configure data buffer for write to IDE bus, payload:
-//                 Byte 0-1: Block length minus 1 (bytes)
+//                 Byte 0-1: Block length minus 1 (words)
 //
 //     0x83:   Configure data buffer for read from IDE bus, payload:
-//                 Byte 0-1: Block length minus 1 (bytes)
+//                 Byte 0-1: Block length minus 1 (words)
 //
 //     0x84:   Write to IDE data buffer (length set by 0x82):
 //                 Byte 0-N: Data to transmit
+//
+//     0x8A:   Configure data buffer for write to IDE bus using UltraDMA, payload:
+//                 Byte 0:   UDMA mode (currently must be 0)
+//                 Byte 1-2: Block length minus 1 (words)
 //
 //     0x90:   Write IDE diagnostic signals, payload:
 //                 Byte 0:  Bit 0: OUT_DASP    drive present / active
@@ -140,12 +143,12 @@ void fpga_transfer_finish();
 // Dump IDE register values
 void fpga_dump_ide_regs();
 
-#define FPGA_PROTOCOL_VERSION 2
+#define FPGA_PROTOCOL_VERSION 4
 
 #define FPGA_CMD_READ_STATUS            0x00
 #define FPGA_CMD_READ_IDE_REGS          0x01
 #define FPGA_CMD_READ_DATABUF           0x02
-#define FPGA_CMD_READ_TRACEBUF          0x10
+#define FPGA_CMD_READ_UDMA_CRC          0x0A
 #define FPGA_CMD_PROTOCOL_VERSION       0x7D
 #define FPGA_CMD_LICENSE_CHECK          0x7E
 #define FPGA_CMD_COMMUNICATION_CHECK    0x7F
@@ -154,6 +157,7 @@ void fpga_dump_ide_regs();
 #define FPGA_CMD_START_WRITE            0x82
 #define FPGA_CMD_START_READ             0x83
 #define FPGA_CMD_WRITE_DATABUF          0x84
+#define FPGA_CMD_START_UDMA_WRITE       0x8A
 #define FPGA_CMD_WRITE_IDE_SIGNALS      0x90
 #define FPGA_CMD_ASSERT_IRQ             0x91
 #define FPGA_CMD_CLR_IRQ_FLAGS          0x92
