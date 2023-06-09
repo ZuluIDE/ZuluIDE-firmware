@@ -171,6 +171,7 @@ bool IDEATAPIDevice::cmd_identify_packet_device(ide_registers_t *regs)
     idf[IDE_IDENTIFY_OFFSET_COMMAND_SET_SUPPORT_3] = 0x4000;
     idf[IDE_IDENTIFY_OFFSET_COMMAND_SET_ENABLED_1] = 0x0014;
     idf[IDE_IDENTIFY_OFFSET_HARDWARE_RESET_RESULT] = 0x4049; // Diagnostics results
+    idf[IDE_IDENTIFY_OFFSET_BYTE_COUNT_ZERO] = 128; // Number of bytes transferred when bytes_req = 0
 
     // Supported PIO modes
     const ide_phy_capabilities_t *phy_caps = ide_phy_get_capabilities();
@@ -230,6 +231,13 @@ bool IDEATAPIDevice::cmd_packet(ide_registers_t *regs)
     m_atapi_state.bytes_req = regs->lba_mid | ((uint16_t)regs->lba_high << 8);
     m_atapi_state.dma_requested = regs->feature & 0x01;
     m_atapi_state.crc_errors = 0;
+
+    if (m_atapi_state.bytes_req == 0)
+    {
+        // "the host should not set the byte count limit to zero. If the host sets the byte count limit to
+        // zero, the contents of IDENTIFY PACKET DEVICE word 125 determines the expected behavior"
+        m_atapi_state.bytes_req = 128;
+    }
 
     // Check if PHY has already received command
     if (!ide_phy_can_read_block() && (regs->status & IDE_STATUS_BSY))
