@@ -26,6 +26,7 @@
 #include <hardware/gpio.h>
 #include <hardware/spi.h>
 #include <hardware/pio.h>
+#include <hardware/dma.h>
 #include <hardware/clocks.h>
 #include <hardware/structs/iobank0.h>
 #include "fpga_bitstream.h"
@@ -33,6 +34,8 @@
 
 #define FPGA_QSPI_PIO pio0
 #define FPGA_QSPI_PIO_SM 0
+#define FPGA_QSPI_DMA_TX 2
+#define FPGA_QSPI_DMA_RX 3
 
 static struct {
     bool claimed;
@@ -41,6 +44,9 @@ static struct {
     uint32_t pio_offset_qspi_transfer;
     pio_sm_config pio_cfg_qspi_transfer_8bit;
     pio_sm_config pio_cfg_qspi_transfer_32bit;
+
+    dma_channel_config dma_tx_cfg;   // Transmit from unaligned buffer
+    dma_channel_config dma_rx_cfg;   // Receive to unaligned buffer
 } g_fpga_qspi;
 
 static void fpga_io_as_spi()
@@ -109,21 +115,44 @@ static void fpga_qspi_pio_init()
         pio_clear_instruction_memory(FPGA_QSPI_PIO);
         g_fpga_qspi.pio_offset_qspi_transfer = pio_add_program(FPGA_QSPI_PIO, &fpga_qspi_transfer_program);
     
-        pio_sm_config cfg = fpga_qspi_transfer_program_get_default_config(g_fpga_qspi.pio_offset_qspi_transfer);
-        sm_config_set_in_pins(&cfg, FPGA_QSPI_D0);
-        sm_config_set_out_pins(&cfg, FPGA_QSPI_D0, 4);
-        sm_config_set_sideset_pins(&cfg, FPGA_QSPI_SCK);
-        sm_config_set_in_shift(&cfg, true, true, 8);
-        sm_config_set_out_shift(&cfg, true, true, 8);
-        sm_config_set_clkdiv(&cfg, 8);
-        g_fpga_qspi.pio_cfg_qspi_transfer_8bit = cfg;
+        // Build PIO configurations
+        {
+            pio_sm_config cfg = fpga_qspi_transfer_program_get_default_config(g_fpga_qspi.pio_offset_qspi_transfer);
+            sm_config_set_in_pins(&cfg, FPGA_QSPI_D0);
+            sm_config_set_out_pins(&cfg, FPGA_QSPI_D0, 4);
+            sm_config_set_sideset_pins(&cfg, FPGA_QSPI_SCK);
+            sm_config_set_in_shift(&cfg, true, true, 8);
+            sm_config_set_out_shift(&cfg, true, true, 8);
+            sm_config_set_clkdiv(&cfg, 8);
+            g_fpga_qspi.pio_cfg_qspi_transfer_8bit = cfg;
 
-        sm_config_set_in_shift(&cfg, true, true, 32);
-        sm_config_set_out_shift(&cfg, true, true, 32);
-        g_fpga_qspi.pio_cfg_qspi_transfer_32bit = cfg;
+            sm_config_set_in_shift(&cfg, true, true, 32);
+            sm_config_set_out_shift(&cfg, true, true, 32);
+            g_fpga_qspi.pio_cfg_qspi_transfer_32bit = cfg;
 
-        // Bypass QSPI data pin synchronizer because the clocks are in same domain
-        FPGA_QSPI_PIO->input_sync_bypass |= (0xF << FPGA_QSPI_D0);
+            // Bypass QSPI data pin synchronizer because the clocks are in same domain
+            FPGA_QSPI_PIO->input_sync_bypass |= (0xF << FPGA_QSPI_D0);
+        }
+
+        // Build DMA channel configurations
+        {
+            dma_channel_claim(FPGA_QSPI_DMA_TX);
+            dma_channel_claim(FPGA_QSPI_DMA_RX);
+
+            dma_channel_config cfg = dma_channel_get_default_config(FPGA_QSPI_DMA_TX);
+            channel_config_set_transfer_data_size(&cfg, DMA_SIZE_32);
+            channel_config_set_read_increment(&cfg, true);
+            channel_config_set_write_increment(&cfg, false);
+            channel_config_set_dreq(&cfg, pio_get_dreq(FPGA_QSPI_PIO, FPGA_QSPI_PIO_SM, true));
+            g_fpga_qspi.dma_tx_cfg = cfg;
+            
+            cfg = dma_channel_get_default_config(FPGA_QSPI_DMA_RX);
+            channel_config_set_transfer_data_size(&cfg, DMA_SIZE_32);
+            channel_config_set_read_increment(&cfg, false);
+            channel_config_set_write_increment(&cfg, true);
+            channel_config_set_dreq(&cfg, pio_get_dreq(FPGA_QSPI_PIO, FPGA_QSPI_PIO_SM, false));
+            g_fpga_qspi.dma_rx_cfg = cfg;
+        }
     }
 }
 
@@ -209,7 +238,7 @@ static void fpga_release()
     pio_sm_set_consecutive_pindirs(FPGA_QSPI_PIO, FPGA_QSPI_PIO_SM, FPGA_QSPI_D0, 4, false);
 }
 
-void fpga_wrcmd(uint8_t cmd, const uint8_t *payload, size_t payload_len, bool keep_active)
+void fpga_wrcmd(uint8_t cmd, const uint8_t *payload, size_t payload_len)
 {
     // Expecting a write-mode command
     assert(cmd & 0x80);
@@ -218,17 +247,20 @@ void fpga_wrcmd(uint8_t cmd, const uint8_t *payload, size_t payload_len, bool ke
     fpga_start_cmd(cmd);
     pio_sm_get_blocking(FPGA_QSPI_PIO, FPGA_QSPI_PIO_SM);
 
-    // Transfer data, if any
-    for (size_t i = 0; i < payload_len; i++)
+    if (payload_len == 0)
     {
-        pio_sm_put_blocking(FPGA_QSPI_PIO, FPGA_QSPI_PIO_SM, payload[i]);
-        pio_sm_get_blocking(FPGA_QSPI_PIO, FPGA_QSPI_PIO_SM);
+        // Nothing to transmit
     }
-
-    if (!keep_active)
+    else if ((payload_len & 3) || ((uint32_t)payload & 3))
     {
-        // Raise chip select if not continuing
-        fpga_release();
+        // Unaligned buffer
+        pio_sm_put_blocking(FPGA_QSPI_PIO, FPGA_QSPI_PIO_SM, payload[0]);
+        for (size_t i = 1; i < payload_len; i++)
+        {
+            pio_sm_put_blocking(FPGA_QSPI_PIO, FPGA_QSPI_PIO_SM, payload[i]);
+            pio_sm_get_blocking(FPGA_QSPI_PIO, FPGA_QSPI_PIO_SM);
+        }
+        pio_sm_get_blocking(FPGA_QSPI_PIO, FPGA_QSPI_PIO_SM);
     }
     else
     {
@@ -238,10 +270,38 @@ void fpga_wrcmd(uint8_t cmd, const uint8_t *payload, size_t payload_len, bool ke
                 g_fpga_qspi.pio_offset_qspi_transfer,
                 &g_fpga_qspi.pio_cfg_qspi_transfer_32bit);
         pio_sm_set_enabled(FPGA_QSPI_PIO, FPGA_QSPI_PIO_SM, true);
+
+        // Transmit 32 bits at a time using DMA
+        uint32_t num_words = payload_len / 4;
+        uint32_t dummy = 0;
+        dma_channel_config cfg_dummy_rx = g_fpga_qspi.dma_rx_cfg;
+        channel_config_set_write_increment(&cfg_dummy_rx, false);
+        dma_channel_configure(FPGA_QSPI_DMA_RX,
+            &cfg_dummy_rx, &dummy, &FPGA_QSPI_PIO->rxf[FPGA_QSPI_PIO_SM],
+            num_words, true);
+
+        dma_channel_configure(FPGA_QSPI_DMA_TX,
+            &g_fpga_qspi.dma_tx_cfg, &FPGA_QSPI_PIO->txf[FPGA_QSPI_PIO_SM], payload,
+            num_words, true);
+
+        uint32_t start = millis();
+        while (dma_channel_is_busy(FPGA_QSPI_DMA_RX))
+        {
+            if ((uint32_t)(millis() - start) > 100)
+            {
+                logmsg("fpga_wrcmd() DMA timeout, ctrl:", dma_hw->ch[FPGA_QSPI_DMA_RX].al1_ctrl, " payload_len: ", (int)payload_len);
+                break;
+            }
+        }
+
+        dma_channel_abort(FPGA_QSPI_DMA_RX);
+        dma_channel_abort(FPGA_QSPI_DMA_TX);
     }
+
+    fpga_release();
 }
 
-void fpga_rdcmd(uint8_t cmd, uint8_t *result, size_t result_len, bool keep_active)
+void fpga_rdcmd(uint8_t cmd, uint8_t *result, size_t result_len)
 {
     // Expecting a read-mode command
     assert(!(cmd & 0x80));
@@ -255,17 +315,20 @@ void fpga_rdcmd(uint8_t cmd, uint8_t *result, size_t result_len, bool keep_activ
     pio_sm_put_blocking(FPGA_QSPI_PIO, FPGA_QSPI_PIO_SM, 0xFF);
     pio_sm_get_blocking(FPGA_QSPI_PIO, FPGA_QSPI_PIO_SM);
 
-    // Transfer data, if any
-    for (size_t i = 0; i < result_len; i++)
+    if (result_len == 0)
     {
-        pio_sm_put_blocking(FPGA_QSPI_PIO, FPGA_QSPI_PIO_SM, 0xFF);
-        result[i] = pio_sm_get_blocking(FPGA_QSPI_PIO, FPGA_QSPI_PIO_SM) >> 24;
+        // Nothing to receive
     }
-
-    if (!keep_active)
+    else if ((result_len & 3) || ((uint32_t)result & 3))
     {
-        // Raise chip select if not continuing
-        fpga_release();
+        // Unaligned buffer
+        pio_sm_put_blocking(FPGA_QSPI_PIO, FPGA_QSPI_PIO_SM, 0xFF);
+        for (size_t i = 0; i < result_len - 1; i++)
+        {
+            pio_sm_put_blocking(FPGA_QSPI_PIO, FPGA_QSPI_PIO_SM, 0xFF);
+            result[i] = pio_sm_get_blocking(FPGA_QSPI_PIO, FPGA_QSPI_PIO_SM) >> 24;
+        }
+        result[result_len - 1] = pio_sm_get_blocking(FPGA_QSPI_PIO, FPGA_QSPI_PIO_SM) >> 24;
     }
     else
     {
@@ -275,7 +338,35 @@ void fpga_rdcmd(uint8_t cmd, uint8_t *result, size_t result_len, bool keep_activ
                 g_fpga_qspi.pio_offset_qspi_transfer,
                 &g_fpga_qspi.pio_cfg_qspi_transfer_32bit);
         pio_sm_set_enabled(FPGA_QSPI_PIO, FPGA_QSPI_PIO_SM, true);
+
+        // Receive 32 bits at a time using DMA
+        uint32_t num_words = result_len / 4;
+        dma_channel_configure(FPGA_QSPI_DMA_RX,
+            &g_fpga_qspi.dma_rx_cfg, result, &FPGA_QSPI_PIO->rxf[FPGA_QSPI_PIO_SM],
+            num_words, true);
+
+        uint32_t dummy = 0;
+        dma_channel_config cfg_dummy_tx = g_fpga_qspi.dma_tx_cfg;
+        channel_config_set_read_increment(&cfg_dummy_tx, false);
+        dma_channel_configure(FPGA_QSPI_DMA_TX,
+            &g_fpga_qspi.dma_tx_cfg, &FPGA_QSPI_PIO->txf[FPGA_QSPI_PIO_SM], &dummy,
+            num_words, true);
+
+        uint32_t start = millis();
+        while (dma_channel_is_busy(FPGA_QSPI_DMA_RX))
+        {
+            if ((uint32_t)(millis() - start) > 100)
+            {
+                logmsg("fpga_rdcmd() DMA timeout, ctrl:", dma_hw->ch[FPGA_QSPI_DMA_RX].al1_ctrl, " result_len: ", (int)result_len);
+                break;
+            }
+        }
+
+        dma_channel_abort(FPGA_QSPI_DMA_RX);
+        dma_channel_abort(FPGA_QSPI_DMA_TX);
     }
+
+    fpga_release();
 }
 
 void fpga_dump_ide_regs()
