@@ -15,6 +15,7 @@ public:
 protected:
     
     virtual bool handle_atapi_command(const uint8_t *cmd);
+    virtual bool atapi_set_cd_speed(const uint8_t *cmd);
     virtual bool atapi_prevent_allow_removal(const uint8_t *cmd);
     virtual bool atapi_read_disc_information(const uint8_t *cmd);
     virtual bool atapi_read_toc(const uint8_t *cmd);

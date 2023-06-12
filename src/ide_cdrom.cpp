@@ -283,6 +283,7 @@ bool IDECDROMDevice::handle_atapi_command(const uint8_t *cmd)
     switch (cmd[0])
     {
         case ATAPI_CMD_PREVENT_ALLOW_MEDIUM_REMOVAL: return atapi_prevent_allow_removal(cmd);
+        case ATAPI_CMD_SET_CD_SPEED:            return atapi_set_cd_speed(cmd);
         case ATAPI_CMD_READ_DISC_INFORMATION:   return atapi_read_disc_information(cmd);
         case ATAPI_CMD_READ_TOC:                return atapi_read_toc(cmd);
         case ATAPI_CMD_READ_HEADER:             return atapi_read_header(cmd);
@@ -292,6 +293,14 @@ bool IDECDROMDevice::handle_atapi_command(const uint8_t *cmd)
         default:
             return IDEATAPIDevice::handle_atapi_command(cmd);
     }
+}
+
+bool IDECDROMDevice::atapi_set_cd_speed(const uint8_t *cmd)
+{
+    uint16_t read_speed = parse_be16(&cmd[2]);
+    uint16_t write_speed = parse_be16(&cmd[4]);
+    dbgmsg("-- Host requested read_speed=", (int)read_speed, ", write_speed=", (int)write_speed);
+    return atapi_cmd_ok();
 }
 
 bool IDECDROMDevice::atapi_prevent_allow_removal(const uint8_t *cmd)
