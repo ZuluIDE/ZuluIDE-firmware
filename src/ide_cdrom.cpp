@@ -77,6 +77,38 @@ static const uint8_t DiscInformation[] =
     0x00,   // 33: number of opc tables
 };
 
+static const uint8_t TrackInformation[] =
+{
+    0x00,   //  0: data length, MSB
+    0x1A,   //  1: data length, LSB
+    0x01,   //  2: track number
+    0x01,   //  3: session number
+    0x00,   //  4: reserved
+    0x04,   //  5: track mode and flags
+    0x8F,   //  6: data mode and flags
+    0x00,   //  7: nwa_v
+    0x00,   //  8: track start address (MSB)
+    0x00,   //  9: .
+    0x00,   // 10: .
+    0x00,   // 11: track start address (LSB)
+    0xFF,   // 12: next writable address (MSB)
+    0xFF,   // 13: .
+    0xFF,   // 14: .
+    0xFF,   // 15: next writable address (LSB)
+    0x00,   // 16: free blocks (MSB)
+    0x00,   // 17: .
+    0x00,   // 18: .
+    0x00,   // 19: free blocks (LSB)
+    0x00,   // 20: fixed packet size (MSB)
+    0x00,   // 21: .
+    0x00,   // 22: .
+    0x00,   // 23: fixed packet size (LSB)
+    0x00,   // 24: track size (MSB)
+    0x00,   // 25: .
+    0x00,   // 26: .
+    0x00,   // 27: track size (LSB)
+};
+
 static const uint8_t SessionTOC[] =
 {
     0x00, // toc length, MSB
@@ -285,6 +317,7 @@ bool IDECDROMDevice::handle_atapi_command(const uint8_t *cmd)
         case ATAPI_CMD_PREVENT_ALLOW_MEDIUM_REMOVAL: return atapi_prevent_allow_removal(cmd);
         case ATAPI_CMD_SET_CD_SPEED:            return atapi_set_cd_speed(cmd);
         case ATAPI_CMD_READ_DISC_INFORMATION:   return atapi_read_disc_information(cmd);
+        case ATAPI_CMD_READ_TRACK_INFORMATION:  return atapi_read_track_information(cmd);
         case ATAPI_CMD_READ_TOC:                return atapi_read_toc(cmd);
         case ATAPI_CMD_READ_HEADER:             return atapi_read_header(cmd);
         case ATAPI_CMD_READ_CD:                 return atapi_read_cd(cmd);
@@ -315,6 +348,8 @@ bool IDECDROMDevice::atapi_prevent_allow_removal(const uint8_t *cmd)
 
 bool IDECDROMDevice::atapi_read_disc_information(const uint8_t *cmd)
 {
+    if (!m_image) return atapi_cmd_error(ATAPI_SENSE_NOT_READY, ATAPI_ASC_NO_MEDIUM);
+
     uint16_t allocationLength = parse_be16(&cmd[7]);
 
     // Take the hardcoded header as base
@@ -338,8 +373,84 @@ bool IDECDROMDevice::atapi_read_disc_information(const uint8_t *cmd)
     return atapi_cmd_ok();
 }
 
+bool IDECDROMDevice::atapi_read_track_information(const uint8_t *cmd)
+{
+    if (!m_image) return atapi_cmd_error(ATAPI_SENSE_NOT_READY, ATAPI_ASC_NO_MEDIUM);
+
+    bool track = (cmd[1] & 0x01);
+    uint32_t lba = parse_be32(&cmd[2]);
+    uint16_t allocationLength = parse_be16(&cmd[7]);
+
+    // Take the hardcoded header as base
+    uint8_t *buf = m_buffer.bytes;
+    uint32_t len = sizeof(TrackInformation);
+    memcpy(buf, TrackInformation, len);
+
+    // Step through the tracks until the one requested is found
+    // Result will be placed in mtrack for later use if found
+    bool trackfound = false;
+    uint32_t tracklen = 0;
+    CUETrackInfo mtrack = {0};
+    const CUETrackInfo *trackinfo;
+    m_cueparser.restart();
+    while ((trackinfo = m_cueparser.next_track()) != NULL)
+    {
+        if (mtrack.track_number != 0) // skip 1st track, just store later
+        {
+            if ((track && lba == mtrack.track_number)
+                || (!track && lba < trackinfo->data_start))
+            {
+                trackfound = true;
+                tracklen = trackinfo->data_start - mtrack.data_start;
+                break;
+            }
+        }
+        mtrack = *trackinfo;
+    }
+    // try the last track as a final attempt if no match found beforehand
+    if (!trackfound)
+    {
+        uint32_t lastLba = getLeadOutLBA(&mtrack);
+        if ((track && lba == mtrack.track_number)
+            || (!track && lba < lastLba))
+        {
+            trackfound = true;
+            tracklen = lastLba - mtrack.data_start;
+        }
+    }
+
+    // bail out if no match found
+    if (!trackfound)
+    {
+        return atapi_cmd_error(ATAPI_SENSE_ILLEGAL_REQ, ATAPI_ASC_INVALID_FIELD);
+    }
+
+    // rewrite relevant bytes, starting with track number
+    buf[3] = mtrack.track_number;
+
+    // track mode
+    if (mtrack.track_mode == CUETrack_AUDIO)
+    {
+        buf[5] = 0x00;
+    }
+
+    // track start
+    write_be32(&buf[8], mtrack.data_start);
+
+    // track size
+    write_be32(&buf[24], tracklen);
+
+    dbgmsg("------ Reporting track ", mtrack.track_number, ", start ", mtrack.data_start,
+            ", length ", tracklen);
+
+    atapi_send_data(buf, std::min<uint32_t>(allocationLength, len));
+    return atapi_cmd_ok();
+}
+
 bool IDECDROMDevice::atapi_read_toc(const uint8_t *cmd)
 {
+    if (!m_image) return atapi_cmd_error(ATAPI_SENSE_NOT_READY, ATAPI_ASC_NO_MEDIUM);
+
     bool MSF = (cmd[1] & 0x02);
     uint8_t track = cmd[6];
     uint16_t allocationLength = parse_be16(&cmd[7]);
@@ -383,6 +494,8 @@ bool IDECDROMDevice::atapi_read_toc(const uint8_t *cmd)
 // Given 2048-byte block sizes this effectively is 1:1 with the provided LBA.
 bool IDECDROMDevice::atapi_read_header(const uint8_t *cmd)
 {
+    if (!m_image) return atapi_cmd_error(ATAPI_SENSE_NOT_READY, ATAPI_ASC_NO_MEDIUM);
+
     bool MSF = (cmd[1] & 0x02);
     uint32_t lba = 0; // IGNORED for now
     uint16_t allocationLength = parse_be16(&cmd[7]);
@@ -415,6 +528,8 @@ bool IDECDROMDevice::atapi_read_header(const uint8_t *cmd)
 
 bool IDECDROMDevice::atapi_read_cd(const uint8_t *cmd)
 {
+    if (!m_image) return atapi_cmd_error(ATAPI_SENSE_NOT_READY, ATAPI_ASC_NO_MEDIUM);
+
     uint8_t sector_type = (cmd[1] >> 2) & 7;
     uint32_t lba = parse_be32(&cmd[2]);
     uint32_t blocks = parse_be24(&cmd[6]);
@@ -426,6 +541,8 @@ bool IDECDROMDevice::atapi_read_cd(const uint8_t *cmd)
 
 bool IDECDROMDevice::atapi_read_cd_msf(const uint8_t *cmd)
 {
+    if (!m_image) return atapi_cmd_error(ATAPI_SENSE_NOT_READY, ATAPI_ASC_NO_MEDIUM);
+
     uint8_t sector_type = (cmd[1] >> 2) & 7;
     uint32_t start = MSF2LBA(cmd[3], cmd[4], cmd[5], false);
     uint32_t end   = MSF2LBA(cmd[6], cmd[7], cmd[8], false);
