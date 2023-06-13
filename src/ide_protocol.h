@@ -10,6 +10,9 @@
 class IDEDevice
 {
 public:
+    // Loads configuration
+    virtual void initialize(int devidx);
+
     // Called periodically by main loop
     virtual void poll() = 0;
 
@@ -24,6 +27,16 @@ public:
 
     // Returns true if this device implements the ATAPI packet command set 
     virtual bool is_packet_device() { return false; }
+
+protected:
+    struct {
+        int max_udma_mode;
+        int max_pio_mode;
+        int max_blocksize;
+    } m_devconfig;
+
+    // PHY capabilities limited by active device configuration
+    ide_phy_capabilities_t m_phy_caps;
 };
 
 // Initialize the protocol layer with devices

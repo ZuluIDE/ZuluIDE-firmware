@@ -22,9 +22,11 @@
 // High-level implementation of IDE command handling
 
 #include "ZuluIDE.h"
+#include "ZuluIDE_config.h"
 #include "ide_protocol.h"
 #include "ide_phy.h"
 #include "ide_constants.h"
+#include <minIni.h>
 
 // Map from command index for command name for logging
 static const char *get_ide_command_name(uint8_t cmd)
@@ -58,6 +60,9 @@ void ide_protocol_init(IDEDevice *primary, IDEDevice *secondary)
 {
     g_ide_devices[0] = primary;
     g_ide_devices[1] = secondary;
+
+    if (primary) primary->initialize(0);
+    if (secondary) secondary->initialize(1);
 
     do_phy_reset();
 }
@@ -123,4 +128,23 @@ void ide_protocol_poll()
 
         LED_OFF();
     }
+}
+
+void IDEDevice::initialize(int devidx)
+{
+    memset(&m_devconfig, 0, sizeof(m_devconfig));
+
+    m_phy_caps = *ide_phy_get_capabilities();
+    m_devconfig.max_pio_mode = ini_getl("IDE", "max_pio", 2, CONFIGFILE);
+    m_devconfig.max_udma_mode = ini_getl("IDE", "max_udma", -1, CONFIGFILE);
+    m_devconfig.max_blocksize = ini_getl("IDE", "max_blocksize", m_phy_caps.max_blocksize, CONFIGFILE);
+
+    logmsg("Device ", devidx, " configuration:");
+    logmsg("-- Max PIO mode: ", m_devconfig.max_pio_mode, " (phy max ", m_phy_caps.max_pio_mode, ")");
+    logmsg("-- Max UDMA mode: ", m_devconfig.max_udma_mode, " (phy max ", m_phy_caps.max_udma_mode, ")");
+    logmsg("-- Max blocksize: ", m_devconfig.max_blocksize, " (phy max ", (int)m_phy_caps.max_blocksize, ")");
+
+    m_phy_caps.max_udma_mode = std::min(m_phy_caps.max_udma_mode, m_devconfig.max_udma_mode);
+    m_phy_caps.max_pio_mode = std::min(m_phy_caps.max_pio_mode, m_devconfig.max_pio_mode);
+    m_phy_caps.max_blocksize = std::min<int>(m_phy_caps.max_blocksize, m_devconfig.max_blocksize);
 }

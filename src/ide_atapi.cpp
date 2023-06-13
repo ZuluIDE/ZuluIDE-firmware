@@ -94,19 +94,18 @@ bool IDEATAPIDevice::cmd_set_features(ide_registers_t *regs)
         uint8_t mode = regs->sector_count;
         uint8_t mode_major = mode >> 3;
         uint8_t mode_minor = mode & 7;
-        const ide_phy_capabilities_t *phy_caps = ide_phy_get_capabilities();
 
         if (mode_major == 0)
         {
             m_atapi_state.udma_mode = -1;
             dbgmsg("-- Set PIO default transfer mode");
         }
-        else if (mode_major == 1 && mode_minor <= phy_caps->max_pio_mode)
+        else if (mode_major == 1 && mode_minor <= m_phy_caps.max_pio_mode)
         {
             m_atapi_state.udma_mode = -1;
             dbgmsg("-- Set PIO transfer mode ", (int)mode_minor);
         }
-        else if (mode_major == 8 && mode_minor <= phy_caps->max_udma_mode)
+        else if (mode_major == 8 && mode_minor <= m_phy_caps.max_udma_mode)
         {
             m_atapi_state.udma_mode = mode_minor;
             dbgmsg("-- Set UDMA transfer mode ", (int)mode_minor);
@@ -174,17 +173,16 @@ bool IDEATAPIDevice::cmd_identify_packet_device(ide_registers_t *regs)
     idf[IDE_IDENTIFY_OFFSET_BYTE_COUNT_ZERO] = 128; // Number of bytes transferred when bytes_req = 0
 
     // Supported PIO modes
-    const ide_phy_capabilities_t *phy_caps = ide_phy_get_capabilities();
-    if (phy_caps->supports_iordy) idf[IDE_IDENTIFY_OFFSET_CAPABILITIES_1] |= (1 << 11);
-    idf[IDE_IDENTIFY_OFFSET_PIO_MODE_ATA1] = (phy_caps->max_pio_mode << 8);
+    if (m_phy_caps.supports_iordy) idf[IDE_IDENTIFY_OFFSET_CAPABILITIES_1] |= (1 << 11);
+    idf[IDE_IDENTIFY_OFFSET_PIO_MODE_ATA1] = (m_phy_caps.max_pio_mode << 8);
     idf[IDE_IDENTIFY_OFFSET_MODE_INFO_VALID] |= 0x02; // PIO support word valid
-    idf[IDE_IDENTIFY_OFFSET_MODEINFO_PIO] = (phy_caps->max_pio_mode >= 3) ? 1 : 0; // PIO3 supported?
-    idf[IDE_IDENTIFY_OFFSET_PIO_CYCLETIME_MIN] = phy_caps->min_pio_cycletime_no_iordy; // Without IORDY
-    idf[IDE_IDENTIFY_OFFSET_PIO_CYCLETIME_IORDY] = phy_caps->min_pio_cycletime_with_iordy; // With IORDY
+    idf[IDE_IDENTIFY_OFFSET_MODEINFO_PIO] = (m_phy_caps.max_pio_mode >= 3) ? 1 : 0; // PIO3 supported?
+    idf[IDE_IDENTIFY_OFFSET_PIO_CYCLETIME_MIN] = m_phy_caps.min_pio_cycletime_no_iordy; // Without IORDY
+    idf[IDE_IDENTIFY_OFFSET_PIO_CYCLETIME_IORDY] = m_phy_caps.min_pio_cycletime_with_iordy; // With IORDY
 
     // Supported UDMA modes
     idf[IDE_IDENTIFY_OFFSET_MODE_INFO_VALID] |= 0x04; // UDMA support word valid
-    if (phy_caps->max_udma_mode >= 0)
+    if (m_phy_caps.max_udma_mode >= 0)
     {
         idf[IDE_IDENTIFY_OFFSET_CAPABILITIES_1] |= (1 << 8);
         idf[IDE_IDENTIFY_OFFSET_MODEINFO_ULTRADMA] = 0x0001;
@@ -310,7 +308,7 @@ bool IDEATAPIDevice::atapi_send_data(const uint8_t *data, size_t blocksize, size
             bytearray((const uint8_t*)data, blocksize * num_blocks));
     }
 
-    size_t phy_max_blocksize = ide_phy_get_capabilities()->max_blocksize;
+    size_t phy_max_blocksize = m_phy_caps.max_blocksize;
     size_t max_blocksize = std::min<size_t>(phy_max_blocksize, m_atapi_state.bytes_req);
     if (blocksize > max_blocksize)
     {
