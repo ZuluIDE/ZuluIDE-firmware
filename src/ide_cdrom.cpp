@@ -758,6 +758,13 @@ ssize_t IDECDROMDevice::read_callback(const uint8_t *data, size_t blocksize, siz
             buf += data_length;
         }
 
+        if (m_cd_read_format.add_fake_headers)
+        {
+            // 288 bytes of ECC
+            memset(buf, 0, 288);
+            buf += 288;
+        }
+
         if (m_cd_read_format.field_q_subchannel)
         {
             // Formatted Q subchannel data
