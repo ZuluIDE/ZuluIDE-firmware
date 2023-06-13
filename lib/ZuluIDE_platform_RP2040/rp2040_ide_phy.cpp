@@ -242,6 +242,11 @@ bool ide_phy_is_write_finished()
 
 void ide_phy_start_read(uint32_t blocklen, int udma_mode)
 {
+    if (udma_mode >= 0)
+    {
+        dbgmsg("WARNING: UDMA read from IDE not yet implemented, using PIO");
+    }
+
     // dbgmsg("ide_phy_start_read(", (int)blocklen, ")");
     g_ide_phy.crc_errors = 0;
     g_ide_phy.block_crc1 = g_ide_phy.block_crc0 = 0;

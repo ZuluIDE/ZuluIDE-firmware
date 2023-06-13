@@ -308,6 +308,32 @@ void IDECDROMDevice::set_image(IDEImage *image)
         )");
         m_cueparser = CUEParser(m_cuesheet);
     }
+
+    if (image)
+    {
+        CUETrackInfo firsttrack, lasttrack;
+        getFirstLastTrackInfo(firsttrack, lasttrack);
+
+        bool firstaudio = (firsttrack.track_mode == CUETrack_AUDIO);
+        bool lastaudio = (lasttrack.track_mode == CUETrack_AUDIO);
+
+        if (firstaudio && lastaudio)
+        {
+            m_devinfo.medium_type = ATAPI_MEDIUM_CDDA;
+        }
+        else if (!firstaudio && !lastaudio)
+        {
+            m_devinfo.medium_type = ATAPI_MEDIUM_CDROM;
+        }
+        else
+        {
+            m_devinfo.medium_type = ATAPI_MEDIUM_CDMIXED;
+        }
+    }
+    else
+    {
+        m_devinfo.medium_type = ATAPI_MEDIUM_NONE;
+    }
 }
 
 bool IDECDROMDevice::handle_atapi_command(const uint8_t *cmd)
@@ -1036,4 +1062,29 @@ size_t IDECDROMDevice::atapi_get_configuration(uint16_t feature, uint8_t *buffer
     }
 
     return IDEATAPIDevice::atapi_get_configuration(feature, buffer, max_bytes);
+}
+
+size_t IDECDROMDevice::atapi_get_mode_page(uint8_t page_ctrl, uint8_t page_idx, uint8_t *buffer, size_t max_bytes)
+{
+    if (page_idx == ATAPI_MODESENSE_CDROM)
+    {
+        buffer[0] = ATAPI_MODESENSE_CDROM; // Page idx
+        buffer[1] = 0x06; // Page length
+        buffer[2] = 0; // Reserved
+        buffer[3] = 7; // Inactivity time
+        buffer[4] = 0;
+        buffer[5] = 60; // Seconds per minute
+        buffer[6] = 0;
+        buffer[7] = 75; // Frames per second
+
+        if (page_ctrl == 1)
+        {
+            // Mask out unchangeable parameters
+            memset(buffer + 2, 0, 6);
+        }
+
+        return 8;
+    }
+
+    return IDEATAPIDevice::atapi_get_mode_page(page_ctrl, page_idx, buffer, max_bytes);
 }

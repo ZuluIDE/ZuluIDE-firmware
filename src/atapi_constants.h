@@ -101,6 +101,7 @@ ATAPI_COMMAND_LIST(ATAPI_ENUM_ENTRY)
 #define ATAPI_ASC_NO_MEDIUM                 0x3A00
 #define ATAPI_ASC_ILLEGAL_MODE_FOR_TRACK    0x6400
 #define ATAPI_ASC_CRC_ERROR                 0x0803
+#define ATAPI_ASC_PARAMETER_LENGTH_ERROR    0x1A00
 
 // ATAPI INQUIRY response format
 #define ATAPI_INQUIRY_OFFSET_TYPE       0
@@ -116,6 +117,13 @@ ATAPI_COMMAND_LIST(ATAPI_ENUM_ENTRY)
 #define ATAPI_DEVTYPE_DIRECT_ACCESS     0
 #define ATAPI_DEVTYPE_CDROM             5
 
+// ATAPI medium types
+#define ATAPI_MEDIUM_UNKNOWN            0x00
+#define ATAPI_MEDIUM_CDROM              0x01
+#define ATAPI_MEDIUM_CDDA               0x02
+#define ATAPI_MEDIUM_CDMIXED            0x03
+#define ATAPI_MEDIUM_NONE               0x70
+
 // GET_CONFIGURATION profiles
 #define ATAPI_PROFILE_CDROM             0x0008
 
@@ -125,3 +133,6 @@ ATAPI_COMMAND_LIST(ATAPI_ENUM_ENTRY)
 #define ATAPI_FEATURE_REMOVABLE         0x0003
 #define ATAPI_FEATURE_CDREAD            0x001E
 #define ATAPI_FEATURE_MAX               0x0032
+
+// MODE SENSE pages
+#define ATAPI_MODESENSE_CDROM           0x0D

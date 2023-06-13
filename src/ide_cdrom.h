@@ -56,5 +56,8 @@ protected:
     CUETrackInfo getTrackFromLBA(uint32_t lba);
 
     // ATAPI configuration pages
-    virtual size_t atapi_get_configuration(uint16_t feature, uint8_t *buffer, size_t max_bytes);
+    virtual size_t atapi_get_configuration(uint16_t feature, uint8_t *buffer, size_t max_bytes) override;
+
+    // ATAPI mode pages
+    virtual size_t atapi_get_mode_page(uint8_t page_ctrl, uint8_t page_idx, uint8_t *buffer, size_t max_bytes) override;
 };

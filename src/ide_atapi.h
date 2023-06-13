@@ -51,6 +51,9 @@ protected:
         uint16_t num_profiles;
         uint16_t profiles[8];
         uint16_t current_profile;
+
+        // Medium type reported by MODE SENSE
+        uint8_t medium_type;
     } m_devinfo;
     
     enum atapi_data_state_t {
@@ -95,6 +98,7 @@ protected:
     bool atapi_send_data(const uint8_t *data, size_t blocksize, size_t num_blocks = 1, bool wait_finish = true);
     bool atapi_send_data_block(const uint8_t *data, uint16_t blocksize);
     bool atapi_send_wait_finish();
+    bool atapi_recv_data_block(uint8_t *data, uint16_t blocksize);
     bool atapi_cmd_error(uint8_t sense_key, uint16_t sense_asc);
     bool atapi_cmd_ok();
 
@@ -104,6 +108,7 @@ protected:
     virtual bool atapi_start_stop_unit(const uint8_t *cmd);
     virtual bool atapi_inquiry(const uint8_t *cmd);
     virtual bool atapi_mode_sense(const uint8_t *cmd);
+    virtual bool atapi_mode_select(const uint8_t *cmd);
     virtual bool atapi_request_sense(const uint8_t *cmd);
     virtual bool atapi_get_configuration(const uint8_t *cmd);
     virtual bool atapi_get_event_status_notification(const uint8_t *cmd);
@@ -120,6 +125,7 @@ protected:
 
     // ATAPI mode pages
     virtual size_t atapi_get_mode_page(uint8_t page_ctrl, uint8_t page_idx, uint8_t *buffer, size_t max_bytes);
+    virtual void atapi_set_mode_page(uint8_t page_ctrl, uint8_t page_idx, const uint8_t *buffer, size_t length);
 
     // ATAPI get_configuration responses
     virtual size_t atapi_get_configuration(uint16_t feature, uint8_t *buffer, size_t max_bytes);

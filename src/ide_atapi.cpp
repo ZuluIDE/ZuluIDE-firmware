@@ -404,6 +404,37 @@ bool IDEATAPIDevice::atapi_send_wait_finish()
     return true;
 }
 
+bool IDEATAPIDevice::atapi_recv_data_block(uint8_t *data, uint16_t blocksize)
+{
+    // Set number bytes to transfer to registers
+    ide_registers_t regs = {};
+    ide_phy_get_regs(&regs);
+    regs.status = IDE_STATUS_BSY;
+    regs.sector_count = 0; // Data transfer to device
+    regs.lba_mid = (uint8_t)blocksize;
+    regs.lba_high = (uint8_t)(blocksize >> 8);
+    ide_phy_set_regs(&regs);
+
+    // Start data transfer
+    int udma_mode = (m_atapi_state.dma_requested ? m_atapi_state.udma_mode : -1);
+    ide_phy_start_read(blocksize, udma_mode);
+
+    uint32_t start = millis();
+    while (!ide_phy_can_read_block())
+    {
+        if ((uint32_t)(millis() - start) > 10000)
+        {
+            logmsg("IDEATAPIDevice::atapi_recv_data_block(", (int)blocksize, ") read timeout");
+            ide_phy_stop_transfers();
+            return false;
+        }
+    }
+
+    ide_phy_read_block(data, blocksize);
+    ide_phy_stop_transfers();
+    return true;
+}
+
 bool IDEATAPIDevice::handle_atapi_command(const uint8_t *cmd)
 {
     // INQUIRY and REQUEST SENSE bypass unit attention
@@ -423,6 +454,7 @@ bool IDEATAPIDevice::handle_atapi_command(const uint8_t *cmd)
         case ATAPI_CMD_TEST_UNIT_READY: return atapi_test_unit_ready(cmd);
         case ATAPI_CMD_START_STOP_UNIT: return atapi_start_stop_unit(cmd);
         case ATAPI_CMD_MODE_SENSE10:    return atapi_mode_sense(cmd);
+        case ATAPI_CMD_MODE_SELECT10:   return atapi_mode_select(cmd);
         case ATAPI_CMD_GET_CONFIGURATION: return atapi_get_configuration(cmd);
         case ATAPI_CMD_GET_EVENT_STATUS_NOTIFICATION: return atapi_get_event_status_notification(cmd);
         case ATAPI_CMD_READ_CAPACITY:   return atapi_read_capacity(cmd);
@@ -538,30 +570,71 @@ bool IDEATAPIDevice::atapi_mode_sense(const uint8_t *cmd)
 {
     uint8_t page_ctrl = cmd[2] >> 6;
     uint8_t page_idx = cmd[2] & 0x3F;
-    uint8_t req_bytes = parse_be16(&cmd[7]);
+    uint16_t req_bytes = parse_be16(&cmd[7]);
 
-    uint8_t *resp = m_buffer.bytes;
-    size_t max_bytes = sizeof(m_buffer);
-    if (req_bytes < max_bytes) max_bytes = req_bytes;
+    uint8_t *resp = m_buffer.bytes + 8; // Reserve space for mode parameter header
+    size_t max_bytes = sizeof(m_buffer) - 8;
     size_t resp_bytes = 0;
 
     if (page_idx != 0x3F)
     {
         // Request single page
         resp_bytes += atapi_get_mode_page(page_ctrl, page_idx, &resp[resp_bytes], max_bytes - resp_bytes);
+        dbgmsg("-- Request page ", page_idx, ", response length ", (int)resp_bytes);
     }
     else
     {
         // Request all pages
         for (int i = 0x01; i < 0x3F && resp_bytes < max_bytes; i++)
         {
-            resp_bytes += atapi_get_mode_page(page_ctrl, page_idx, &resp[resp_bytes], max_bytes - resp_bytes);
+            resp_bytes += atapi_get_mode_page(page_ctrl, i, &resp[resp_bytes], max_bytes - resp_bytes);
         }
         resp_bytes += atapi_get_mode_page(page_ctrl, 0, &resp[resp_bytes], max_bytes - resp_bytes);
+        dbgmsg("-- Request all pages, response length ", (int)resp_bytes);
     }
 
+    // Fill in mode parameter header
+    resp_bytes += 8;
+    uint8_t *hdr = m_buffer.bytes;
+    memset(hdr, 0, 8);
+    write_be16(&hdr[0], resp_bytes - 2);
+    hdr[2] = m_devinfo.medium_type;
+    
     if (resp_bytes > req_bytes) resp_bytes = req_bytes;
     atapi_send_data(m_buffer.bytes, resp_bytes);
+
+    return atapi_cmd_ok();
+}
+
+bool IDEATAPIDevice::atapi_mode_select(const uint8_t *cmd)
+{
+    bool save_pages = cmd[1] & 1;
+    uint16_t paramLength = parse_be16(&cmd[7]);
+
+    dbgmsg("-- MODE SELECT, save pages: ", (int)save_pages, ", paramLength ", (int)paramLength);
+
+    uint8_t *buf = m_buffer.bytes;
+    if (paramLength > sizeof(m_buffer))
+    {
+        return atapi_cmd_error(ATAPI_SENSE_ILLEGAL_REQ, ATAPI_ASC_PARAMETER_LENGTH_ERROR);
+    }
+
+    if (!atapi_recv_data_block(buf, paramLength))
+    {
+        dbgmsg("-- Failed to read parameter list");
+        return atapi_cmd_error(ATAPI_SENSE_ABORTED_CMD, 0);
+    }
+
+    while (buf < &m_buffer.bytes[paramLength])
+    {
+        uint8_t page_idx = buf[0] & 0x3F;
+        uint8_t page_ctrl = buf[0] >> 6;
+        uint16_t datalength = buf[1] + 2;
+
+        dbgmsg("-- Set mode page ", page_idx, ", value ", bytearray(buf, datalength));
+        atapi_set_mode_page(page_ctrl, page_idx, buf, datalength);
+        buf += datalength;
+    }
 
     return atapi_cmd_ok();
 }
@@ -765,6 +838,11 @@ ssize_t IDEATAPIDevice::write_callback(uint8_t *data, size_t blocksize, size_t n
 size_t IDEATAPIDevice::atapi_get_mode_page(uint8_t page_ctrl, uint8_t page_idx, uint8_t *buffer, size_t max_bytes)
 {
     return 0;
+}
+
+void IDEATAPIDevice::atapi_set_mode_page(uint8_t page_ctrl, uint8_t page_idx, const uint8_t *buffer, size_t length)
+{
+
 }
 
 size_t IDEATAPIDevice::atapi_get_configuration(uint16_t feature, uint8_t *buffer, size_t max_bytes)
