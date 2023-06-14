@@ -295,7 +295,10 @@ void zuluide_setup(void)
         }
     }
 
-    ide_protocol_init(&g_ide_cdrom, NULL);
+    if (platform_get_device_id() == 1)
+        ide_protocol_init(NULL, &g_ide_cdrom); // Secondary device
+    else
+        ide_protocol_init(&g_ide_cdrom, NULL); // Primary device
 }
 
 void zuluide_main_loop(void)

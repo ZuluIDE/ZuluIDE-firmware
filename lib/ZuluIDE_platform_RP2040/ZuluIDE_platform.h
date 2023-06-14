@@ -41,8 +41,9 @@ void platform_write_led(bool state);
 // Disable the status LED
 void platform_disable_led(void);
 
-// Query whether initiator mode is enabled on targets with PLATFORM_HAS_INITIATOR_MODE
-bool platform_is_initiator_mode_enabled();
+// Query IDE device id 0/1 requested on hardware DIP switches.
+// If platform has no DIP switches, returns 0.
+int platform_get_device_id(void);
 
 // Setup soft watchdog if supported
 void platform_reset_watchdog();

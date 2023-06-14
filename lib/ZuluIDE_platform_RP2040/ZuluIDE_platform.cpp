@@ -40,6 +40,7 @@ const char *g_platform_name = PLATFORM_NAME;
 static uint32_t g_flash_chip_size = 0;
 static bool g_uart_initialized = false;
 static bool g_led_disabled = false;
+static bool g_dip_drive_id, g_dip_cable_sel;
 
 void mbed_error_hook(const mbed_error_ctx * error_context);
 
@@ -74,8 +75,8 @@ void platform_init()
     delay(10); // 10 ms delay to let pull-ups do their work
 
     bool dbglog = !gpio_get(DIP_DBGLOG);
-    bool cablesel = !gpio_get(DIP_CABLESEL);
-    bool drive_id = !gpio_get(DIP_DRIVE_ID);
+    g_dip_cable_sel = !gpio_get(DIP_CABLESEL);
+    g_dip_drive_id = !gpio_get(DIP_DRIVE_ID);
 
     /* Initialize logging to SWO pin (UART0) */
     gpio_conf(SWO_PIN,        GPIO_FUNC_UART,false,false, true,  false, true);
@@ -86,7 +87,7 @@ void platform_init()
     logmsg("Platform: ", g_platform_name);
     logmsg("FW Version: ", g_log_firmwareversion);
 
-    logmsg("DIP switch settings: cablesel ", (int)cablesel, ", drive_id ", (int)drive_id, " debug log ", (int)dbglog);
+    logmsg("DIP switch settings: cablesel ", (int)g_dip_cable_sel, ", drive_id ", (int)g_dip_drive_id, " debug log ", (int)dbglog);
 
     g_log_debug = dbglog;
     
@@ -159,6 +160,24 @@ void platform_disable_led(void)
 {   
     g_led_disabled = true;
     logmsg("Disabling status LED");
+}
+
+int platform_get_device_id(void)
+{
+    if (g_dip_cable_sel)
+    {
+        if (gpio_get(IDE_CSEL_IN))
+            return 1;    // CSEL wire has been cut, secondary device
+        else
+            return 0;    // CSEL wire grounded, primary device
+    }
+    else
+    {
+        if (g_dip_drive_id)
+            return 1;    // PRI/SEC switch on, secondary device
+        else
+            return 0;    // PRI/SEC switch off, primary device
+    }
 }
 
 /*****************************************/
