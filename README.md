@@ -28,7 +28,7 @@ Hotplugging
 The firmware supports hot-plug removal and reinsertion of SD card.
 The status led will blink continuously when card is not present, then blink once when card is reinserted successfully.
 
-When SD card is removed, the CD drive is reported as being empty. (**TODO**: Implement and test)
+When SD card is removed, the CD drive is reported as being empty.
 
 Programming & bootloader
 ------------------------

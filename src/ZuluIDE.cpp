@@ -325,6 +325,9 @@ void zuluide_main_loop(void)
                 {
                     g_sdcard_present = false;
                     logmsg("SD card removed, trying to reinit");
+
+                    g_ide_cdrom.set_image(NULL);
+                    g_ide_imagefile.close();
                 }
             }
         }

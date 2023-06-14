@@ -73,6 +73,11 @@ bool IDEImageFile::open_file(FsVolume *volume, const char *filename, bool read_o
     return true;
 }
 
+void IDEImageFile::close()
+{
+    m_file.close();
+}
+
 bool IDEImageFile::get_filename(char *buf, size_t buflen)
 {
     if (!m_file.isOpen())

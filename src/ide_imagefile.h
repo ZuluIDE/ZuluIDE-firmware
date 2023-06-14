@@ -65,6 +65,7 @@ public:
     IDEImageFile(uint8_t *buffer, size_t buffer_size);
 
     bool open_file(FsVolume *volume, const char *filename, bool read_only = false);
+    void close();
 
     virtual bool get_filename(char *buf, size_t buflen);
     virtual uint64_t capacity();

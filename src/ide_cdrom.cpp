@@ -334,6 +334,18 @@ void IDECDROMDevice::set_image(IDEImage *image)
     {
         m_devinfo.medium_type = ATAPI_MEDIUM_NONE;
     }
+
+    // Notify host of media change
+    m_atapi_state.unit_attention = true;
+
+    if (!image)
+    {
+        m_devinfo.media_status_events = ATAPI_MEDIA_EVENT_EJECTREQ;
+    }
+    else
+    {
+        m_devinfo.media_status_events = ATAPI_MEDIA_EVENT_NEW;
+    }
 }
 
 bool IDECDROMDevice::handle_atapi_command(const uint8_t *cmd)
