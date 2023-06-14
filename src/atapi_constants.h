@@ -16,6 +16,8 @@ X(ATAPI_CMD_REQUEST_SENSE                 , 0x03) \
 X(ATAPI_CMD_FORMAT_UNIT                   , 0x04) \
 X(ATAPI_CMD_READ6                         , 0x08) \
 X(ATAPI_CMD_INQUIRY                       , 0x12) \
+X(ATAPI_CMD_MODE_SELECT6                  , 0x15) \
+X(ATAPI_CMD_MODE_SENSE6                   , 0x1A) \
 X(ATAPI_CMD_START_STOP_UNIT               , 0x1B) \
 X(ATAPI_CMD_PREVENT_ALLOW_MEDIUM_REMOVAL  , 0x1E) \
 X(ATAPI_CMD_READ_FORMAT_CAPACITIES        , 0x23) \

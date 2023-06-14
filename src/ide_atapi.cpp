@@ -451,7 +451,9 @@ bool IDEATAPIDevice::handle_atapi_command(const uint8_t *cmd)
     {
         case ATAPI_CMD_TEST_UNIT_READY: return atapi_test_unit_ready(cmd);
         case ATAPI_CMD_START_STOP_UNIT: return atapi_start_stop_unit(cmd);
+        case ATAPI_CMD_MODE_SENSE6:     return atapi_mode_sense(cmd);
         case ATAPI_CMD_MODE_SENSE10:    return atapi_mode_sense(cmd);
+        case ATAPI_CMD_MODE_SELECT6:    return atapi_mode_select(cmd);
         case ATAPI_CMD_MODE_SELECT10:   return atapi_mode_select(cmd);
         case ATAPI_CMD_GET_CONFIGURATION: return atapi_get_configuration(cmd);
         case ATAPI_CMD_GET_EVENT_STATUS_NOTIFICATION: return atapi_get_event_status_notification(cmd);
@@ -566,9 +568,24 @@ bool IDEATAPIDevice::atapi_inquiry(const uint8_t *cmd)
 
 bool IDEATAPIDevice::atapi_mode_sense(const uint8_t *cmd)
 {
-    uint8_t page_ctrl = cmd[2] >> 6;
-    uint8_t page_idx = cmd[2] & 0x3F;
-    uint16_t req_bytes = parse_be16(&cmd[7]);
+    uint8_t page_ctrl, page_idx;
+    uint16_t req_bytes;
+    if (cmd[0] == ATAPI_CMD_MODE_SENSE6)
+    {
+        page_ctrl = cmd[2] >> 6;
+        page_idx = cmd[2] & 0x3F;
+        req_bytes = cmd[4];
+    }
+    else if (cmd[0] == ATAPI_CMD_MODE_SENSE10)
+    {
+        page_ctrl = cmd[2] >> 6;
+        page_idx = cmd[2] & 0x3F;
+        req_bytes = parse_be16(&cmd[7]);
+    }
+    else
+    {
+        assert(false);
+    }
 
     uint8_t *resp = m_buffer.bytes + 8; // Reserve space for mode parameter header
     size_t max_bytes = sizeof(m_buffer) - 8;
@@ -606,8 +623,23 @@ bool IDEATAPIDevice::atapi_mode_sense(const uint8_t *cmd)
 
 bool IDEATAPIDevice::atapi_mode_select(const uint8_t *cmd)
 {
-    bool save_pages = cmd[1] & 1;
-    uint16_t paramLength = parse_be16(&cmd[7]);
+    bool save_pages;
+    uint16_t paramLength;
+
+    if (cmd[0] == ATAPI_CMD_MODE_SELECT6)
+    {
+        save_pages = cmd[1] & 1;
+        paramLength = cmd[4];
+    }
+    else if (cmd[0] == ATAPI_CMD_MODE_SELECT10)
+    {
+        save_pages = cmd[1] & 1;
+        paramLength = parse_be16(&cmd[7]);
+    }
+    else
+    {
+        assert(false);
+    }
 
     dbgmsg("-- MODE SELECT, save pages: ", (int)save_pages, ", paramLength ", (int)paramLength);
 
