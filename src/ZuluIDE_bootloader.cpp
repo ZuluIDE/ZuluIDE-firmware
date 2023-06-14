@@ -44,7 +44,7 @@ bool find_firmware_image(FsFile &file, char name[MAX_FILE_PATH + 1])
         int namelen = file.getName(name, MAX_FILE_PATH);
 
         if (namelen >= 11 &&
-            strncasecmp(name, "zuluide", 8) == 0 &&
+            strncasecmp(name, "zuluide", 7) == 0 &&
             strncasecmp(name + namelen - 3, "bin", 3) == 0)
         {
             root.close();
@@ -61,16 +61,17 @@ bool find_firmware_image(FsFile &file, char name[MAX_FILE_PATH + 1])
 
 bool program_firmware(FsFile &file)
 {
-    uint32_t fwsize = file.size() - PLATFORM_BOOTLOADER_SIZE;
-    uint32_t num_pages = (fwsize + PLATFORM_FLASH_PAGE_SIZE - 1) / AZPLATFORM_FLASH_PAGE_SIZE;
+    uint32_t filesize = file.size();
+    uint32_t fwsize = filesize- PLATFORM_BOOTLOADER_SIZE;
+    uint32_t num_pages = (fwsize + PLATFORM_FLASH_PAGE_SIZE - 1) / PLATFORM_FLASH_PAGE_SIZE;
 
     // Make sure the buffer is aligned to word boundary
     static uint32_t buffer32[PLATFORM_FLASH_PAGE_SIZE / 4];
     uint8_t *buffer = (uint8_t*)buffer32;
 
-    if (fwsize > PLATFORM_FLASH_TOTAL_SIZE)
+    if (filesize > PLATFORM_FLASH_TOTAL_SIZE)
     {
-        logmsg("Firmware too large: ", (int)fwsize, " flash size ", (int)PLATFORM_FLASH_TOTAL_SIZE);
+        logmsg("Firmware too large: ", (int)filesize, " flash size ", (int)PLATFORM_FLASH_TOTAL_SIZE);
         return false;
     }
 
@@ -93,7 +94,7 @@ bool program_firmware(FsFile &file)
             return false;
         }
 
-        if (!platform_rewrite_flash_page(PLATFORM_BOOTLOADER_SIZE + i * AZPLATFORM_FLASH_PAGE_SIZE, buffer))
+        if (!platform_rewrite_flash_page(PLATFORM_BOOTLOADER_SIZE + i * PLATFORM_FLASH_PAGE_SIZE, buffer))
         {
             logmsg("Flash programming failed on page ", i);
             return false;
@@ -125,7 +126,7 @@ extern "C"
 int bootloader_main(void)
 {
     platform_init();
-    g_logmsg_debug = true;
+    g_log_debug = true;
 
     logmsg("Bootloader version: " __DATE__ " " __TIME__ " " PLATFORM_NAME);
 
