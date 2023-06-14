@@ -87,6 +87,13 @@ void ide_phy_stop_transfers(int *crc_errors = nullptr);
 // Assert IDE interrupt and set status register
 void ide_phy_assert_irq(uint8_t ide_status);
 
+// Set IDE phy diagnostics signals
+// Bit set = drive signal to 0 state, bit clear = high-impedance
+#define IDE_SIGNAL_DASP     0x01
+#define IDE_SIGNAL_PDIAG    0x02
+void ide_phy_set_signals(uint8_t signals);
+uint8_t ide_phy_get_signals();
+
 // Query what is supported by the IDE PHY
 struct ide_phy_capabilities_t
 {

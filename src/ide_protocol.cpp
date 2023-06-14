@@ -42,6 +42,10 @@ static const char *get_ide_command_name(uint8_t cmd)
 
 static ide_phy_config_t g_ide_config;
 static IDEDevice *g_ide_devices[2];
+static ide_event_t g_last_reset_event;
+static uint32_t g_last_reset_time;
+static bool g_drive1_detected;
+static uint8_t g_ide_signals;
 
 static void do_phy_reset()
 {
@@ -49,7 +53,8 @@ static void do_phy_reset()
     g_ide_config.enable_dev1 = (g_ide_devices[1] != NULL);
     g_ide_config.enable_dev1_zeros = (g_ide_devices[0] != NULL)
                                     && (g_ide_devices[1] == NULL)
-                                    && (g_ide_devices[0]->is_packet_device());
+                                    && (g_ide_devices[0]->is_packet_device())
+                                    && !g_drive1_detected;
     g_ide_config.atapi_dev0 = (g_ide_devices[0] != NULL) && (g_ide_devices[0]->is_packet_device());
     g_ide_config.atapi_dev1 = (g_ide_devices[1] != NULL) && (g_ide_devices[1]->is_packet_device());
 
@@ -99,7 +104,10 @@ void ide_protocol_poll()
                 return;
             }
 
+            ide_phy_set_signals(g_ide_signals | IDE_SIGNAL_DASP); // Set motherboard IDE status led
             bool status = device->handle_command(&regs);
+            ide_phy_set_signals(g_ide_signals);
+
             if (!status)
             {
                 logmsg("-- Command handler failed for ", get_ide_command_name(cmd));
@@ -122,11 +130,65 @@ void ide_protocol_poll()
                 default: dbgmsg("PHY EVENT: ", (int)evt); break;
             }
 
+            if (evt == IDE_EVENT_HWRST || evt == IDE_EVENT_SWRST)
+            {
+                g_ide_signals = 0;
+                ide_phy_set_signals(0); // Release DASP and PDIAG
+                g_last_reset_time = millis();
+                g_last_reset_event = evt;
+                g_drive1_detected = false;
+            }
+
             if (g_ide_devices[0]) g_ide_devices[0]->handle_event(evt);
             if (g_ide_devices[1]) g_ide_devices[1]->handle_event(evt);
         }
 
         LED_OFF();
+    }
+
+    if (g_last_reset_event == IDE_EVENT_HWRST || g_last_reset_event == IDE_EVENT_SWRST)
+    {
+        uint32_t time_passed = millis() - g_last_reset_time;
+
+        if (g_ide_devices[1])
+        {
+            // Announce our presence to primary device
+
+            if (time_passed > 5)
+            {
+                // Assert DASP to indicate presence
+                ide_phy_set_signals(IDE_SIGNAL_DASP);
+            }
+            else if (time_passed > 100)
+            {
+                // Assert PDIAG to indicate passed diagnostics
+                g_ide_signals = IDE_SIGNAL_PDIAG;
+                ide_phy_set_signals(IDE_SIGNAL_DASP | g_ide_signals);
+            }
+            else if (time_passed > 31000 || evt == IDE_EVENT_CMD)
+            {
+                // Release DASP after first command or 31 secs
+                ide_phy_set_signals(g_ide_signals);
+                g_last_reset_event = IDE_EVENT_NONE;
+            }
+        }
+        else
+        {
+            // Monitor presence of secondary device
+            uint8_t signals = ide_phy_get_signals();
+
+            if (signals & IDE_SIGNAL_DASP)
+            {
+                g_drive1_detected = true;
+            }
+
+            if (time_passed > 500)
+            {
+                // Apply configuration based on whether drive1 was present
+                do_phy_reset();
+                g_last_reset_event = IDE_EVENT_NONE;
+            }
+        }
     }
 }
 

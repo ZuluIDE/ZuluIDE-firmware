@@ -104,8 +104,8 @@
 //                 Byte 1-2: Block length minus 1 (words)
 //
 //     0x90:   Write IDE diagnostic signals, payload:
-//                 Byte 0:  Bit 0: OUT_DASP    drive present / active
-//                              1: OUT_PDIAG   passed diagnostics
+//                 Byte 0:  Bit 0: OUT_DASP    drive present / active, 1 to drive signal low
+//                              1: OUT_PDIAG   passed diagnostics, 1 to drive signal low
 //
 //     0x91:   Assert IDE interrupt (if enabled and selected) and write status register simultaneously
 //               Byte 0: IDE STATUS

@@ -24,6 +24,8 @@
 #include "rp2040_fpga.h"
 #include <assert.h>
 #include <ZuluIDE_log.h>
+#include <hardware/gpio.h>
+#include "ZuluIDE_platform.h"
 
 static struct {
     ide_phy_config_t config;
@@ -290,6 +292,19 @@ void ide_phy_assert_irq(uint8_t ide_status)
 {
     fpga_wrcmd(FPGA_CMD_ASSERT_IRQ, &ide_status, 1);
     // dbgmsg("ide_phy_assert_irq(", ide_status, ")");
+}
+
+void ide_phy_set_signals(uint8_t signals)
+{
+    fpga_wrcmd(FPGA_CMD_WRITE_IDE_SIGNALS, &signals, 1);
+}
+
+uint8_t ide_phy_get_signals()
+{
+    uint8_t result = 0;
+    if (!gpio_get(IDE_PDIAG_IN)) result |= IDE_SIGNAL_PDIAG;
+    if (!gpio_get(IDE_DASP_IN))  result |= IDE_SIGNAL_DASP;
+    return result;
 }
 
 const ide_phy_capabilities_t *ide_phy_get_capabilities()
