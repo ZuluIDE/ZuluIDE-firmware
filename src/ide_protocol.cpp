@@ -58,7 +58,32 @@ static void do_phy_reset()
     g_ide_config.atapi_dev0 = (g_ide_devices[0] != NULL) && (g_ide_devices[0]->is_packet_device());
     g_ide_config.atapi_dev1 = (g_ide_devices[1] != NULL) && (g_ide_devices[1]->is_packet_device());
 
+    if (g_ide_config.enable_dev0 && !g_ide_config.enable_dev1)
+    {
+        if (g_drive1_detected)
+        {
+            dbgmsg("-- Operating as primary drive, secondary drive detected");
+        }
+        else
+        {
+            dbgmsg("-- Operating as primary drive, secondary drive not detected");
+        }
+    }
+    else if (g_ide_config.enable_dev1 && !g_ide_config.enable_dev0)
+    {
+        dbgmsg("-- Operating as secondary drive");
+    }
+    else
+    {
+        dbgmsg("-- Operating as two drives");
+    }
+
     ide_phy_reset(&g_ide_config);
+}
+
+const ide_phy_config_t *ide_protocol_get_config()
+{
+    return &g_ide_config;
 }
 
 void ide_protocol_init(IDEDevice *primary, IDEDevice *secondary)
@@ -136,7 +161,13 @@ void ide_protocol_poll()
                 ide_phy_set_signals(0); // Release DASP and PDIAG
                 g_last_reset_time = millis();
                 g_last_reset_event = evt;
-                g_drive1_detected = false;
+
+                if (evt == IDE_EVENT_HWRST)
+                {
+                    // Some drives don't assert DASP after SWRST,
+                    // keep result from latest HWRST.
+                    g_drive1_detected = false;
+                }
             }
 
             if (g_ide_devices[0]) g_ide_devices[0]->handle_event(evt);
@@ -154,25 +185,27 @@ void ide_protocol_poll()
         {
             // Announce our presence to primary device
 
-            if (time_passed > 5)
+            if (time_passed > 5 && g_ide_signals == 0)
             {
                 // Assert DASP to indicate presence
-                ide_phy_set_signals(IDE_SIGNAL_DASP);
+                g_ide_signals = IDE_SIGNAL_DASP;
+                ide_phy_set_signals(g_ide_signals);
             }
-            else if (time_passed > 100)
+            else if (time_passed > 100 && g_ide_signals == IDE_SIGNAL_DASP)
             {
                 // Assert PDIAG to indicate passed diagnostics
-                g_ide_signals = IDE_SIGNAL_PDIAG;
-                ide_phy_set_signals(IDE_SIGNAL_DASP | g_ide_signals);
+                g_ide_signals = IDE_SIGNAL_DASP | IDE_SIGNAL_PDIAG;
+                ide_phy_set_signals(g_ide_signals);
             }
             else if (time_passed > 31000 || evt == IDE_EVENT_CMD)
             {
                 // Release DASP after first command or 31 secs
+                g_ide_signals = IDE_SIGNAL_PDIAG;
                 ide_phy_set_signals(g_ide_signals);
                 g_last_reset_event = IDE_EVENT_NONE;
             }
         }
-        else
+        else if (g_last_reset_event == IDE_EVENT_HWRST)
         {
             // Monitor presence of secondary device
             uint8_t signals = ide_phy_get_signals();
@@ -195,6 +228,8 @@ void ide_protocol_poll()
 void IDEDevice::initialize(int devidx)
 {
     memset(&m_devconfig, 0, sizeof(m_devconfig));
+
+    m_devconfig.dev_index = devidx;
 
     m_phy_caps = *ide_phy_get_capabilities();
     m_devconfig.max_pio_mode = ini_getl("IDE", "max_pio", 2, CONFIGFILE);

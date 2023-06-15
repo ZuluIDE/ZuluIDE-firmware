@@ -77,7 +77,11 @@ void IDEATAPIDevice::handle_event(ide_event_t evt)
 {
     if (evt == IDE_EVENT_HWRST || evt == IDE_EVENT_SWRST)
     {
-        m_atapi_state.udma_mode = -1;
+        if (evt == IDE_EVENT_HWRST)
+        {
+            m_atapi_state.udma_mode = -1;
+        }
+
         m_atapi_state.unit_attention = true;
         set_packet_device_signature(0, true);
     }
@@ -169,8 +173,26 @@ bool IDEATAPIDevice::cmd_identify_packet_device(ide_registers_t *regs)
     idf[IDE_IDENTIFY_OFFSET_COMMAND_SET_SUPPORT_2] = 0x4000;
     idf[IDE_IDENTIFY_OFFSET_COMMAND_SET_SUPPORT_3] = 0x4000;
     idf[IDE_IDENTIFY_OFFSET_COMMAND_SET_ENABLED_1] = 0x0014;
-    idf[IDE_IDENTIFY_OFFSET_HARDWARE_RESET_RESULT] = 0x4049; // Diagnostics results
     idf[IDE_IDENTIFY_OFFSET_BYTE_COUNT_ZERO] = 128; // Number of bytes transferred when bytes_req = 0
+
+    // Diagnostics results
+    const ide_phy_config_t *phycfg = ide_protocol_get_config();
+    if (m_devconfig.dev_index == 0)
+    {
+        idf[IDE_IDENTIFY_OFFSET_HARDWARE_RESET_RESULT] = 0x4009; // Device 0 passed diagnostics
+        if (phycfg->enable_dev1_zeros)
+        {
+            idf[IDE_IDENTIFY_OFFSET_HARDWARE_RESET_RESULT] |= (1 << 6); // Device 0 responds for device 1
+        }
+        else
+        {
+            idf[IDE_IDENTIFY_OFFSET_HARDWARE_RESET_RESULT] |= 0x30; // Device 1 detected
+        }
+    }
+    else
+    {
+        idf[IDE_IDENTIFY_OFFSET_HARDWARE_RESET_RESULT] = 0x4900; // Device 1 passed diagnostics
+    }
 
     // Supported PIO modes
     if (m_phy_caps.supports_iordy) idf[IDE_IDENTIFY_OFFSET_CAPABILITIES_1] |= (1 << 11);

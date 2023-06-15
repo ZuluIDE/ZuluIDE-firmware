@@ -30,6 +30,7 @@ public:
 
 protected:
     struct {
+        int dev_index;
         int max_udma_mode;
         int max_pio_mode;
         int max_blocksize;
@@ -41,6 +42,9 @@ protected:
 
 // Initialize the protocol layer with devices
 void ide_protocol_init(IDEDevice *primary, IDEDevice *secondary);
+
+// Get phy config as information to device implementations
+const ide_phy_config_t *ide_protocol_get_config();
 
 // Call this periodically to process events
 void ide_protocol_poll();
