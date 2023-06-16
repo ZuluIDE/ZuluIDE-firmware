@@ -20,7 +20,7 @@
 
 // Transfer buffer size in bytes, must be a power of 2
 #ifndef IDE_BUFFER_SIZE
-#define IDE_BUFFER_SIZE 16384
+#define IDE_BUFFER_SIZE 65536
 #endif
 
 // Log buffer size in bytes, must be a power of 2
