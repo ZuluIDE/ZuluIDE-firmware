@@ -13,21 +13,25 @@
 // ------------------ //
 
 #define fpga_qspi_transfer_wrap_target 0
-#define fpga_qspi_transfer_wrap 3
+#define fpga_qspi_transfer_wrap 7
 
 static const uint16_t fpga_qspi_transfer_program_instructions[] = {
             //     .wrap_target
     0x6004, //  0: out    pins, 4         side 0     
-    0x5004, //  1: in     pins, 4         side 1     
-    0x7004, //  2: out    pins, 4         side 1     
-    0x4004, //  3: in     pins, 4         side 0     
+    0xb042, //  1: nop                    side 1
+    0x5004, //  2: in     pins, 4         side 1
+    0xb042, //  3: nop                    side 1
+    0x7004, //  4: out    pins, 4         side 1
+    0xa042, //  5: nop                    side 0
+    0x4004, //  6: in     pins, 4         side 0
+    0xa042, //  7: nop                    side 0
             //     .wrap
 };
 
 #if !PICO_NO_HARDWARE
 static const struct pio_program fpga_qspi_transfer_program = {
     .instructions = fpga_qspi_transfer_program_instructions,
-    .length = 4,
+    .length = 8,
     .origin = -1,
 };
 

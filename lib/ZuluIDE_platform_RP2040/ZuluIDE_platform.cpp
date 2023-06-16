@@ -111,7 +111,8 @@ void platform_init()
     // I2C pins
     //        pin             function       pup   pdown  out    state fast
     gpio_conf(GPIO_I2C_SCL,   GPIO_FUNC_I2C, true,false, false,  true, true);
-    gpio_conf(GPIO_I2C_SDA,   GPIO_FUNC_I2C, true,false, false,  true, true);
+    // gpio_conf(GPIO_I2C_SDA,   GPIO_FUNC_I2C, true,false, false,  true, true);
+    gpio_conf(GPIO_I2C_SDA,   GPIO_FUNC_SIO, true,false, true,  true, true); // FIXME: DEBUG
 
     // FPGA bus
     // Signals will be switched between SPI/PIO by rp2040_fpga.cpp, but pull-ups are configured here.
@@ -145,7 +146,7 @@ void platform_late_init()
     }
     else
     {
-        logmsg("FPGA initialization failed");
+        logmsg("ERROR: FPGA initialization failed");
     }
 }
 

@@ -123,7 +123,6 @@ static void fpga_qspi_pio_init()
             sm_config_set_sideset_pins(&cfg, FPGA_QSPI_SCK);
             sm_config_set_in_shift(&cfg, true, true, 8);
             sm_config_set_out_shift(&cfg, true, true, 8);
-            sm_config_set_clkdiv(&cfg, 8);
             g_fpga_qspi.pio_cfg_qspi_transfer_8bit = cfg;
 
             sm_config_set_in_shift(&cfg, true, true, 32);
@@ -156,6 +155,53 @@ static void fpga_qspi_pio_init()
     }
 }
 
+bool fpga_selftest()
+{
+    // Test communication
+    uint32_t result1, result2, result3;
+    fpga_rdcmd(FPGA_CMD_COMMUNICATION_CHECK, (uint8_t*)&result1, 4);
+    delay(1);
+    fpga_rdcmd(FPGA_CMD_COMMUNICATION_CHECK, (uint8_t*)&result2, 4);
+    delay(1);
+    fpga_rdcmd(FPGA_CMD_COMMUNICATION_CHECK, (uint8_t*)&result3, 4);
+
+    uint32_t expected = 0x03020100;
+    if (result1 != expected || result2 != expected || result3 != expected)
+    {
+        logmsg("FPGA communication test failed, got ", result1, " ", result2, " ", result3, " expected ", expected);
+        return false;
+    }
+
+    // Test register roundtrip
+    uint32_t regs[2] = {0xBEEFBE80, 0xC0FEC0DE};
+    uint32_t regs_readback[2] = {0,0};
+
+    fpga_wrcmd(FPGA_CMD_WRITE_IDE_REGS, (uint8_t*)regs, 8);
+    fpga_rdcmd(FPGA_CMD_READ_IDE_REGS, (uint8_t*)regs_readback, 8);
+
+    if (regs[0] != regs_readback[0] || regs[1] != regs_readback[1])
+    {
+        logmsg("FPGA register roundtrip test failed, got ", regs_readback[0], " ", regs_readback[1]);
+        return false;
+    }
+
+    // Test data buffer roundtrip
+    uint32_t buf[4] = {0xA3A2A1A0, 0xB3B2B1B0, 0xC3C2C1C0, 0xD3D2D1D0};
+    uint32_t buf_readback[4] = {0};
+    uint16_t buflastidx = 7;
+    fpga_wrcmd(FPGA_CMD_START_WRITE, (uint8_t*)&buflastidx, 2);
+    fpga_wrcmd(FPGA_CMD_WRITE_DATABUF, (uint8_t*)buf, 16);
+    fpga_rdcmd(FPGA_CMD_READ_DATABUF, (uint8_t*)buf_readback, 16);
+
+    if (memcmp(buf, buf_readback, 16) != 0)
+    {
+        logmsg("FPGA databuf roundtrip test failed, got ", bytearray((uint8_t*)buf_readback, 16));
+        return false;
+    }
+
+    return true;
+}
+
 bool fpga_init()
 {
     // Enable clock output to FPGA
@@ -180,27 +226,18 @@ bool fpga_init()
     fpga_io_as_qspi();
     fpga_qspi_pio_init();
 
-    // Test communication
-    uint32_t result1, result2, result3;
-    fpga_rdcmd(FPGA_CMD_COMMUNICATION_CHECK, (uint8_t*)&result1, 4);
-    delay(1);
-    fpga_rdcmd(FPGA_CMD_COMMUNICATION_CHECK, (uint8_t*)&result2, 4);
-    delay(1);
-    fpga_rdcmd(FPGA_CMD_COMMUNICATION_CHECK, (uint8_t*)&result3, 4);
-    
-    uint32_t expected = 0x03020100;
-    if (result1 != expected || result2 != expected || result3 != expected)
-    {
-        logmsg("FPGA communication test failed, got ", result1, " ", result2, " ", result3, " expected ", expected);
-        return false;
-    }
-
     // Check protocol version
     uint8_t version;
     fpga_rdcmd(FPGA_CMD_PROTOCOL_VERSION, &version, 1);
     if (version != FPGA_PROTOCOL_VERSION)
     {
         logmsg("WARNING: FPGA reports protocol version ", (int)version, ", firmware is built for version ", (int)FPGA_PROTOCOL_VERSION);
+    }
+
+    if (!fpga_selftest())
+    {
+        logmsg("ERROR: FPGA self-test failed");
+        return false;
     }
 
     // Check FPGA license code

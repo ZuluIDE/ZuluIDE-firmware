@@ -36,10 +36,21 @@
 ; When reading, the TX FIFO is written with dummy bytes to set number of items.
 ;
 ; Pin directions should be set before starting the program.
+;
+; Designed to run with PIO input synchronizers disabled.
+; Timing is designed to account for the 1 register delay on both PIO input and output.
+;
+; Currently QSPI bus is run at 31.25 MHz, giving 15.6 MB/s throughput.
+;
+; See https://github.com/raspberrypi/pico-feedback/issues/280
+
 .program fpga_qspi_transfer
 .side_set 1
-    out PINS, 4     side 0    ; Write low nibble (if TX)
-    in PINS, 4      side 1    ; Clock rising edge, read low nibble (if RX)
-    out PINS, 4     side 1    ; Write high nibble (if TX)
-    in PINS, 4      side 0    ; Clock falling edge, read high nibble (if RX)
-
+    out PINS, 4     side 0    ; Write low nibble or wait for new data
+    nop             side 1    ; Clock rising edge
+    in PINS, 4      side 1    ; Read low nibble, FPGA sees clock rising edge
+    nop             side 1    ; Delay for FPGA latency
+    out PINS, 4     side 1    ; Write high nibble
+    nop             side 0    ; Clock falling edge
+    in PINS, 4      side 0    ; Read high nibble
+    nop             side 0    ; Delay for FPGA latency
