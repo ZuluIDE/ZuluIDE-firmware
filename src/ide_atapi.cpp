@@ -46,6 +46,8 @@ IDEATAPIDevice::IDEATAPIDevice():
 void IDEATAPIDevice::set_image(IDEImage *image)
 {
     m_image = image;
+    m_atapi_state.unit_attention = true;
+    m_atapi_state.sense_asc = ATAPI_ASC_MEDIUM_CHANGE;
 }
 
 void IDEATAPIDevice::poll()
@@ -83,6 +85,7 @@ void IDEATAPIDevice::handle_event(ide_event_t evt)
         }
 
         m_atapi_state.unit_attention = true;
+        m_atapi_state.sense_asc = ATAPI_ASC_RESET_OCCURRED;
         set_packet_device_signature(0, true);
     }
 }
@@ -466,7 +469,8 @@ bool IDEATAPIDevice::handle_atapi_command(const uint8_t *cmd)
 
     if (m_atapi_state.unit_attention)
     {
-        return atapi_cmd_error(ATAPI_SENSE_UNIT_ATTENTION, 0);
+        m_atapi_state.unit_attention = false;
+        return atapi_cmd_error(ATAPI_SENSE_UNIT_ATTENTION, m_atapi_state.sense_asc);
     }
 
     switch (cmd[0])
@@ -514,7 +518,7 @@ bool IDEATAPIDevice::atapi_cmd_error(uint8_t sense_key, uint16_t sense_asc)
 {
     if (sense_key == ATAPI_SENSE_UNIT_ATTENTION)
     {
-        dbgmsg("-- Reporting UNIT_ATTENTION condition after reset/medium change");
+        dbgmsg("-- Reporting UNIT_ATTENTION condition after reset/medium change (ASC:", sense_asc, ")");
     }
     else
     {
