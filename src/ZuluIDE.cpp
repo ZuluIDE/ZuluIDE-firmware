@@ -28,6 +28,15 @@
 #include "ide_protocol.h"
 #include "ide_cdrom.h"
 
+SdFs SD;
+bool g_sdcard_present;
+static FsFile g_logfile;
+
+static uint32_t g_ide_buffer[IDE_BUFFER_SIZE / 4];
+static IDECDROMDevice g_ide_cdrom;
+static IDEImageFile g_ide_imagefile;
+
+
 /************************************/
 /* Status reporting by blinking led */
 /************************************/
@@ -51,11 +60,12 @@ void blinkStatus(int count)
 /* SD card mounting              */
 /*********************************/
 
-SdFs SD;
-bool g_sdcard_present;
-
 static bool mountSDCard()
 {
+    // Verify that all existing files have been closed
+    g_logfile.close();
+    g_ide_cdrom.set_image(NULL);
+
     // Check for the common case, FAT filesystem as first partition
     if (SD.begin(SD_CONFIG))
         return true;
@@ -95,8 +105,6 @@ void print_sd_info()
 /**************/
 /* Log saving */
 /**************/
-
-FsFile g_logfile;
 
 void save_logfile(bool always = false)
 {
@@ -206,10 +214,6 @@ static bool find_next_image(const char *directory, const char *prev_image, char 
 /*********************************/
 /* Main IDE handling loop        */
 /*********************************/
-
-static uint32_t g_ide_buffer[IDE_BUFFER_SIZE / 4];
-static IDECDROMDevice g_ide_cdrom;
-static IDEImageFile g_ide_imagefile;
 
 void load_image()
 {
