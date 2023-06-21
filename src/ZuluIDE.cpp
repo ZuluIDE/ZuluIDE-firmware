@@ -22,18 +22,24 @@
 #include <SdFat.h>
 #include <minIni.h>
 #include <strings.h>
+#include "ZuluIDE.h"
 #include "ZuluIDE_config.h"
 #include "ZuluIDE_platform.h"
 #include "ZuluIDE_log.h"
 #include "ide_protocol.h"
 #include "ide_cdrom.h"
+#include "ide_zipdrive.h"
 
 bool g_sdcard_present;
 static FsFile g_logfile;
 
 static uint32_t g_ide_buffer[IDE_BUFFER_SIZE / 4];
+
+// Currently supports one IDE device
 static IDECDROMDevice g_ide_cdrom;
+static IDEZipDrive g_ide_zipdrive;
 static IDEImageFile g_ide_imagefile;
+static IDEDevice *g_ide_device;
 
 
 /************************************/
@@ -147,6 +153,23 @@ void init_logfile()
 /* Image file searching          */
 /*********************************/
 
+static bool is_valid_filename(const char *name)
+{
+    if (strcasecmp(name, "ice5lp1k_top_bitmap.bin") == 0)
+    {
+        // Ignore FPGA bitstream
+        return false;
+    }
+
+    if (!isalnum(name[0]))
+    {
+        // Skip names beginning with special character
+        return false;
+    }
+
+    return true;
+}
+
 // Find the next image file in alphabetical order.
 // If prev_image is NULL, returns the first image file.
 static bool find_next_image(const char *directory, const char *prev_image, char *result, size_t buflen)
@@ -170,21 +193,16 @@ static bool find_next_image(const char *directory, const char *prev_image, char 
         file.getName(candidate, sizeof(candidate));
         const char *extension = strrchr(candidate, '.');
 
-        if (strcasecmp(candidate, "ice5lp1k_top_bitmap.bin") == 0)
+        if (!is_valid_filename(candidate))
         {
             continue;
         }
 
-        if (strcasecmp(extension, ".iso") != 0 &&
-            strcasecmp(extension, ".bin") != 0)
+        if (!extension ||
+            (strcasecmp(extension, ".iso") != 0 &&
+             strcasecmp(extension, ".bin") != 0))
         {
-            // Not a CD-ROM image
-            continue;
-        }
-
-        if (!isalnum(candidate[0]))
-        {
-            // Skip names beginning with special character
+            // Not an image file
             continue;
         }
 
@@ -216,15 +234,18 @@ static bool find_next_image(const char *directory, const char *prev_image, char 
 
 void load_image()
 {
+    // Clear any previous state
     g_ide_cdrom.set_image(nullptr);
+    g_ide_zipdrive.set_image(nullptr);
     g_ide_imagefile = IDEImageFile((uint8_t*)g_ide_buffer, sizeof(g_ide_buffer));
     
+    // Find image file
     char imagefile[MAX_FILE_PATH];
     if (find_next_image("/", NULL, imagefile, sizeof(imagefile)))
     {
         logmsg("Loading image ", imagefile);
-        g_ide_imagefile.open_file(SD.vol(), imagefile, true);
-        g_ide_cdrom.set_image(&g_ide_imagefile);
+        g_ide_imagefile.open_file(SD.vol(), imagefile, false);
+        if (g_ide_device) g_ide_device->set_image(&g_ide_imagefile);
         blinkStatus(BLINK_STATUS_OK);
     }
     else
@@ -286,8 +307,19 @@ void zuluide_setup(void)
 
     platform_late_init();
 
+    int type = ini_getl("IDE", "type", 0, CONFIGFILE);
+    if (type == 1)
+    {
+        logmsg("Device type: ZIP drive");
+        g_ide_device = &g_ide_zipdrive;
+    }
+    else
+    {
+        logmsg("Device type: CD-ROM");
+        g_ide_device = &g_ide_cdrom;
+    }
+
     load_image();
-    logmsg("Initialization complete!");
 
     if (g_sdcard_present)
     {
@@ -299,9 +331,11 @@ void zuluide_setup(void)
     }
 
     if (platform_get_device_id() == 1)
-        ide_protocol_init(NULL, &g_ide_cdrom); // Secondary device
+        ide_protocol_init(NULL, g_ide_device); // Secondary device
     else
-        ide_protocol_init(&g_ide_cdrom, NULL); // Primary device
+        ide_protocol_init(g_ide_device, NULL); // Primary device
+
+    logmsg("Initialization complete!");
 }
 
 void zuluide_main_loop(void)
