@@ -345,6 +345,15 @@ bool IDEATAPIDevice::atapi_send_data(const uint8_t *data, size_t blocksize, size
         blocksize /= split;
         num_blocks *= split;
     }
+    else
+    {
+        // Combine blocks for better performance
+        while (blocksize * 2 < max_blocksize && (num_blocks & 1) == 0)
+        {
+            blocksize *= 2;
+            num_blocks >>= 1;
+        }
+    }
 
     for (size_t i = 0; i < num_blocks; i++)
     {
@@ -429,6 +438,69 @@ bool IDEATAPIDevice::atapi_send_wait_finish()
     return true;
 }
 
+bool IDEATAPIDevice::atapi_recv_data(uint8_t *data, size_t blocksize, size_t num_blocks)
+{
+    size_t phy_max_blocksize = m_phy_caps.max_blocksize;
+    size_t max_blocksize = std::min<size_t>(phy_max_blocksize, m_atapi_state.bytes_req);
+    if (blocksize > max_blocksize)
+    {
+        // Have to split the blocks for phy
+        size_t split = (blocksize + max_blocksize - 1) / max_blocksize;
+        assert(blocksize % split == 0);
+        blocksize /= split;
+        num_blocks *= split;
+    }
+    else
+    {
+        // Combine blocks for better performance
+        while (blocksize * 2 < max_blocksize && (num_blocks & 1) == 0)
+        {
+            blocksize *= 2;
+            num_blocks >>= 1;
+        }
+    }
+
+    // Set number bytes to transfer to registers
+    ide_registers_t regs = {};
+    ide_phy_get_regs(&regs);
+    regs.status = IDE_STATUS_BSY;
+    regs.sector_count = 0; // Data transfer to device
+    regs.lba_mid = (uint8_t)blocksize;
+    regs.lba_high = (uint8_t)(blocksize >> 8);
+    ide_phy_set_regs(&regs);
+
+    // Start data transfer for first block
+    int udma_mode = (m_atapi_state.dma_requested ? m_atapi_state.udma_mode : -1);
+    ide_phy_start_read(blocksize, udma_mode);
+
+    // Receive blocks
+    for (size_t i = 0; i < num_blocks; i++)
+    {
+        uint32_t start = millis();
+        while (!ide_phy_can_read_block())
+        {
+            if ((uint32_t)(millis() - start) > 10000)
+            {
+                logmsg("IDEATAPIDevice::atapi_recv_data read timeout on block ", (int)i, "/", (int)num_blocks);
+                ide_phy_stop_transfers();
+                return false;
+            }
+        }
+
+        if (i + 1 < num_blocks)
+        {
+            // Start next block transfer
+            ide_phy_assert_irq(IDE_STATUS_DEVRDY | IDE_STATUS_DATAREQ);
+        }
+
+        // Read out previous block
+        ide_phy_read_block(data + blocksize * i, blocksize);
+    }
+
+    ide_phy_stop_transfers();
+    return true;
+}
+
 bool IDEATAPIDevice::atapi_recv_data_block(uint8_t *data, uint16_t blocksize)
 {
     // Set number bytes to transfer to registers
@@ -490,8 +562,10 @@ bool IDEATAPIDevice::handle_atapi_command(const uint8_t *cmd)
         case ATAPI_CMD_READ6:           return atapi_read(cmd);
         case ATAPI_CMD_READ10:          return atapi_read(cmd);
         case ATAPI_CMD_READ12:          return atapi_read(cmd);
+        case ATAPI_CMD_WRITE6:          return atapi_write(cmd);
         case ATAPI_CMD_WRITE10:         return atapi_write(cmd);
         case ATAPI_CMD_WRITE12:         return atapi_write(cmd);
+        case ATAPI_CMD_WRITE_AND_VERIFY10: return atapi_write(cmd);
 
         default:
             logmsg("-- WARNING: Unsupported ATAPI command ", get_atapi_command_name(cmd[0]));
@@ -903,15 +977,80 @@ ssize_t IDEATAPIDevice::read_callback(const uint8_t *data, size_t blocksize, siz
     }
 }
 
+// Parse ATAPI WRITE command
 bool IDEATAPIDevice::atapi_write(const uint8_t *cmd)
 {
-    return atapi_cmd_error(ATAPI_SENSE_ABORTED_CMD, ATAPI_ASC_WRITE_PROTECTED);
+    if (!m_devinfo.writable || (m_image && !m_image->writable()))
+    {
+        return atapi_cmd_error(ATAPI_SENSE_ABORTED_CMD, ATAPI_ASC_WRITE_PROTECTED);
+    }
+    else if (!m_image)
+    {
+        return atapi_cmd_error(ATAPI_SENSE_NOT_READY, ATAPI_ASC_NO_MEDIUM);
+    }
+
+    uint32_t lba, transfer_len;
+    if (cmd[0] == ATAPI_CMD_WRITE6)
+    {
+        lba = parse_be24(&cmd[1]) & 0x1FFFFF;
+        transfer_len = cmd[4];
+        if (transfer_len == 0) transfer_len = 256;
+    }
+    else if (cmd[0] == ATAPI_CMD_WRITE10 || cmd[0] == ATAPI_CMD_WRITE_AND_VERIFY10)
+    {
+        lba = parse_be32(&cmd[2]);
+        transfer_len = parse_be16(&cmd[7]);
+    }
+    else if (cmd[0] == ATAPI_CMD_WRITE12)
+    {
+        lba = parse_be32(&cmd[2]);
+        transfer_len = parse_be32(&cmd[6]);
+    }
+    else
+    {
+        assert(false);
+    }
+
+    if (lba + transfer_len > capacity_lba())
+    {
+        logmsg("-- Host attempted write at LBA ", (int)lba, "+", (int)transfer_len,
+            ", beyond capacity ", capacity_lba());
+        return atapi_cmd_error(ATAPI_SENSE_ILLEGAL_REQ, ATAPI_ASC_LBA_OUT_OF_RANGE);
+    }
+
+    dbgmsg("-- Write ", (int)transfer_len, " sectors starting at ", (int)lba);
+    return doWrite(lba, transfer_len);
 }
 
+// Start write transfer to image file. Can be called directly by subclasses.
+bool IDEATAPIDevice::doWrite(uint32_t lba, uint32_t transfer_len)
+{
+    bool status = m_image->write((uint64_t)lba * m_devinfo.bytes_per_sector,
+                                m_devinfo.bytes_per_sector, transfer_len,
+                                this);
+
+    if (status)
+    {
+        return atapi_cmd_ok();
+    }
+    else
+    {
+        return atapi_cmd_error(ATAPI_SENSE_MEDIUM_ERROR, 0);
+    }
+}
+
+// Called by IDEImage to request reception of more data from IDE bus
 ssize_t IDEATAPIDevice::write_callback(uint8_t *data, size_t blocksize, size_t num_blocks)
 {
-    assert(false);
-    return -1;
+    if (atapi_recv_data(data, blocksize, num_blocks))
+    {
+        return num_blocks;
+    }
+    else
+    {
+        logmsg("atapi_recv_data_block(", (int)blocksize, ") failed");
+        return -1;
+    }
 }
 
 size_t IDEATAPIDevice::atapi_get_mode_page(uint8_t page_ctrl, uint8_t page_idx, uint8_t *buffer, size_t max_bytes)

@@ -103,6 +103,7 @@ protected:
     bool atapi_send_data(const uint8_t *data, size_t blocksize, size_t num_blocks = 1, bool wait_finish = true);
     bool atapi_send_data_block(const uint8_t *data, uint16_t blocksize);
     bool atapi_send_wait_finish();
+    bool atapi_recv_data(uint8_t *data, size_t blocksize, size_t num_blocks = 1);
     bool atapi_recv_data_block(uint8_t *data, uint16_t blocksize);
     bool atapi_cmd_error(uint8_t sense_key, uint16_t sense_asc);
     bool atapi_cmd_ok();
@@ -127,6 +128,7 @@ protected:
     virtual ssize_t read_callback(const uint8_t *data, size_t blocksize, size_t num_blocks);
     
     // Write handlers
+    virtual bool doWrite(uint32_t lba, uint32_t transfer_len);
     virtual ssize_t write_callback(uint8_t *data, size_t blocksize, size_t num_blocks);
 
     // ATAPI mode pages

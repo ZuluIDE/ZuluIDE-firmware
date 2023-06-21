@@ -15,6 +15,7 @@ X(ATAPI_CMD_TEST_UNIT_READY               , 0x00) \
 X(ATAPI_CMD_REQUEST_SENSE                 , 0x03) \
 X(ATAPI_CMD_FORMAT_UNIT                   , 0x04) \
 X(ATAPI_CMD_READ6                         , 0x08) \
+X(ATAPI_CMD_WRITE6                        , 0x0A) \
 X(ATAPI_CMD_INQUIRY                       , 0x12) \
 X(ATAPI_CMD_MODE_SELECT6                  , 0x15) \
 X(ATAPI_CMD_MODE_SENSE6                   , 0x1A) \
@@ -129,6 +130,9 @@ ATAPI_COMMAND_LIST(ATAPI_ENUM_ENTRY)
 #define ATAPI_MEDIUM_NONE               0x70
 
 // GET_CONFIGURATION profiles
+#define ATAPI_PROFILE_RESERVED          0x0000
+#define ATAPI_PROFILE_FIXEDDISK         0x0001
+#define ATAPI_PROFILE_REMOVABLE         0x0002
 #define ATAPI_PROFILE_CDROM             0x0008
 
 // GET_CONFIGURATION features
@@ -139,6 +143,10 @@ ATAPI_COMMAND_LIST(ATAPI_ENUM_ENTRY)
 #define ATAPI_FEATURE_MAX               0x0032
 
 // MODE SENSE pages
+#define ATAPI_MODESENSE_ERRORRECOVERY   0x01
+#define ATAPI_MODESENSE_GEOMETRY        0x04
+#define ATAPI_MODESENSE_FLEXDISK        0x05
+#define ATAPI_MODESENSE_CACHING         0x08
 #define ATAPI_MODESENSE_CDROM           0x0D
 
 // ATAPI GET EVENT STATUS events

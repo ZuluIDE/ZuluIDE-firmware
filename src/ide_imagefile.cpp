@@ -232,11 +232,11 @@ bool IDEImageFile::write(uint64_t startpos, size_t blocksize, size_t num_blocks,
             int status = m_file.write(buf, blocksize * max_write);
             platform_set_sd_callback(nullptr, nullptr);
 
-            // Check status of SD card read
+            // Check status of SD card write
             if (status != blocksize * max_write)
                 sd_cb_state.error = true;
             else
-                sd_cb_state.blocks_available += max_write;
+                sd_cb_state.blocks_done += max_write;
         }
     }
 
