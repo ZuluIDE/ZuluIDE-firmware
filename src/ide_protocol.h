@@ -5,6 +5,7 @@
 
 #include "ide_constants.h"
 #include "ide_phy.h"
+#include "ide_imagefile.h"
 
 // This interface is used for implementing emulated IDE devices
 class IDEDevice
@@ -12,6 +13,9 @@ class IDEDevice
 public:
     // Loads configuration
     virtual void initialize(int devidx);
+
+    // Set image backing file to access
+    virtual void set_image(IDEImage *image) = 0;
 
     // Called periodically by main loop
     virtual void poll() = 0;

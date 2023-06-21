@@ -14,7 +14,7 @@
 class IDEATAPIDevice: public IDEDevice, public IDEImage::Callback
 {
 public:
-    IDEATAPIDevice();
+    virtual void initialize(int devidx) override;
 
     virtual void set_image(IDEImage *image);
 
@@ -28,6 +28,10 @@ public:
 
     virtual bool is_medium_present() { return m_image != nullptr; }
 
+    virtual uint64_t capacity() { return (m_image ? m_image->capacity() : 0); }
+    
+    virtual uint64_t capacity_lba() { return capacity() / m_devinfo.bytes_per_sector; }
+
 protected:
     IDEImage *m_image;
 
@@ -35,6 +39,7 @@ protected:
     struct {
         uint8_t devtype;
         bool removable;
+        bool writable;
         uint32_t bytes_per_sector;
         uint8_t media_status_events;
 
@@ -106,6 +111,7 @@ protected:
     virtual bool handle_atapi_command(const uint8_t *cmd);
     virtual bool atapi_test_unit_ready(const uint8_t *cmd);
     virtual bool atapi_start_stop_unit(const uint8_t *cmd);
+    virtual bool atapi_prevent_allow_removal(const uint8_t *cmd);
     virtual bool atapi_inquiry(const uint8_t *cmd);
     virtual bool atapi_mode_sense(const uint8_t *cmd);
     virtual bool atapi_mode_select(const uint8_t *cmd);

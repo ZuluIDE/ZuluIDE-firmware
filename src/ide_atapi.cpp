@@ -37,10 +37,11 @@ static const char *get_atapi_command_name(uint8_t cmd)
     }
 }
 
-IDEATAPIDevice::IDEATAPIDevice():
-    m_devinfo({}), m_atapi_state({})
+void IDEATAPIDevice::initialize(int devidx)
 {
-
+    memset(&m_devinfo, 0, sizeof(m_devinfo));
+    memset(&m_atapi_state, 0, sizeof(m_atapi_state));
+    IDEDevice::initialize(devidx);
 }
 
 void IDEATAPIDevice::set_image(IDEImage *image)
@@ -329,6 +330,7 @@ bool IDEATAPIDevice::atapi_send_data(const uint8_t *data, size_t blocksize, size
 {
     if (blocksize < 600 && wait_finish)
     {
+        // Report data for command responses
         dbgmsg("---- ATAPI send ", (int)num_blocks, "x", (int)blocksize, " bytes: ",
             bytearray((const uint8_t*)data, blocksize * num_blocks));
     }
@@ -477,6 +479,7 @@ bool IDEATAPIDevice::handle_atapi_command(const uint8_t *cmd)
     {
         case ATAPI_CMD_TEST_UNIT_READY: return atapi_test_unit_ready(cmd);
         case ATAPI_CMD_START_STOP_UNIT: return atapi_start_stop_unit(cmd);
+        case ATAPI_CMD_PREVENT_ALLOW_MEDIUM_REMOVAL: return atapi_prevent_allow_removal(cmd);
         case ATAPI_CMD_MODE_SENSE6:     return atapi_mode_sense(cmd);
         case ATAPI_CMD_MODE_SENSE10:    return atapi_mode_sense(cmd);
         case ATAPI_CMD_MODE_SELECT6:    return atapi_mode_select(cmd);
@@ -570,6 +573,16 @@ bool IDEATAPIDevice::atapi_test_unit_ready(const uint8_t *cmd)
 bool IDEATAPIDevice::atapi_start_stop_unit(const uint8_t *cmd)
 {
     // TODO: medium ejection
+    return atapi_cmd_ok();
+}
+
+bool IDEATAPIDevice::atapi_prevent_allow_removal(const uint8_t *cmd)
+{
+    bool prevent = cmd[4] & 1;
+    bool persistent = cmd[4] & 2;
+
+    // We can't actually prevent SD card from being removed
+    dbgmsg("-- Host requested prevent=", (int)prevent, " persistent=", (int)persistent);
     return atapi_cmd_ok();
 }
 
@@ -808,8 +821,7 @@ bool IDEATAPIDevice::atapi_get_event_status_notification(const uint8_t *cmd)
 
 bool IDEATAPIDevice::atapi_read_capacity(const uint8_t *cmd)
 {
-    uint64_t capacity = (m_image ? m_image->capacity() : 0);
-    uint32_t last_lba = capacity / m_devinfo.bytes_per_sector - 1;
+    uint32_t last_lba = this->capacity_lba() - 1;
     uint8_t *buf = m_buffer.bytes;
     write_be32(&buf[0], last_lba);
     write_be32(&buf[4], m_devinfo.bytes_per_sector);
@@ -818,6 +830,7 @@ bool IDEATAPIDevice::atapi_read_capacity(const uint8_t *cmd)
     return atapi_cmd_ok();
 }
 
+// Parse ATAPI READ commands
 bool IDEATAPIDevice::atapi_read(const uint8_t *cmd)
 {
     uint32_t lba, transfer_len;
@@ -847,10 +860,18 @@ bool IDEATAPIDevice::atapi_read(const uint8_t *cmd)
         return atapi_cmd_error(ATAPI_SENSE_NOT_READY, ATAPI_ASC_NO_MEDIUM);
     }
 
+    if (lba + transfer_len > capacity_lba())
+    {
+        logmsg("-- Host attempted read at LBA ", (int)lba, "+", (int)transfer_len,
+            ", beyond capacity ", capacity_lba());
+        return atapi_cmd_error(ATAPI_SENSE_ILLEGAL_REQ, ATAPI_ASC_LBA_OUT_OF_RANGE);
+    }
+
     dbgmsg("-- Read ", (int)transfer_len, " sectors starting at ", (int)lba);
     return doRead(lba, transfer_len);
 }
 
+// Start actual read transfer from image file (can be called directly by subclasses)
 bool IDEATAPIDevice::doRead(uint32_t lba, uint32_t transfer_len)
 {
     bool status = m_image->read((uint64_t)lba * m_devinfo.bytes_per_sector,
@@ -867,6 +888,8 @@ bool IDEATAPIDevice::doRead(uint32_t lba, uint32_t transfer_len)
     }
 }
 
+// IDEImage implementation calls this when new data is available from file.
+// This will send the data to IDE bus.
 ssize_t IDEATAPIDevice::read_callback(const uint8_t *data, size_t blocksize, size_t num_blocks)
 {
     platform_poll();

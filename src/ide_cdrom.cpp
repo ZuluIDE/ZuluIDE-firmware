@@ -265,8 +265,10 @@ static void formatRawTrackInfo(const CUETrackInfo *track, uint8_t *dest, bool us
     }
 }
 
-IDECDROMDevice::IDECDROMDevice()
+void IDECDROMDevice::initialize(int devidx)
 {
+    IDEATAPIDevice::initialize(devidx);
+
     m_devinfo.devtype = ATAPI_DEVTYPE_CDROM;
     m_devinfo.removable = true;
     m_devinfo.bytes_per_sector = 2048;
@@ -352,7 +354,6 @@ bool IDECDROMDevice::handle_atapi_command(const uint8_t *cmd)
 {
     switch (cmd[0])
     {
-        case ATAPI_CMD_PREVENT_ALLOW_MEDIUM_REMOVAL: return atapi_prevent_allow_removal(cmd);
         case ATAPI_CMD_SET_CD_SPEED:            return atapi_set_cd_speed(cmd);
         case ATAPI_CMD_READ_DISC_INFORMATION:   return atapi_read_disc_information(cmd);
         case ATAPI_CMD_READ_TRACK_INFORMATION:  return atapi_read_track_information(cmd);
@@ -371,16 +372,6 @@ bool IDECDROMDevice::atapi_set_cd_speed(const uint8_t *cmd)
     uint16_t read_speed = parse_be16(&cmd[2]);
     uint16_t write_speed = parse_be16(&cmd[4]);
     dbgmsg("-- Host requested read_speed=", (int)read_speed, ", write_speed=", (int)write_speed);
-    return atapi_cmd_ok();
-}
-
-bool IDECDROMDevice::atapi_prevent_allow_removal(const uint8_t *cmd)
-{
-    bool prevent = cmd[4] & 1;
-    bool persistent = cmd[4] & 2;
-
-    // We can't actually prevent SD card from being removed
-    dbgmsg("-- Host requested prevent=", (int)prevent, " persistent=", (int)persistent);
     return atapi_cmd_ok();
 }
 
@@ -1023,6 +1014,15 @@ bool IDECDROMDevice::getFirstLastTrackInfo(CUETrackInfo &first, CUETrackInfo &la
     }
 
     return got_track;
+}
+
+uint64_t IDECDROMDevice::capacity_lba()
+{
+    if (!m_image) return 0;
+
+    CUETrackInfo first, last;
+    getFirstLastTrackInfo(first, last);
+    return (uint64_t)getLeadOutLBA(&last);
 }
 
 uint32_t IDECDROMDevice::getLeadOutLBA(const CUETrackInfo* lasttrack)

@@ -8,15 +8,16 @@
 class IDECDROMDevice: public IDEATAPIDevice
 {
 public:
-    IDECDROMDevice();
+    virtual void initialize(int devidx) override;
 
     virtual void set_image(IDEImage *image);
+
+    virtual uint64_t capacity_lba() override;
 
 protected:
     
     virtual bool handle_atapi_command(const uint8_t *cmd);
     virtual bool atapi_set_cd_speed(const uint8_t *cmd);
-    virtual bool atapi_prevent_allow_removal(const uint8_t *cmd);
     virtual bool atapi_read_disc_information(const uint8_t *cmd);
     virtual bool atapi_read_track_information(const uint8_t *cmd);
     virtual bool atapi_read_toc(const uint8_t *cmd);
