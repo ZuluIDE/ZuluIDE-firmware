@@ -263,7 +263,7 @@ bool SdioCard::stopTransmission(bool blocking)
     }
     else
     {
-        uint32_t end = millis() + 100;
+        uint32_t end = millis() + 5000;
         while (millis() < end && isBusy())
         {
             if (m_stream_callback)
@@ -344,9 +344,12 @@ bool SdioCard::writeSector(uint32_t sector, const uint8_t* src)
     // If possible, report transfer status to application through callback.
     sd_callback_t callback = get_stream_callback(src, 512, "writeSector", sector);
 
+    // Cards up to 2GB use byte addressing, SDHC cards use sector addressing
+    uint32_t address = (type() == SD_CARD_TYPE_SDHC) ? sector : (sector * 512);
+
     uint32_t reply;
     if (!checkReturnOk(rp2040_sdio_command_R1(16, 512, &reply)) || // SET_BLOCKLEN
-        !checkReturnOk(rp2040_sdio_command_R1(CMD24, sector, &reply)) || // WRITE_BLOCK
+        !checkReturnOk(rp2040_sdio_command_R1(CMD24, address, &reply)) || // WRITE_BLOCK
         !checkReturnOk(rp2040_sdio_tx_start(src, 1))) // Start transmission
     {
         return false;
@@ -387,11 +390,14 @@ bool SdioCard::writeSectors(uint32_t sector, const uint8_t* src, size_t n)
 
     sd_callback_t callback = get_stream_callback(src, n * 512, "writeSectors", sector);
 
+    // Cards up to 2GB use byte addressing, SDHC cards use sector addressing
+    uint32_t address = (type() == SD_CARD_TYPE_SDHC) ? sector : (sector * 512);
+
     uint32_t reply;
     if (!checkReturnOk(rp2040_sdio_command_R1(16, 512, &reply)) || // SET_BLOCKLEN
         !checkReturnOk(rp2040_sdio_command_R1(CMD55, g_sdio_rca, &reply)) || // APP_CMD
         !checkReturnOk(rp2040_sdio_command_R1(ACMD23, n, &reply)) || // SET_WR_CLK_ERASE_COUNT
-        !checkReturnOk(rp2040_sdio_command_R1(CMD25, sector, &reply)) || // WRITE_MULTIPLE_BLOCK
+        !checkReturnOk(rp2040_sdio_command_R1(CMD25, address, &reply)) || // WRITE_MULTIPLE_BLOCK
         !checkReturnOk(rp2040_sdio_tx_start(src, n))) // Start transmission
     {
         return false;
@@ -415,6 +421,8 @@ bool SdioCard::writeSectors(uint32_t sector, const uint8_t* src, size_t n)
     }
     else
     {
+        // TODO: Instead of CMD12 stopTransmission command, according to SD spec we should send stopTran token.
+        // stopTransmission seems to work in practice.
         return stopTransmission(true);
     }
 }
@@ -430,10 +438,13 @@ bool SdioCard::readSector(uint32_t sector, uint8_t* dst)
 
     sd_callback_t callback = get_stream_callback(dst, 512, "readSector", sector);
 
+    // Cards up to 2GB use byte addressing, SDHC cards use sector addressing
+    uint32_t address = (type() == SD_CARD_TYPE_SDHC) ? sector : (sector * 512);
+
     uint32_t reply;
     if (!checkReturnOk(rp2040_sdio_command_R1(16, 512, &reply)) || // SET_BLOCKLEN
         !checkReturnOk(rp2040_sdio_rx_start(dst, 1)) || // Prepare for reception
-        !checkReturnOk(rp2040_sdio_command_R1(CMD17, sector, &reply))) // READ_SINGLE_BLOCK
+        !checkReturnOk(rp2040_sdio_command_R1(CMD17, address, &reply))) // READ_SINGLE_BLOCK
     {
         return false;
     }
@@ -478,10 +489,13 @@ bool SdioCard::readSectors(uint32_t sector, uint8_t* dst, size_t n)
 
     sd_callback_t callback = get_stream_callback(dst, n * 512, "readSectors", sector);
 
+    // Cards up to 2GB use byte addressing, SDHC cards use sector addressing
+    uint32_t address = (type() == SD_CARD_TYPE_SDHC) ? sector : (sector * 512);
+
     uint32_t reply;
     if (!checkReturnOk(rp2040_sdio_command_R1(16, 512, &reply)) || // SET_BLOCKLEN
         !checkReturnOk(rp2040_sdio_rx_start(dst, n)) || // Prepare for reception
-        !checkReturnOk(rp2040_sdio_command_R1(CMD18, sector, &reply))) // READ_MULTIPLE_BLOCK
+        !checkReturnOk(rp2040_sdio_command_R1(CMD18, address, &reply))) // READ_MULTIPLE_BLOCK
     {
         return false;
     }
