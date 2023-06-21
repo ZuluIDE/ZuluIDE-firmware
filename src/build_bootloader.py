@@ -14,12 +14,12 @@ bootloader_main = env2.Object(
     ["ZuluIDE_main.cpp"]
 )
 
-# Include all other dependencies except ZuluIDE_main.cpp
+# Include all other dependencies except ZuluIDE_main.cpp and ZuluIDE.cpp
 dep_objs = []
 for nodelist in env["PIOBUILDFILES"]:
     for node in nodelist:
         filename = str(node.rfile())
-        if 'ZuluIDE_main' not in filename:
+        if 'ZuluIDE_main' not in filename and 'ZuluIDE.' not in filename:
             dep_objs.append(node)
 # print("Bootloader dependencies: ", type(dep_objs), str([str(f.rfile()) for f in dep_objs]))
 

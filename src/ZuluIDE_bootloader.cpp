@@ -27,9 +27,12 @@
 #include <SdFat.h>
 #include <string.h>
 
+// This is defined here but used also by ZuluIDE.cpp.
+// Doing it this way avoids having to link in whole ZuluIDE.cpp into bootloader
+SdFs SD;
+
 #ifdef PLATFORM_BOOTLOADER_SIZE
 
-extern SdFs SD;
 extern FsFile g_logfile;
 
 bool find_firmware_image(FsFile &file, char name[MAX_FILE_PATH + 1])

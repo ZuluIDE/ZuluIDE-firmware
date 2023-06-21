@@ -28,7 +28,6 @@
 #include "ide_protocol.h"
 #include "ide_cdrom.h"
 
-SdFs SD;
 bool g_sdcard_present;
 static FsFile g_logfile;
 
