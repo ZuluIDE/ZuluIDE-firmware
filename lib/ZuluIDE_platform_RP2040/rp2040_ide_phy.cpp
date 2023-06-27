@@ -250,20 +250,28 @@ bool ide_phy_is_write_finished()
 
 void ide_phy_start_read(uint32_t blocklen, int udma_mode)
 {
-    if (udma_mode >= 0)
-    {
-        dbgmsg("WARNING: UDMA read from IDE not yet implemented, using PIO");
-    }
-
-    // dbgmsg("ide_phy_start_read(", (int)blocklen, ")");
+    // dbgmsg("ide_phy_start_read(", (int)blocklen, ", ", udma_mode, ")");
     g_ide_phy.crc_errors = 0;
     g_ide_phy.block_crc1 = g_ide_phy.block_crc0 = 0;
     uint16_t last_word_idx = (blocklen + 1) / 2 - 1;
-    fpga_wrcmd(FPGA_CMD_START_READ, (const uint8_t*)&last_word_idx, 2);
-    g_ide_phy.transfer_running = true;
-    g_ide_phy.udma_mode = -1; // Not supported for read yet
+    if (udma_mode < 0)
+    {
+        // Transfer in PIO mode
+        fpga_wrcmd(FPGA_CMD_START_READ, (const uint8_t*)&last_word_idx, 2);
+        g_ide_phy.udma_mode = -1;
+        ide_phy_assert_irq(IDE_STATUS_DEVRDY | IDE_STATUS_DATAREQ);
+    }
+    else
+    {
+        // Transfer in UDMA mode
+        uint8_t arg[3] = {(uint8_t)udma_mode,
+                          (uint8_t)(last_word_idx),
+                          (uint8_t)((last_word_idx) >> 8)};
+        fpga_wrcmd(FPGA_CMD_START_UDMA_READ, arg, 3);
+        g_ide_phy.udma_mode = udma_mode;
+    }
 
-    ide_phy_assert_irq(IDE_STATUS_DEVRDY | IDE_STATUS_DATAREQ);
+    g_ide_phy.transfer_running = true;
 }
 
 bool ide_phy_can_read_block()
@@ -274,10 +282,25 @@ bool ide_phy_can_read_block()
     return (status & FPGA_STATUS_RX_DONE);
 }
 
-void ide_phy_read_block(uint8_t *buf, uint32_t blocklen)
+void ide_phy_read_block(uint8_t *buf, uint32_t blocklen, bool continue_transfer)
 {
-    fpga_rdcmd(FPGA_CMD_READ_DATABUF, buf, blocklen);
+    // dbgmsg("ide_phy_read_block, cont = ", (int)continue_transfer);
+    uint8_t cmd = continue_transfer ? FPGA_CMD_READ_DATABUF_CONT : FPGA_CMD_READ_DATABUF;
+    uint16_t our_crc = 0;
+    fpga_rdcmd(cmd, buf, blocklen, &our_crc);
     // dbgmsg("ide_phy_read_block(", bytearray(buf, blocklen), ")");
+
+    if (g_ide_phy.udma_mode >= 0)
+    {
+        uint16_t host_crc = 0;
+        fpga_rdcmd(FPGA_CMD_READ_UDMA_CRC, (uint8_t*)&host_crc, 2);
+
+        if (our_crc != host_crc)
+        {
+            logmsg("WARNING: UltraDMA receive from IDE CRC mismatch, calculated ", our_crc, ", host sent ", host_crc);
+            g_ide_phy.crc_errors++;
+        }
+    }
 }
 
 void ide_phy_stop_transfers(int *crc_errors)

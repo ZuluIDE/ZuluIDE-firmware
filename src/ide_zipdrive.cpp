@@ -49,13 +49,6 @@ void IDEZipDrive::initialize(int devidx)
     m_devinfo.num_profiles = 1;
     m_devinfo.profiles[0] = ATAPI_PROFILE_REMOVABLE;
     m_devinfo.current_profile = ATAPI_PROFILE_REMOVABLE;
-
-    if (m_devconfig.max_udma_mode >= 0)
-    {
-        logmsg("-- Disabling UDMA because writable device DMA support not yet implemented");
-        m_devconfig.max_udma_mode = -1;
-        m_phy_caps.max_udma_mode = -1;
-    }
 }
 
 // We always have the same capacity, no matter image size

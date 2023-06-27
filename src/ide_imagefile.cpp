@@ -240,7 +240,7 @@ bool IDEImageFile::write(uint64_t startpos, size_t blocksize, size_t num_blocks,
         }
     }
 
-    return true;
+    return !sd_cb_state.error;
 }
 
 void IDEImageFile::sd_write_callback(uint32_t bytes_complete)

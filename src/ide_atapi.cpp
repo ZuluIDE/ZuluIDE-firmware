@@ -481,20 +481,15 @@ bool IDEATAPIDevice::atapi_recv_data(uint8_t *data, size_t blocksize, size_t num
         {
             if ((uint32_t)(millis() - start) > 10000)
             {
-                logmsg("IDEATAPIDevice::atapi_recv_data read timeout on block ", (int)i, "/", (int)num_blocks);
+                logmsg("IDEATAPIDevice::atapi_recv_data read timeout on block ", (int)(i + 1), "/", (int)num_blocks);
                 ide_phy_stop_transfers();
                 return false;
             }
         }
 
-        if (i + 1 < num_blocks)
-        {
-            // Start next block transfer
-            ide_phy_assert_irq(IDE_STATUS_DEVRDY | IDE_STATUS_DATAREQ);
-        }
-
         // Read out previous block
-        ide_phy_read_block(data + blocksize * i, blocksize);
+        bool continue_transfer = (i + 1 < num_blocks);
+        ide_phy_read_block(data + blocksize * i, blocksize, continue_transfer);
     }
 
     ide_phy_stop_transfers();
@@ -1048,7 +1043,7 @@ ssize_t IDEATAPIDevice::write_callback(uint8_t *data, size_t blocksize, size_t n
     }
     else
     {
-        logmsg("atapi_recv_data_block(", (int)blocksize, ") failed");
+        logmsg("IDEATAPIDevice::write_callback(", (int)blocksize, ", ", (int)num_blocks, ") failed");
         return -1;
     }
 }

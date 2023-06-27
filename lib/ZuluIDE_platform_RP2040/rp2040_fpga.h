@@ -55,6 +55,9 @@
 //     0x02:    Read received data block from buffer (length set by 0x83)
 //                 Byte 0-N: Data bytes received from IDE host
 //
+//     0x03:    Read received data block from buffer and start next transfer (length set by 0x83)
+//                 Byte 0-N: Data bytes received from IDE host
+//
 //     0x0A:    Read 16-bit CRC of latest transferred UltraDMA block
 //                 Byte 0-1: CRC
 //
@@ -103,6 +106,10 @@
 //                 Byte 0:   UDMA mode (currently must be 0)
 //                 Byte 1-2: Block length minus 1 (words)
 //
+//     0x8B:   Configure data buffer for read from IDE bus using UltraDMA, payload:
+//                 Byte 0:   UDMA mode (currently must be 0)
+//                 Byte 1-2: Block length minus 1 (words)
+//
 //     0x90:   Write IDE diagnostic signals, payload:
 //                 Byte 0:  Bit 0: OUT_DASP    drive present / active, 1 to drive signal low
 //                              1: OUT_PDIAG   passed diagnostics, 1 to drive signal low
@@ -142,6 +149,7 @@ void fpga_dump_ide_regs();
 #define FPGA_CMD_READ_STATUS            0x00
 #define FPGA_CMD_READ_IDE_REGS          0x01
 #define FPGA_CMD_READ_DATABUF           0x02
+#define FPGA_CMD_READ_DATABUF_CONT      0x03
 #define FPGA_CMD_READ_UDMA_CRC          0x0A
 #define FPGA_CMD_PROTOCOL_VERSION       0x7D
 #define FPGA_CMD_LICENSE_CHECK          0x7E
@@ -152,6 +160,7 @@ void fpga_dump_ide_regs();
 #define FPGA_CMD_START_READ             0x83
 #define FPGA_CMD_WRITE_DATABUF          0x84
 #define FPGA_CMD_START_UDMA_WRITE       0x8A
+#define FPGA_CMD_START_UDMA_READ        0x8B
 #define FPGA_CMD_WRITE_IDE_SIGNALS      0x90
 #define FPGA_CMD_ASSERT_IRQ             0x91
 #define FPGA_CMD_CLR_IRQ_FLAGS          0x92
