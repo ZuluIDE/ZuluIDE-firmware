@@ -174,8 +174,7 @@ void ide_phy_start_write(uint32_t blocklen, int udma_mode)
     // dbgmsg("ide_phy_start_write(", (int)blocklen, ", ", udma_mode, ")");
     g_ide_phy.crc_errors = 0;
     g_ide_phy.block_crc1 = g_ide_phy.block_crc0 = 0;
-    assert((blocklen & 1) == 0);
-    uint16_t last_word_idx = blocklen / 2 - 1;
+    uint16_t last_word_idx = (blocklen + 1) / 2 - 1;
     if (udma_mode < 0)
     {
         fpga_wrcmd(FPGA_CMD_START_WRITE, (const uint8_t*)&last_word_idx, 2);
@@ -207,6 +206,13 @@ void ide_phy_write_block(const uint8_t *buf, uint32_t blocklen)
     {
         // Verify the CRC of the previous block before overwriting it
         verify_crc(&g_ide_phy.block_crc1);
+    }
+
+    if (blocklen & 1)
+    {
+        // Dummy byte when transferring odd number of bytes
+        // IDE bus always transfers 16 bits.
+        blocklen++;
     }
 
     uint16_t crc = 0;
@@ -252,8 +258,7 @@ void ide_phy_start_read(uint32_t blocklen, int udma_mode)
     // dbgmsg("ide_phy_start_read(", (int)blocklen, ")");
     g_ide_phy.crc_errors = 0;
     g_ide_phy.block_crc1 = g_ide_phy.block_crc0 = 0;
-    assert((blocklen & 1) == 0);
-    uint16_t last_word_idx = blocklen / 2 - 1;
+    uint16_t last_word_idx = (blocklen + 1) / 2 - 1;
     fpga_wrcmd(FPGA_CMD_START_READ, (const uint8_t*)&last_word_idx, 2);
     g_ide_phy.transfer_running = true;
     g_ide_phy.udma_mode = -1; // Not supported for read yet
