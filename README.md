@@ -64,6 +64,17 @@ To build run the command:
 
     pio run
 
+Debugging with picoprobe
+------------------------
+There are helper scripts in `utils` folder for debugging the code using [picoprobe](https://github.com/raspberrypi/picoprobe):
+
+* `utils/picoprobe_log.py`: Read picoprobe serial port at 1 Mbps baudrate to show the log from ZuluIDE.
+* `utils/upload_picoprobe.sh`: Upload firmware through SWD (requires openocd >= 0.12 installed on system)
+* `utils/run_gdb_picoprobe.sh`: Start log reader, openocd and command line gdb for debugging.
+
+In gdb, use `load` to upload the firmware and `run` to restart from beginning.
+
+Theoretically you can also use the platformio `pio debug` command, but currently it doesn't seem to work with picoprobe.
 
 Origins and License
 -------------------
