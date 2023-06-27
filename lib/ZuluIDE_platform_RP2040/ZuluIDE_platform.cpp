@@ -22,6 +22,7 @@
 #include "ZuluIDE_platform.h"
 #include "ZuluIDE_log.h"
 #include "ZuluIDE_config.h"
+#include <ZuluIDE.h>
 #include "ide_phy.h"
 #include <SdFat.h>
 #include <assert.h>
@@ -35,12 +36,14 @@
 #include <multicore.h>
 #include <USB/PluggableUSBSerial.h>
 #include "rp2040_fpga.h"
+#include <strings.h>
 
 const char *g_platform_name = PLATFORM_NAME;
 static uint32_t g_flash_chip_size = 0;
 static bool g_uart_initialized = false;
 static bool g_led_disabled = false;
 static bool g_dip_drive_id, g_dip_cable_sel;
+static uint64_t g_flash_unique_id;
 
 void mbed_error_hook(const mbed_error_ctx * error_context);
 
@@ -98,6 +101,14 @@ void platform_init()
     g_flash_chip_size = (1 << response_jedec[3]);
     logmsg("Flash chip size: ", (int)(g_flash_chip_size / 1024), " kB");
 
+    // Get flash chip unique ID
+    // (flash_get_unique_id() from RP2040 libs didn't work for some reason)
+    uint8_t cmd_read_uniq_id[13] = {0x4B};
+    uint8_t response_uniq_id[13] = {0};
+    flash_do_cmd(cmd_read_uniq_id, response_uniq_id, 13);
+    memcpy(&g_flash_unique_id, response_uniq_id + 5, 8);
+    logmsg("Flash unique ID: ", g_flash_unique_id);
+
     // SD card pins
     // Card is used in SDIO mode, rp2040_sdio.cpp will redirect these to PIO1
     //        pin             function       pup   pdown  out    state fast
@@ -142,7 +153,7 @@ void platform_late_init()
     dbgmsg("Loading FPGA bitstream");
     if (fpga_init())
     {
-        dbgmsg("FPGA initialization succeeded");
+        logmsg("FPGA initialization succeeded");
     }
     else
     {
@@ -440,12 +451,178 @@ void platform_reset_watchdog()
     usb_log_poll();
 }
 
+// Install FPGA license key to RP2040 flash
+// buf is pointer to hex string with 26 bytes (encoding 13 bytes)
+bool install_license(char *buf)
+{
+    uint8_t key[256] = {0};
+    for (int i = 0; i < 13; i++)
+    {
+        char tmp[3] = {buf[i * 2], buf[i * 2 + 1], 0};
+        key[i] = strtoull(tmp, NULL, 16);
+    }
+
+    if (memcmp(key, PLATFORM_LICENSE_KEY_ADDR, 32) == 0)
+    {
+        logmsg("---- License key matches the one already installed");
+        return true;
+    }
+
+    // Make a test run with the license key and wait for FPGA to validate it
+    logmsg("---- Testing new license key..");
+    fpga_init(true, false);
+    fpga_wrcmd(FPGA_CMD_LICENSE_AUTH, key, 32);
+    for (int i = 0; i < 20; i++)
+    {
+        usb_log_poll();
+        delay(100);
+    }
+
+    // Check validation results
+    uint8_t status;
+    fpga_rdcmd(FPGA_CMD_LICENSE_CHECK, &status, 1);
+
+    if (status < 0x80 || status > 0x84)
+    {
+        logmsg("---- New license key is not valid for this device, not installing (status ", status, ")");
+        return false;
+    }
+    else
+    {
+        logmsg("---- New license key accepted, writing to flash (status ", status, ")");
+    }
+
+    usb_log_poll();
+
+    // Write to RP2040 flash
+    __disable_irq();
+    flash_range_erase(PLATFORM_LICENSE_KEY_OFFSET, PLATFORM_FLASH_PAGE_SIZE);
+    flash_range_program(PLATFORM_LICENSE_KEY_OFFSET, key, 256);
+    __enable_irq();
+
+    if (memcmp(key, PLATFORM_LICENSE_KEY_ADDR, 32) == 0)
+    {
+        logmsg("---- Flash write successful");
+        return true;
+    }
+    else
+    {
+        logmsg("---- Flash compare failed: ", bytearray(key, 5), " vs. ", bytearray(PLATFORM_LICENSE_KEY_ADDR, 5));
+        return false;
+    }
+}
+
+void usb_command_handler(char *cmd)
+{
+    if (strncasecmp(cmd, "license ", 8) == 0)
+    {
+        logmsg("-- Installing new license key received from USB port");
+        char *p = cmd + 8;
+        while (isspace(*p)) p++;
+
+        if (strlen(p) < 26)
+        {
+            logmsg("---- License key too short: ", p);
+        }
+        else
+        {
+            install_license(p);
+        }
+    }
+}
+
+// Poll for commands sent through the USB serial port
+void usb_command_poll()
+{
+    static uint8_t rx_buf[64];
+    static int rx_len;
+
+    uint32_t available = _SerialUSB.available();
+    if (available > 0)
+    {
+        available = std::min<uint32_t>(available, sizeof(rx_buf) - rx_len);
+        _SerialUSB.readBytes(rx_buf + rx_len, available);
+        rx_len += available;
+    }
+
+    if (rx_len > 0)
+    {
+        char *first = (char*)rx_buf;
+        for (int i = 0; i < rx_len; i++)
+        {
+            if (rx_buf[i] == '\n' || rx_buf[i] == '\r')
+            {
+                // Got complete line
+                rx_buf[i] = '\0';
+                usb_command_handler(first);
+                rx_len = 0;
+            }
+            else if (isspace(*first))
+            {
+                first++;
+            }
+        }
+
+        if (rx_len == sizeof(rx_buf))
+        {
+            // Too long line, discard
+            rx_len = 0;
+        }
+    }
+}
+
 // Poll function that is called every few milliseconds.
 // Can be left empty or used for platform-specific processing.
 void platform_poll()
 {
+    static bool license_log_done = false;
+    static bool license_from_sd_done = false;
+
+    if (!license_from_sd_done && g_sdcard_present)
+    {
+        license_from_sd_done = true;
+
+        if (SD.exists(LICENSEFILE))
+        {
+            char buf[26];
+            FsFile f = SD.open(LICENSEFILE, O_RDONLY);
+            if (f.read(buf, 26) == 26)
+            {
+                logmsg("-- Found license key file ", LICENSEFILE);
+                install_license(buf);
+            }
+            f.close();
+            SD.remove(LICENSEFILE);
+        }
+    }
+
+    if (!license_log_done && millis() >= 2000)
+    {
+        uint8_t response[21];
+        fpga_rdcmd(FPGA_CMD_LICENSE_CHECK, response, 21);
+        logmsg("FPGA license request code: ",
+            bytearray((uint8_t*)&g_flash_unique_id, 8),
+            bytearray(response + 1, 4),
+            bytearray(response + 16, 5));
+
+        if (response[0] == 0 || response[0] == 0xFF)
+        {
+            logmsg("-------------------------------------------------");
+            logmsg("ERROR: FPGA license check failed with status ", response[0]);
+            logmsg("       Please contact customer support and provide this log file and proof of purchase.");
+            logmsg("-------------------------------------------------");
+        }
+        else
+        {
+            logmsg("FPGA license accepted with status ", response[0]);
+        }
+
+        license_log_done = true;
+    }
+
     usb_log_poll();
     adc_poll();
+    usb_command_poll();
 }
 
 /*****************************************/

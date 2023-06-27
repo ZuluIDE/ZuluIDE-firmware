@@ -58,10 +58,15 @@ void platform_poll();
 typedef void (*sd_callback_t)(uint32_t bytes_complete);
 void platform_set_sd_callback(sd_callback_t func, const uint8_t *buffer);
 
+// FPGA bitstream is protected by a license key stored in RP2040 flash,
+// in the last page before 1 MB boundary.
+#define PLATFORM_LICENSE_KEY_OFFSET 0x000ff000
+#define PLATFORM_LICENSE_KEY_ADDR ((const uint8_t*)(0x130ff000))
+
 // Reprogram firmware in main program area.
 #ifndef RP2040_DISABLE_BOOTLOADER
 #define PLATFORM_BOOTLOADER_SIZE (128 * 1024)
-#define PLATFORM_FLASH_TOTAL_SIZE (1024 * 1024)
+#define PLATFORM_FLASH_TOTAL_SIZE (1020 * 1024)
 #define PLATFORM_FLASH_PAGE_SIZE 4096
 bool platform_rewrite_flash_page(uint32_t offset, uint8_t buffer[PLATFORM_FLASH_PAGE_SIZE]);
 void platform_boot_to_main_firmware();

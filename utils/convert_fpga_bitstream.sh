@@ -26,7 +26,9 @@ INFILE="fpga/icecube2_ice5lp1k/ZuluIDE/ZuluIDE_Implmnt/sbt/outputs/bitmap/ice5lp
 OUTFILE="lib/ZuluIDE_platform_RP2040/fpga_bitstream.h"
 DATE=$(date +%Y-%m-%d)
 
-echo "/* FPGA bitstream, converted from $INFILE on $DATE */" > $OUTFILE
+echo "/* ZuluIDE™ - Copyright (c) 2022 Rabbit Hole Computing™ */" > $OUTFILE
+echo "/* All rights reserved - distribution and use permitted on hardware produced by Rabbit Hole Computing */" >> $OUTFILE
+echo "/* FPGA bitstream, converted from $INFILE on $DATE */" >> $OUTFILE
 echo '/* Use utils/convert_fpga_bitstream.sh to regenerate this file */' >> $OUTFILE
 echo 'static const uint8_t fpga_bitstream[] = {' >> $OUTFILE
 xxd -i < $INFILE >> $OUTFILE

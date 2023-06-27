@@ -70,6 +70,7 @@ static bool mountSDCard()
     // Verify that all existing files have been closed
     g_logfile.close();
     g_ide_cdrom.set_image(NULL);
+    g_ide_zipdrive.set_image(NULL);
 
     // Check for the common case, FAT filesystem as first partition
     if (SD.begin(SD_CONFIG))
@@ -255,12 +256,10 @@ void load_image()
     }
 }
 
-// TODO: Build bitstream into firmware instead of loading from SD card.
-uint8_t fpga_bitstream[71337];
-
 void zuluide_setup(void)
 {
     platform_init();
+    platform_late_init();
 
     g_sdcard_present = mountSDCard();
 
@@ -268,18 +267,8 @@ void zuluide_setup(void)
     {
         logmsg("SD card init failed, sdErrorCode: ", (int)SD.sdErrorCode(),
                      " sdErrorData: ", (int)SD.sdErrorData());
-
-        do
-        {
-            blinkStatus(BLINK_ERROR_NO_SD_CARD);
-            delay(1000);
-            platform_reset_watchdog();
-            g_sdcard_present = mountSDCard();
-        } while (!g_sdcard_present);
-        logmsg("SD card init succeeded after retry");
     }
-
-    if (g_sdcard_present)
+    else
     {
         if (SD.clusterCount() == 0)
         {
@@ -288,24 +277,6 @@ void zuluide_setup(void)
 
         print_sd_info();
     }
-
-    FsFile bitstream = SD.open("ice5lp1k_top_bitmap.bin", O_RDONLY);
-    if (!bitstream.isOpen())
-    {
-        logmsg("Could not find bitstream file ice5lp1k_top_bitmap.bin!");
-        init_logfile();
-        while (1)
-        {
-            blinkStatus(2);
-            delay(2000);
-        }
-    }
-
-    bitstream.read(fpga_bitstream, sizeof(fpga_bitstream));
-    bitstream.close();
-    logmsg("Loaded bitstream from ice5lp1k_top_bitmap.bin to RAM, beginning FPGA load");
-
-    platform_late_init();
 
     int type = ini_getl("IDE", "type", 0, CONFIGFILE);
     if (type == 1)
@@ -319,10 +290,10 @@ void zuluide_setup(void)
         g_ide_device = &g_ide_cdrom;
     }
 
-    load_image();
-
     if (g_sdcard_present)
     {
+        load_image();
+
         init_logfile();
         if (ini_getbool("IDE", "DisableStatusLED", false, CONFIGFILE))
         {
@@ -340,7 +311,15 @@ void zuluide_setup(void)
 
 void zuluide_main_loop(void)
 {
-    static uint32_t sd_card_check_time = 0;
+    static uint32_t sd_card_check_time;
+    static bool first_loop = true;
+
+    if (first_loop)
+    {
+        // Give time for basic initialization to run
+        // before checking SD card
+        sd_card_check_time = millis() + 1000;
+    }
 
     platform_reset_watchdog();
     platform_poll();

@@ -63,9 +63,9 @@
 //
 //     0x7E:    Read license check status
 //                 Byte 0: 0x00: License check failed
-//                         0x01 to 0x10: License check passed
+//                         0x01 to 0xFE: License check passed
 //                         0xFF: License check in progress
-//                 Bytes 1-N: License request code
+//                 Bytes 1-20: License request code
 //
 //     0x7F:    QSPI Communication check, response:
 //                 Byte 0-255: Values 0-255
@@ -117,24 +117,27 @@
 //                                 5:  Clear "IDE DEVICE_CONTROL software reset has occurred"
 //                                 6:  Clear "IDE command register has been written"
 //                                 7:  Clear "Any IDE register has been written"
+//
+//     0xFE:   Provide FPGA license code
+//                 Byte 0-31: License code
 
 #pragma once
 #include <stdint.h>
 #include <stdlib.h>
 
 // Initialize FPGA and load bitstream
-bool fpga_init();
+bool fpga_init(bool force_reinit = false, bool do_auth = true);
 
 // Send a write command to FPGA through QSPI bus
 void fpga_wrcmd(uint8_t cmd, const uint8_t *payload, size_t payload_len, uint16_t *crc = nullptr);
 
 // Send a read command to FPGA through QSPI bus
-void fpga_rdcmd(uint8_t cmd, uint8_t *result, size_t result_len, uint16_t *crc = nullptr);
+void fpga_rdcmd(uint8_t cmd, uint8_t *result, size_t result_len, uint16_t *crc = nullptr, bool slow = false);
 
 // Dump IDE register values
 void fpga_dump_ide_regs();
 
-#define FPGA_PROTOCOL_VERSION 4
+#define FPGA_PROTOCOL_VERSION 5
 
 #define FPGA_CMD_READ_STATUS            0x00
 #define FPGA_CMD_READ_IDE_REGS          0x01
@@ -152,6 +155,7 @@ void fpga_dump_ide_regs();
 #define FPGA_CMD_WRITE_IDE_SIGNALS      0x90
 #define FPGA_CMD_ASSERT_IRQ             0x91
 #define FPGA_CMD_CLR_IRQ_FLAGS          0x92
+#define FPGA_CMD_LICENSE_AUTH           0xFE
 
 #define FPGA_STATUS_DATA_DIR            0x01
 #define FPGA_STATUS_RX_DONE             0x02

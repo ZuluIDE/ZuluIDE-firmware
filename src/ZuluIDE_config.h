@@ -14,6 +14,7 @@
 #define CONFIGFILE  "zuluide.ini"
 #define LOGFILE     "zululog.txt"
 #define CRASHFILE   "zuluerr.txt"
+#define LICENSEFILE "zuluide.lic"
 
 // Maximum path length for files on SD card
 #define MAX_FILE_PATH 64

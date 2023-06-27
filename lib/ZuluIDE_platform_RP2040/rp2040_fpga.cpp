@@ -40,7 +40,6 @@
 static struct {
     bool claimed;
     bool bitstream_loaded;
-    bool license_done;
     uint32_t pio_offset_qspi_transfer;
     pio_sm_config pio_cfg_qspi_transfer_8bit;
     pio_sm_config pio_cfg_qspi_transfer_32bit;
@@ -157,6 +156,15 @@ static void fpga_qspi_pio_init()
 
 bool fpga_selftest()
 {
+    // Check license status
+    uint8_t status = 0;
+    fpga_rdcmd(FPGA_CMD_LICENSE_CHECK, &status, 1);
+    if (status == 0)
+    {
+        logmsg("Skipping FPGA self-test: missing license");
+        return true;
+    }
+
     // Test communication
     uint32_t result1, result2, result3;
     fpga_rdcmd(FPGA_CMD_COMMUNICATION_CHECK, (uint8_t*)&result1, 4);
@@ -182,6 +190,8 @@ bool fpga_selftest()
     if (regs[0] != regs_readback[0] || regs[1] != regs_readback[1])
     {
         logmsg("FPGA register roundtrip test failed, got ", regs_readback[0], " ", regs_readback[1]);
+
+        fpga_rdcmd(FPGA_CMD_READ_IDE_REGS, (uint8_t*)regs_readback, 8);
         return false;
     }
 
@@ -199,10 +209,14 @@ bool fpga_selftest()
         return false;
     }
 
+    // Return to busy status
+    uint32_t regs2[2] = {0x00000080, 0x00000000};
+    fpga_wrcmd(FPGA_CMD_WRITE_IDE_REGS, (uint8_t*)regs2, 8);
+
     return true;
 }
 
-bool fpga_init()
+bool fpga_init(bool force_reinit, bool do_auth)
 {
     // Enable clock output to FPGA
     // 15.6 MHz for now, resulting in FPGA clock of 60MHz.
@@ -211,7 +225,8 @@ bool fpga_init()
     clock_gpio_init(FPGA_CLK, CLOCKS_CLK_GPOUT0_CTRL_AUXSRC_VALUE_CLKSRC_PLL_SYS, 8);
 
     // Load bitstream
-    if (!g_fpga_qspi.bitstream_loaded)
+    bool reloaded = false;
+    if (!g_fpga_qspi.bitstream_loaded || force_reinit)
     {
         if (!fpga_load_bitstream())
         {
@@ -220,6 +235,7 @@ bool fpga_init()
         }
 
         g_fpga_qspi.bitstream_loaded = true;
+        reloaded = true;
     }
     
     // Set pins to QSPI mode
@@ -240,13 +256,46 @@ bool fpga_init()
         return false;
     }
 
-    // Check FPGA license code
-    if (!g_fpga_qspi.license_done)
+    if (reloaded)
     {
-        uint8_t license[17];
-        fpga_rdcmd(0x7E, license, 17);
-        logmsg("FPGA license code: ", bytearray(license + 1, 16));
-        g_fpga_qspi.license_done = true;
+        // TODO: This extensive communication check can be removed later,
+        // it is here now to detect any subtle QSPI problems.
+        for (uint32_t i = 0; i < 256; i++)
+        {
+            uint32_t regs[2] = {0xBEEFBE80, 0xC0FEC0DE};
+            uint32_t regs_readback[2] = {0,0};
+
+            if (i & 1) {
+                regs[0] = (i << 24) | ((i ^ 0xFF) << 16) | (i << 8) | 0x80;
+                regs[1] = 0xAA55AA55;
+            }
+
+            fpga_wrcmd(FPGA_CMD_WRITE_IDE_REGS, (uint8_t*)regs, 8);
+            fpga_rdcmd(FPGA_CMD_READ_IDE_REGS, (uint8_t*)regs_readback, 8);
+
+            if (regs[0] != regs_readback[0] || regs[1] != regs_readback[1])
+            {
+                logmsg("ERROR: FPGA extended communication check failed, got ", regs_readback[0], " ", regs_readback[1]);
+
+                fpga_rdcmd(FPGA_CMD_READ_IDE_REGS, (uint8_t*)regs_readback, 8, nullptr, true);
+                logmsg("Expected result:   ", regs[0], " ", regs[1]);
+                logmsg("Repeated readback: ", regs_readback[0], " ", regs_readback[1]);
+            }
+        }
+    }
+
+    if (reloaded && do_auth)
+    {
+        if (memcmp(PLATFORM_LICENSE_KEY_ADDR, "\x00\x00\x00\x00\x00", 5) == 0 ||
+            memcmp(PLATFORM_LICENSE_KEY_ADDR, "\xFF\xFF\xFF\xFF\xFF", 5) == 0)
+        {
+            logmsg("ERROR: FPGA license key missing from flash! (new device or flash erased?)");
+        }
+        else
+        {
+            // Authenticate license with code from RP2040 flash
+            fpga_wrcmd(FPGA_CMD_LICENSE_AUTH, PLATFORM_LICENSE_KEY_ADDR, 32);
+        }
     }
 
     return true;
@@ -344,7 +393,7 @@ void fpga_wrcmd(uint8_t cmd, const uint8_t *payload, size_t payload_len, uint16_
     fpga_release();
 }
 
-void fpga_rdcmd(uint8_t cmd, uint8_t *result, size_t result_len, uint16_t *crc)
+void fpga_rdcmd(uint8_t cmd, uint8_t *result, size_t result_len, uint16_t *crc, bool slow)
 {
     // Expecting a read-mode command
     assert(!(cmd & 0x80));
@@ -361,6 +410,15 @@ void fpga_rdcmd(uint8_t cmd, uint8_t *result, size_t result_len, uint16_t *crc)
     if (result_len == 0)
     {
         // Nothing to receive
+    }
+    else if (slow)
+    {
+        // Do slow transfer (for debugging)
+        for (size_t i = 0; i < result_len; i++)
+        {
+            pio_sm_put_blocking(FPGA_QSPI_PIO, FPGA_QSPI_PIO_SM, 0xFF);
+            result[i] = pio_sm_get_blocking(FPGA_QSPI_PIO, FPGA_QSPI_PIO_SM) >> 24;
+        }
     }
     else if ((result_len & 3) || ((uint32_t)result & 3))
     {
