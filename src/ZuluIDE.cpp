@@ -50,14 +50,50 @@ static IDEDevice *g_ide_device;
 #define BLINK_ERROR_NO_IMAGES    3
 #define BLINK_ERROR_NO_SD_CARD 5
 
+static int g_blink_status_code = -2;
+
+// Handle LED blinking without delaying other processing
+void blink_poll()
+{
+    static bool prev_state;
+    static bool prev_phase;
+    bool phase = millis() & 256;
+
+    if (g_blink_status_code > 0)
+    {
+        if (phase && !prev_phase)
+        {
+            LED_ON();
+            prev_state = true;
+        }
+        else if (!phase && prev_phase)
+        {
+            LED_OFF();
+            prev_state = false;
+            g_blink_status_code -= 1;
+        }
+    }
+    else if (g_blink_status_code > -2)
+    {
+        // Implement delay between blink codes
+        if (!phase && prev_phase)
+        {
+            g_blink_status_code -= 1;
+        }
+    }
+    else if (prev_state)
+    {
+        LED_OFF();
+    }
+
+    prev_phase = phase;
+}
+
 void blinkStatus(int count)
 {
-    for (int i = 0; i < count; i++)
+    if (g_blink_status_code <= -2)
     {
-        LED_ON();
-        delay(250);
-        LED_OFF();
-        delay(250);
+        g_blink_status_code = count;
     }
 }
 
@@ -323,6 +359,7 @@ void zuluide_main_loop(void)
 
     platform_reset_watchdog();
     platform_poll();
+    blink_poll();
 
     save_logfile();
 
