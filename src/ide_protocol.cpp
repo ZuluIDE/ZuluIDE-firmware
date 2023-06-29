@@ -46,6 +46,9 @@ static ide_event_t g_last_reset_event;
 static uint32_t g_last_reset_time;
 static bool g_drive1_detected;
 static uint8_t g_ide_signals;
+static uint32_t g_last_event_time;
+static ide_registers_t g_prev_ide_regs;
+static int g_ide_busy_secs;
 
 static void do_phy_reset()
 {
@@ -175,6 +178,43 @@ void ide_protocol_poll()
         }
 
         LED_OFF();
+        g_last_event_time = millis();
+        g_ide_busy_secs = 0;
+    }
+    else if ((millis() - g_last_event_time) > 1000)
+    {
+        // Log any changes in IDE registers
+        g_last_event_time = millis();
+        ide_registers_t regs = {};
+        ide_phy_get_regs(&regs);
+
+        if (memcmp(&regs, &g_prev_ide_regs, sizeof(ide_registers_t)) != 0)
+        {
+            g_prev_ide_regs = regs;
+            dbgmsg("-- IDE regs:",
+                " STATUS:", regs.status,
+                " CMD:", regs.command,
+                " DEV:", regs.device,
+                " DEVCTRL:", regs.device_control,
+                " ERROR:", regs.error,
+                " FEATURE:", regs.feature,
+                " LBAL:", regs.lba_low,
+                " LBAM:", regs.lba_mid,
+                " LBAH:", regs.lba_high);
+        }
+
+        if (regs.status & IDE_STATUS_BSY)
+        {
+            g_ide_busy_secs++;
+
+            if (g_ide_busy_secs > 15)
+            {
+                logmsg("Detected IDE STATUS register stuck at busy state ", regs.status, " for ",
+                       (int)g_ide_busy_secs, " seconds, resetting to zero");
+                regs.status = 0;
+                ide_phy_set_regs(&regs);
+            }
+        }
     }
 
     if (g_last_reset_event == IDE_EVENT_HWRST || g_last_reset_event == IDE_EVENT_SWRST)
