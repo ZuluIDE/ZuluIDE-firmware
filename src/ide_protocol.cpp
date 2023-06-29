@@ -47,6 +47,7 @@ static uint32_t g_last_reset_time;
 static bool g_drive1_detected;
 static uint8_t g_ide_signals;
 static uint32_t g_last_event_time;
+static ide_event_t g_last_event;
 static ide_registers_t g_prev_ide_regs;
 static int g_ide_busy_secs;
 static bool g_ide_reset_after_init_done;
@@ -158,12 +159,15 @@ void ide_protocol_poll()
         }
         else
         {
-            switch(evt)
+            if (evt != g_last_event || (millis() - g_last_event_time) > 5000)
             {
-                case IDE_EVENT_HWRST: dbgmsg("IDE_EVENT_HWRST"); break;
-                case IDE_EVENT_SWRST: dbgmsg("IDE_EVENT_SWRST"); break;
-                case IDE_EVENT_DATA_TRANSFER_DONE: dbgmsg("IDE_EVENT_DATA_TRANSFER_DONE"); break;
-                default: dbgmsg("PHY EVENT: ", (int)evt); break;
+                switch(evt)
+                {
+                    case IDE_EVENT_HWRST: dbgmsg("IDE_EVENT_HWRST"); break;
+                    case IDE_EVENT_SWRST: dbgmsg("IDE_EVENT_SWRST"); break;
+                    case IDE_EVENT_DATA_TRANSFER_DONE: dbgmsg("IDE_EVENT_DATA_TRANSFER_DONE"); break;
+                    default: dbgmsg("PHY EVENT: ", (int)evt); break;
+                }
             }
 
             if (evt == IDE_EVENT_HWRST || evt == IDE_EVENT_SWRST)
@@ -187,6 +191,7 @@ void ide_protocol_poll()
 
         LED_OFF();
         g_last_event_time = millis();
+        g_last_event = evt;
         g_ide_busy_secs = 0;
     }
     else if ((millis() - g_last_event_time) > 1000)
