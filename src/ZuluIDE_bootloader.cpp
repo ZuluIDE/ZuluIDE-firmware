@@ -86,6 +86,8 @@ bool program_firmware(FsFile &file)
 
     for (int i = 0; i < num_pages; i++)
     {
+        platform_reset_watchdog();
+
         if (i % 2)
             LED_ON();
         else
@@ -130,6 +132,7 @@ int bootloader_main(void)
 {
     platform_init();
     g_log_debug = true;
+    platform_reset_watchdog();
 
     logmsg("Bootloader version: " __DATE__ " " __TIME__ " " PLATFORM_NAME);
 
