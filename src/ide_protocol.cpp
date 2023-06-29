@@ -49,6 +49,7 @@ static uint8_t g_ide_signals;
 static uint32_t g_last_event_time;
 static ide_registers_t g_prev_ide_regs;
 static int g_ide_busy_secs;
+static bool g_ide_reset_after_init_done;
 
 static void do_phy_reset()
 {
@@ -98,12 +99,19 @@ void ide_protocol_init(IDEDevice *primary, IDEDevice *secondary)
     if (secondary) secondary->initialize(1);
 
     do_phy_reset();
+    g_ide_reset_after_init_done = false;
 }
 
 
 void ide_protocol_poll()
 {
     ide_event_t evt = ide_phy_get_events();
+
+    if (!g_ide_reset_after_init_done)
+    {
+        evt = IDE_EVENT_HWRST;
+        g_ide_reset_after_init_done = true;
+    }
     
     if (evt != IDE_EVENT_NONE)
     {
