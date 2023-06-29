@@ -41,6 +41,7 @@ void IDEATAPIDevice::initialize(int devidx)
 {
     memset(&m_devinfo, 0, sizeof(m_devinfo));
     memset(&m_atapi_state, 0, sizeof(m_atapi_state));
+    memset(&m_removable, 0, sizeof(m_removable));
     IDEDevice::initialize(devidx);
 }
 
@@ -676,14 +677,43 @@ bool IDEATAPIDevice::atapi_cmd_ok()
 
 bool IDEATAPIDevice::atapi_test_unit_ready(const uint8_t *cmd)
 {
+    if (m_devinfo.removable && m_removable.ejected)
+    {
+        if (m_removable.reinsert_media_after_eject)
+        {
+            insert_media();
+        }
+        return atapi_cmd_error(ATAPI_SENSE_NOT_READY, ATAPI_ASC_NO_MEDIUM);
+    }
     return atapi_cmd_ok();
 }
 
 bool IDEATAPIDevice::atapi_start_stop_unit(const uint8_t *cmd)
 {
-    // TODO: medium ejection
+    uint8_t cmd_eject = *(cmd + ATAPI_START_STOP_EJT_OFFSET);
+    if ((ATAPI_START_STOP_PWR_CON_MASK & cmd_eject) == 0 && 
+        (ATAPI_START_STOP_LOEJ & cmd_eject) != 0)
+    {
+        m_atapi_state.unit_attention = true;
+        
+        // Eject condition
+        if ((ATAPI_START_STOP_START & cmd_eject) == 0 && m_removable.ejected == false)
+        {
+            logmsg("Device ejecting media");
+            m_image->load_next_image();
+            m_devinfo.media_status_events = ATAPI_MEDIA_EVENT_REMOVED;
+            m_removable.ejected = true;
+        }
+        // Load condition
+        else
+        {
+            insert_media();
+        }
+    }
     return atapi_cmd_ok();
+
 }
+
 
 bool IDEATAPIDevice::atapi_prevent_allow_removal(const uint8_t *cmd)
 {
@@ -710,6 +740,12 @@ bool IDEATAPIDevice::atapi_inquiry(const uint8_t *cmd)
 
     if (req_bytes < count) count = req_bytes;
     atapi_send_data(inquiry, count);
+
+    if (m_removable.reinsert_media_on_inquiry)
+    {
+        insert_media();
+    }
+
 
     return atapi_cmd_ok();
 }
@@ -1131,4 +1167,14 @@ size_t IDEATAPIDevice::atapi_get_configuration(uint16_t feature, uint8_t *buffer
     }
 
     return 0;
+}
+
+void IDEATAPIDevice::insert_media()
+{
+    if (m_devinfo.removable && m_removable.ejected)
+    {
+            dbgmsg("-- Device loading media");
+            m_devinfo.media_status_events = ATAPI_MEDIA_EVENT_NEW;
+            m_removable.ejected = false;
+    }
 }

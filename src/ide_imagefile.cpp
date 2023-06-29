@@ -20,7 +20,9 @@
 **/
 
 #include "ide_imagefile.h"
+#include <strings.h>
 #include "ZuluIDE.h"
+#include "ZuluIDE_config.h"
 #include <assert.h>
 #include <algorithm>
 
@@ -36,7 +38,10 @@ IDEImageFile::IDEImageFile(uint8_t *buffer, size_t buffer_size):
     m_blockdev(nullptr), m_contiguous(false), m_first_sector(0), m_capacity(0),
     m_read_only(false), m_buffer(buffer), m_buffer_size(buffer_size)
 {
+    memset(m_prefix, 0, sizeof(m_prefix));
 }
+
+
 
 bool IDEImageFile::open_file(FsVolume *volume, const char *filename, bool read_only)
 {
@@ -91,6 +96,125 @@ bool IDEImageFile::get_filename(char *buf, size_t buflen)
         return true;
     }
 }
+
+static bool is_valid_filename(const char *name)
+{
+    if (strcasecmp(name, "ice5lp1k_top_bitmap.bin") == 0)
+    {
+        // Ignore FPGA bitstream
+        return false;
+    }
+
+    if (!isalnum(name[0]))
+    {
+        // Skip names beginning with special character
+        return false;
+    }
+
+    return true;
+}
+
+bool IDEImageFile::load_next_image()
+{
+    char prev_image[MAX_FILE_PATH];
+    char image_file[MAX_FILE_PATH];
+    
+    if (get_filename(prev_image, MAX_FILE_PATH))
+    {
+        close();
+        if (find_next_image("/", prev_image, image_file, MAX_FILE_PATH))
+        {
+            open_file(SD.vol(), image_file);
+            return true;
+        }
+    }
+    return false;
+}
+// Find the next image file in alphabetical order.
+// If prev_image is NULL, returns the first image file.
+bool IDEImageFile::find_next_image(const char *directory, const char *prev_image, char *result, size_t buflen)
+{
+    FsFile root;
+    FsFile file;
+    bool first_search = prev_image == NULL;
+
+    if (!root.open(directory))
+    {
+        logmsg("Could not open directory: ", directory);
+        return false;
+    }
+
+    result[0] = '\0';
+
+    while (file.openNext(&root, O_RDONLY))
+    {
+        if (file.isDirectory()) continue;
+
+        char candidate[MAX_FILE_PATH];
+        file.getName(candidate, sizeof(candidate));
+        const char *extension = strrchr(candidate, '.');
+
+        if (!is_valid_filename(candidate))
+        {
+            continue;
+        }
+        if (!extension ||
+            (strcasecmp(extension, ".iso") != 0 &&
+             strcasecmp(extension, ".bin") != 0 &&
+             strcasecmp(extension, ".img") != 0))
+        {
+            // Not an image file
+            continue;
+        }
+        char prefix[5] = {0};
+        find_prefix(prefix, candidate);
+        if (!first_search && !get_prefix()[0] && strcasecmp(get_prefix(), prefix) != 0)
+        {
+            // look for only image with the same prefix
+            continue;
+        }
+        if (prev_image && strcasecmp(candidate, prev_image) <= 0)
+        {
+            // Alphabetically before the previous image
+            continue;
+        }
+
+        if (result[0] && strcasecmp(candidate, result) >= 0)
+        {
+            // Alphabetically later than current result
+            continue;
+        }
+
+        // Copy as the best result
+        file.getName(result, buflen);
+    }
+    file.close();
+    root.close();
+    // wrap search
+    if (result[0] == '\0' && !first_search)
+    {
+        find_next_image(directory, NULL, result, buflen);
+    }
+
+    return result[0] != '\0';
+}
+
+void IDEImageFile::set_prefix(char *prefix)
+{
+    strcpy(m_prefix, prefix);
+}
+const char* const IDEImageFile::get_prefix()
+{
+    return m_prefix;
+}
+
+void IDEImageFile::find_prefix(char *prefix, const char* file_name)
+{
+    for (int i=0; i < 4; i++)
+    {
+        prefix[i] = tolower(file_name[i]);
+    }
+}               
 
 uint64_t IDEImageFile::capacity()
 {

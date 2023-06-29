@@ -55,6 +55,11 @@ public:
     // The callback function is passed data pointer and number of blocks requested.
     // It will return the number of blocks available at data.
     virtual bool write(uint64_t startpos, size_t blocksize, size_t num_blocks, Callback *callback) = 0;
+    
+    // Load next image
+    // returns false if it failed to load
+    virtual bool load_next_image() = 0;
+
 };
 
 // Implementation for SD-card based image files
@@ -72,6 +77,15 @@ public:
     virtual bool writable();
     virtual bool read(uint64_t startpos, size_t blocksize, size_t num_blocks, Callback *callback);
     virtual bool write(uint64_t startpos, size_t blocksize, size_t num_blocks, Callback *callback);
+    virtual bool load_next_image();
+
+    // Find next image in alphabetical order. If prev_image is NULL, find the first image
+    virtual bool find_next_image(const char *directory, const char *prev_image, char *result, size_t buflen);
+    
+    // Set the prefix string of the filename, to match next file to insert after ejection
+    virtual void set_prefix(char* prefix);
+    virtual const char* const get_prefix();
+    virtual void find_prefix(char* prefix, const char* file_name); 
 
 protected:
     FsFile m_file;
@@ -85,6 +99,7 @@ protected:
     uint8_t *m_buffer;
     size_t m_buffer_size;
 
+    char m_prefix[5];
     struct sd_cb_state_t {
         IDEImage::Callback *callback;
         bool error;
