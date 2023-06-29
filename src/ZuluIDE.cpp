@@ -186,84 +186,6 @@ void init_logfile()
 }
 
 
-/*********************************/
-/* Image file searching          */
-/*********************************/
-
-static bool is_valid_filename(const char *name)
-{
-    if (strcasecmp(name, "ice5lp1k_top_bitmap.bin") == 0)
-    {
-        // Ignore FPGA bitstream
-        return false;
-    }
-
-    if (!isalnum(name[0]))
-    {
-        // Skip names beginning with special character
-        return false;
-    }
-
-    return true;
-}
-
-// Find the next image file in alphabetical order.
-// If prev_image is NULL, returns the first image file.
-static bool find_next_image(const char *directory, const char *prev_image, char *result, size_t buflen)
-{
-    FsFile root;
-    FsFile file;
-
-    if (!root.open(directory))
-    {
-        logmsg("Could not open directory: ", directory);
-        return false;
-    }
-
-    result[0] = '\0';
-
-    while (file.openNext(&root, O_RDONLY))
-    {
-        if (file.isDirectory()) continue;
-
-        char candidate[MAX_FILE_PATH];
-        file.getName(candidate, sizeof(candidate));
-        const char *extension = strrchr(candidate, '.');
-
-        if (!is_valid_filename(candidate))
-        {
-            continue;
-        }
-
-        if (!extension ||
-            (strcasecmp(extension, ".iso") != 0 &&
-             strcasecmp(extension, ".bin") != 0))
-        {
-            // Not an image file
-            continue;
-        }
-
-        if (prev_image && strcasecmp(candidate, prev_image) <= 0)
-        {
-            // Alphabetically before the previous image
-            continue;
-        }
-
-        if (result[0] && strcasecmp(candidate, result) >= 0)
-        {
-            // Alphabetically later than current result
-            continue;
-        }
-
-        // Copy as the best result
-        file.getName(result, buflen);
-    }
-
-    file.close();
-    root.close();
-
-    return result[0] != '\0';
-}
 
 /*********************************/
 /* Main IDE handling loop        */
@@ -278,8 +200,52 @@ void load_image()
     
     // Find image file
     char imagefile[MAX_FILE_PATH];
-    if (find_next_image("/", NULL, imagefile, sizeof(imagefile)))
+    if (g_ide_imagefile.find_next_image("/", NULL, imagefile, sizeof(imagefile)))
     {
+        int type = ini_getl("IDE", "type", 0, CONFIGFILE);
+        if (type == 2)
+        {
+            logmsg("Device type: ZIP drive");
+            g_ide_device = &g_ide_zipdrive;
+        }
+        else if (type == 1)
+        {
+            logmsg("Device type: CD-ROM");
+            g_ide_device = &g_ide_cdrom;
+        }
+        else
+        {
+            bool valid_imagefile = true;
+            if (strlen(imagefile) >= 4)
+            {
+                char prefix[5] = {0};
+                g_ide_imagefile.find_prefix(prefix, imagefile);
+                if (strcasecmp(prefix, "cdrm") == 0)
+                {
+                    g_ide_device = &g_ide_cdrom;
+                    g_ide_imagefile.set_prefix(prefix);
+                }
+                else if (strcasecmp(prefix, "zipd") == 0)
+                {
+                    g_ide_device = &g_ide_zipdrive;
+                    g_ide_imagefile.set_prefix(prefix);
+                }
+                else
+                {
+                    valid_imagefile = false;
+                }
+            }
+            else
+            {
+                valid_imagefile = false;
+            }
+            
+            if (!valid_imagefile)
+            {
+                logmsg("Could not determine image type by filename, defaulting to: CD-ROM");
+                g_ide_device = &g_ide_cdrom;
+            }
+        }
         logmsg("Loading image ", imagefile);
         g_ide_imagefile.open_file(SD.vol(), imagefile, false);
         if (g_ide_device) g_ide_device->set_image(&g_ide_imagefile);
@@ -312,18 +278,6 @@ void zuluide_setup(void)
         }
 
         print_sd_info();
-    }
-
-    int type = ini_getl("IDE", "type", 0, CONFIGFILE);
-    if (type == 1)
-    {
-        logmsg("Device type: ZIP drive");
-        g_ide_device = &g_ide_zipdrive;
-    }
-    else
-    {
-        logmsg("Device type: CD-ROM");
-        g_ide_device = &g_ide_cdrom;
     }
 
     if (g_sdcard_present)

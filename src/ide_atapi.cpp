@@ -39,6 +39,7 @@ static const char *get_atapi_command_name(uint8_t cmd)
 
 void IDEATAPIDevice::initialize(int devidx)
 {
+    m_ejected = false;
     memset(&m_devinfo, 0, sizeof(m_devinfo));
     memset(&m_atapi_state, 0, sizeof(m_atapi_state));
     IDEDevice::initialize(devidx);
@@ -641,9 +642,32 @@ bool IDEATAPIDevice::atapi_test_unit_ready(const uint8_t *cmd)
 
 bool IDEATAPIDevice::atapi_start_stop_unit(const uint8_t *cmd)
 {
-    // TODO: medium ejection
+    uint8_t cmd_eject = *(cmd + ATAPI_START_STOP_EJT_OFFSET);
+    if ((ATAPI_START_STOP_PWR_CON_MASK & cmd_eject) == 0 && 
+        (ATAPI_START_STOP_LOEJ & cmd_eject) != 0)
+    {
+        m_atapi_state.unit_attention = true;
+        
+        if ((ATAPI_START_STOP_START & cmd_eject) == 0 && m_ejected == false)
+        {
+            logmsg("Device ejecting media");
+            m_image->load_next_image();
+            m_devinfo.media_status_events = ATAPI_MEDIA_EVENT_REMOVED;
+            m_ejected = true;
+        }
+        // Load condition
+        else
+        {
+            logmsg("Device loading media");
+            m_devinfo.media_status_events = ATAPI_MEDIA_EVENT_NEW;
+            m_ejected = false;
+
+        }
+    }
     return atapi_cmd_ok();
+
 }
+
 
 bool IDEATAPIDevice::atapi_prevent_allow_removal(const uint8_t *cmd)
 {

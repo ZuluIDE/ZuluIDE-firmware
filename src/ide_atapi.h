@@ -34,7 +34,7 @@ public:
 
 protected:
     IDEImage *m_image;
-
+    bool m_ejected;
     // Device type info is filled in by subclass
     struct {
         uint8_t devtype;
