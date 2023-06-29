@@ -325,7 +325,7 @@ static void fpga_release()
     pio_sm_set_consecutive_pindirs(FPGA_QSPI_PIO, FPGA_QSPI_PIO_SM, FPGA_QSPI_D0, 4, false);
 }
 
-void fpga_wrcmd(uint8_t cmd, const uint8_t *payload, size_t payload_len, uint16_t *crc)
+void fpga_wrcmd(uint8_t cmd, const uint8_t *payload, size_t payload_len, uint32_t *crc)
 {
     // Expecting a write-mode command
     assert(cmd & 0x80);
@@ -388,13 +388,13 @@ void fpga_wrcmd(uint8_t cmd, const uint8_t *payload, size_t payload_len, uint16_
         dma_channel_abort(FPGA_QSPI_DMA_TX);
         dma_sniffer_disable();
 
-        if (crc) *crc = dma_hw->sniff_data;
+        if (crc) *crc = (uint16_t)dma_hw->sniff_data;
     }
 
     fpga_release();
 }
 
-void fpga_rdcmd(uint8_t cmd, uint8_t *result, size_t result_len, uint16_t *crc, bool slow)
+void fpga_rdcmd(uint8_t cmd, uint8_t *result, size_t result_len, uint32_t *crc, bool slow)
 {
     // Expecting a read-mode command
     assert(!(cmd & 0x80));
@@ -471,7 +471,7 @@ void fpga_rdcmd(uint8_t cmd, uint8_t *result, size_t result_len, uint16_t *crc, 
         dma_channel_abort(FPGA_QSPI_DMA_TX);
         dma_sniffer_disable();
 
-        if (crc) *crc = dma_hw->sniff_data;
+        if (crc) *crc = (uint16_t)dma_hw->sniff_data;
     }
 
     fpga_release();

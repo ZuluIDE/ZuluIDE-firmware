@@ -136,10 +136,12 @@
 bool fpga_init(bool force_reinit = false, bool do_auth = true);
 
 // Send a write command to FPGA through QSPI bus
-void fpga_wrcmd(uint8_t cmd, const uint8_t *payload, size_t payload_len, uint16_t *crc = nullptr);
+// Optionally calculate UltraDMA CRC of the data (only for aligned buffers)
+void fpga_wrcmd(uint8_t cmd, const uint8_t *payload, size_t payload_len, uint32_t *crc = nullptr);
 
 // Send a read command to FPGA through QSPI bus
-void fpga_rdcmd(uint8_t cmd, uint8_t *result, size_t result_len, uint16_t *crc = nullptr, bool slow = false);
+// Optionally calculate UltraDMA CRC of the data (only for aligned buffers)
+void fpga_rdcmd(uint8_t cmd, uint8_t *result, size_t result_len, uint32_t *crc = nullptr, bool slow = false);
 
 // Dump IDE register values
 void fpga_dump_ide_regs();

@@ -213,13 +213,17 @@ void ide_phy_write_block(const uint8_t *buf, uint32_t blocklen)
         blocklen++;
     }
 
-    uint16_t crc = 0;
+    uint32_t crc = 0xDEADBEEF;
     fpga_wrcmd(FPGA_CMD_WRITE_DATABUF, buf, blocklen, &crc);
     g_ide_phy.transfer_running = true;
 
-    // There can be up to two blocks in FPGA buffers, so store their CRCs separately.
-    g_ide_phy.block_crc1 = g_ide_phy.block_crc0;
-    g_ide_phy.block_crc0 = crc | BLOCK_CRC_VALID;
+    if (crc != 0xDEADBEEF)
+    {
+        // There can be up to two blocks in FPGA buffers, so store their CRCs separately.
+        // Note: for unaligned buffers crc will stay 0xDEADBEEF, ignore it.
+        g_ide_phy.block_crc1 = g_ide_phy.block_crc0;
+        g_ide_phy.block_crc0 = crc | BLOCK_CRC_VALID;
+    }
 }
 
 bool ide_phy_is_write_finished()
@@ -284,11 +288,11 @@ void ide_phy_read_block(uint8_t *buf, uint32_t blocklen, bool continue_transfer)
 {
     // dbgmsg("ide_phy_read_block, cont = ", (int)continue_transfer);
     uint8_t cmd = continue_transfer ? FPGA_CMD_READ_DATABUF_CONT : FPGA_CMD_READ_DATABUF;
-    uint16_t our_crc = 0;
+    uint32_t our_crc = 0xDEADBEEF;
     fpga_rdcmd(cmd, buf, blocklen, &our_crc);
     // dbgmsg("ide_phy_read_block(", bytearray(buf, blocklen), ")");
 
-    if (g_ide_phy.udma_mode >= 0)
+    if (g_ide_phy.udma_mode >= 0 && our_crc != 0xDEADBEEF)
     {
         uint16_t host_crc = 0;
         fpga_rdcmd(FPGA_CMD_READ_UDMA_CRC, (uint8_t*)&host_crc, 2);
