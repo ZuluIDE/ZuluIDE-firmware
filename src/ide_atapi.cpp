@@ -605,6 +605,8 @@ bool IDEATAPIDevice::atapi_cmd_error(uint8_t sense_key, uint16_t sense_asc)
     ide_phy_get_regs(&regs);
     regs.error = IDE_ERROR_ABORT | (sense_key << 4);
     regs.sector_count = ATAPI_SCOUNT_IS_CMD | ATAPI_SCOUNT_TO_HOST;
+    regs.lba_mid = 0xFE;
+    regs.lba_high = 0xFF;
     ide_phy_set_regs(&regs);
     ide_phy_assert_irq(IDE_STATUS_DEVRDY | IDE_STATUS_ERR);
 
@@ -628,6 +630,8 @@ bool IDEATAPIDevice::atapi_cmd_ok()
     ide_phy_get_regs(&regs);
     regs.error = 0;
     regs.sector_count = ATAPI_SCOUNT_IS_CMD | ATAPI_SCOUNT_TO_HOST;
+    regs.lba_mid = 0xFE;
+    regs.lba_high = 0xFF;
     ide_phy_set_regs(&regs);
     ide_phy_assert_irq(IDE_STATUS_DEVRDY);
 
