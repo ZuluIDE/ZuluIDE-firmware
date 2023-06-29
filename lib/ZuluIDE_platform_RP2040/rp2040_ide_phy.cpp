@@ -153,6 +153,20 @@ ide_event_t ide_phy_get_events()
     return IDE_EVENT_NONE;
 }
 
+bool ide_phy_is_command_interrupted()
+{
+    if (g_ide_phy.watchdog_error) return true;
+
+    uint8_t status;
+    fpga_rdcmd(FPGA_CMD_READ_STATUS, &status, 1);
+
+    if (status & FPGA_STATUS_IDE_RST) return true;
+    if (status & FPGA_STATUS_IDE_SRST) return true;
+    if (status & FPGA_STATUS_IDE_CMD) return true;
+
+    return false;
+}
+
 // Get current state of IDE registers
 void ide_phy_get_regs(ide_registers_t *regs)
 {

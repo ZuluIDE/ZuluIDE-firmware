@@ -284,6 +284,13 @@ bool IDEATAPIDevice::cmd_packet(ide_registers_t *regs)
             ide_phy_stop_transfers();
             return false;
         }
+
+        if (ide_phy_is_command_interrupted())
+        {
+            dbgmsg("IDEATAPIDevice::cmd_packet() interrupted");
+            ide_phy_stop_transfers();
+            return false;
+        }
     }
 
     uint8_t cmdbuf[12] = {0};
@@ -410,6 +417,11 @@ bool IDEATAPIDevice::atapi_send_data_block(const uint8_t *data, uint16_t blocksi
                 logmsg("IDEATAPIDevice::atapi_send_data_block() data write timeout");
                 return false;
             }
+            if (ide_phy_is_command_interrupted())
+            {
+                dbgmsg("IDEATAPIDevice::atapi_send_data_block() interrupted");
+                return false;
+            }
         }
 
         ide_phy_write_block(data, blocksize);
@@ -428,6 +440,12 @@ bool IDEATAPIDevice::atapi_send_wait_finish()
         if ((uint32_t)(millis() - start) > 10000)
         {
             logmsg("IDEATAPIDevice::atapi_send_wait_finish() data write timeout");
+            return false;
+        }
+
+        if (ide_phy_is_command_interrupted())
+        {
+            dbgmsg("IDEATAPIDevice::atapi_send_wait_finish() interrupted");
             return false;
         }
     }
@@ -485,6 +503,12 @@ bool IDEATAPIDevice::atapi_recv_data(uint8_t *data, size_t blocksize, size_t num
                 ide_phy_stop_transfers();
                 return false;
             }
+
+            if (ide_phy_is_command_interrupted())
+            {
+                dbgmsg("IDEATAPIDevice::atapi_recv_data() interrupted");
+                return false;
+            }
         }
 
         // Read out previous block
@@ -518,6 +542,12 @@ bool IDEATAPIDevice::atapi_recv_data_block(uint8_t *data, uint16_t blocksize)
         {
             logmsg("IDEATAPIDevice::atapi_recv_data_block(", (int)blocksize, ") read timeout");
             ide_phy_stop_transfers();
+            return false;
+        }
+
+        if (ide_phy_is_command_interrupted())
+        {
+            dbgmsg("IDEATAPIDevice::atapi_recv_data_block() interrupted");
             return false;
         }
     }
