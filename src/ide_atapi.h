@@ -32,9 +32,11 @@ public:
     
     virtual uint64_t capacity_lba() { return capacity() / m_devinfo.bytes_per_sector; }
 
+    virtual void insert_media();
+
 protected:
     IDEImage *m_image;
-    bool m_ejected;
+
     // Device type info is filled in by subclass
     struct {
         uint8_t devtype;
@@ -80,6 +82,13 @@ protected:
         int crc_errors; // CRC errors in latest transfer
     } m_atapi_state;
     
+    struct 
+    {
+        bool ejected;
+        bool reinsert_media_on_inquiry;
+        bool reinsert_media_after_eject;
+    } m_removable;
+
     // Buffer used for responses, ide_phy code benefits from this being aligned to 32 bits
     // Enough for any inquiry/mode response and for up to one CD sector.
     union {

@@ -38,6 +38,7 @@
 #include "ZuluIDE.h"
 #include <string.h>
 #include <strings.h>
+#include <minIni.h>
 
 static const uint8_t DiscInformation[] =
 {
@@ -272,14 +273,19 @@ void IDECDROMDevice::initialize(int devidx)
     m_devinfo.devtype = ATAPI_DEVTYPE_CDROM;
     m_devinfo.removable = true;
     m_devinfo.bytes_per_sector = 2048;
+    
     strncpy(m_devinfo.ide_vendor, "ZuluIDE", sizeof(m_devinfo.ide_vendor));
     strncpy(m_devinfo.ide_product, "CD-ROM", sizeof(m_devinfo.ide_product));
     memcpy(m_devinfo.ide_revision, ZULU_FW_VERSION, sizeof(m_devinfo.ide_revision));
     strncpy(m_devinfo.atapi_model, "ZuluIDE CD-ROM", sizeof(m_devinfo.atapi_model));
     memcpy(m_devinfo.atapi_revision, ZULU_FW_VERSION, sizeof(m_devinfo.atapi_revision));
+
     m_devinfo.num_profiles = 1;
     m_devinfo.profiles[0] = ATAPI_PROFILE_CDROM;
     m_devinfo.current_profile = ATAPI_PROFILE_CDROM;
+
+    m_removable.reinsert_media_after_eject = ini_getbool("IDE", "reinsert_media_after_eject", true, CONFIGFILE);
+    m_removable.reinsert_media_on_inquiry = ini_getbool("IDE", "reinsert_media_on_inquiry", true, CONFIGFILE);
 }
 
 void IDECDROMDevice::set_image(IDEImage *image)

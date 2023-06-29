@@ -27,6 +27,7 @@
 #include "ZuluIDE.h"
 #include <string.h>
 #include <strings.h>
+#include <minIni.h>
 
 #define ZIP100_SECTORSIZE 512
 #define ZIP100_SECTORCOUNT 196608
@@ -49,6 +50,9 @@ void IDEZipDrive::initialize(int devidx)
     m_devinfo.num_profiles = 1;
     m_devinfo.profiles[0] = ATAPI_PROFILE_REMOVABLE;
     m_devinfo.current_profile = ATAPI_PROFILE_REMOVABLE;
+
+    m_removable.reinsert_media_after_eject = ini_getbool("IDE", "reinsert_media_after_eject", true, CONFIGFILE);
+    m_removable.reinsert_media_on_inquiry =  ini_getbool("IDE", "reinsert_media_on_inquiry", true, CONFIGFILE);
 }
 
 // We always have the same capacity, no matter image size
