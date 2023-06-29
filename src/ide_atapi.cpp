@@ -256,6 +256,12 @@ bool IDEATAPIDevice::cmd_packet(ide_registers_t *regs)
     m_atapi_state.dma_requested = regs->feature & 0x01;
     m_atapi_state.crc_errors = 0;
 
+    if (m_atapi_state.dma_requested && m_atapi_state.udma_mode < 0)
+    {
+        dbgmsg("---- Host requested DMA transfer while DMA mode is not selected, enabling UDMA0!");
+        m_atapi_state.udma_mode = 0;
+    }
+
     if (m_atapi_state.bytes_req == 0)
     {
         // "the host should not set the byte count limit to zero. If the host sets the byte count limit to
