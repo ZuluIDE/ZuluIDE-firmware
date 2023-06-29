@@ -46,6 +46,11 @@ static ide_event_t g_last_reset_event;
 static uint32_t g_last_reset_time;
 static bool g_drive1_detected;
 static uint8_t g_ide_signals;
+static uint32_t g_last_event_time;
+static ide_event_t g_last_event;
+static ide_registers_t g_prev_ide_regs;
+static int g_ide_busy_secs;
+static bool g_ide_reset_after_init_done;
 
 static void do_phy_reset()
 {
@@ -95,12 +100,19 @@ void ide_protocol_init(IDEDevice *primary, IDEDevice *secondary)
     if (secondary) secondary->initialize(1);
 
     do_phy_reset();
+    g_ide_reset_after_init_done = false;
 }
 
 
 void ide_protocol_poll()
 {
     ide_event_t evt = ide_phy_get_events();
+
+    if (!g_ide_reset_after_init_done)
+    {
+        evt = IDE_EVENT_HWRST;
+        g_ide_reset_after_init_done = true;
+    }
     
     if (evt != IDE_EVENT_NONE)
     {
@@ -147,12 +159,15 @@ void ide_protocol_poll()
         }
         else
         {
-            switch(evt)
+            if (evt != g_last_event || (millis() - g_last_event_time) > 5000)
             {
-                case IDE_EVENT_HWRST: dbgmsg("IDE_EVENT_HWRST"); break;
-                case IDE_EVENT_SWRST: dbgmsg("IDE_EVENT_SWRST"); break;
-                case IDE_EVENT_DATA_TRANSFER_DONE: dbgmsg("IDE_EVENT_DATA_TRANSFER_DONE"); break;
-                default: dbgmsg("PHY EVENT: ", (int)evt); break;
+                switch(evt)
+                {
+                    case IDE_EVENT_HWRST: dbgmsg("IDE_EVENT_HWRST"); break;
+                    case IDE_EVENT_SWRST: dbgmsg("IDE_EVENT_SWRST"); break;
+                    case IDE_EVENT_DATA_TRANSFER_DONE: dbgmsg("IDE_EVENT_DATA_TRANSFER_DONE"); break;
+                    default: dbgmsg("PHY EVENT: ", (int)evt); break;
+                }
             }
 
             if (evt == IDE_EVENT_HWRST || evt == IDE_EVENT_SWRST)
@@ -175,6 +190,44 @@ void ide_protocol_poll()
         }
 
         LED_OFF();
+        g_last_event_time = millis();
+        g_last_event = evt;
+        g_ide_busy_secs = 0;
+    }
+    else if ((millis() - g_last_event_time) > 1000)
+    {
+        // Log any changes in IDE registers
+        g_last_event_time = millis();
+        ide_registers_t regs = {};
+        ide_phy_get_regs(&regs);
+
+        if (memcmp(&regs, &g_prev_ide_regs, sizeof(ide_registers_t)) != 0)
+        {
+            g_prev_ide_regs = regs;
+            dbgmsg("-- IDE regs:",
+                " STATUS:", regs.status,
+                " CMD:", regs.command,
+                " DEV:", regs.device,
+                " DEVCTRL:", regs.device_control,
+                " ERROR:", regs.error,
+                " FEATURE:", regs.feature,
+                " LBAL:", regs.lba_low,
+                " LBAM:", regs.lba_mid,
+                " LBAH:", regs.lba_high);
+        }
+
+        if (regs.status & IDE_STATUS_BSY)
+        {
+            g_ide_busy_secs++;
+
+            if (g_ide_busy_secs > 15)
+            {
+                logmsg("Detected IDE STATUS register stuck at busy state ", regs.status, " for ",
+                       (int)g_ide_busy_secs, " seconds, resetting to zero");
+                regs.status = 0;
+                ide_phy_set_regs(&regs);
+            }
+        }
     }
 
     if (g_last_reset_event == IDE_EVENT_HWRST || g_last_reset_event == IDE_EVENT_SWRST)
@@ -232,8 +285,8 @@ void IDEDevice::initialize(int devidx)
     m_devconfig.dev_index = devidx;
 
     m_phy_caps = *ide_phy_get_capabilities();
-    m_devconfig.max_pio_mode = ini_getl("IDE", "max_pio", 2, CONFIGFILE);
-    m_devconfig.max_udma_mode = ini_getl("IDE", "max_udma", -1, CONFIGFILE);
+    m_devconfig.max_pio_mode = ini_getl("IDE", "max_pio", 3, CONFIGFILE);
+    m_devconfig.max_udma_mode = ini_getl("IDE", "max_udma", 0, CONFIGFILE);
     m_devconfig.max_blocksize = ini_getl("IDE", "max_blocksize", m_phy_caps.max_blocksize, CONFIGFILE);
 
     logmsg("Device ", devidx, " configuration:");

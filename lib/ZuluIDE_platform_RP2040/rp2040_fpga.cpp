@@ -250,6 +250,21 @@ bool fpga_init(bool force_reinit, bool do_auth)
         logmsg("WARNING: FPGA reports protocol version ", (int)version, ", firmware is built for version ", (int)FPGA_PROTOCOL_VERSION);
     }
 
+    if (reloaded && do_auth)
+    {
+        delay(2);
+        if (memcmp(PLATFORM_LICENSE_KEY_ADDR, "\x00\x00\x00\x00\x00", 5) == 0 ||
+            memcmp(PLATFORM_LICENSE_KEY_ADDR, "\xFF\xFF\xFF\xFF\xFF", 5) == 0)
+        {
+            logmsg("ERROR: FPGA license key missing from flash! (new device or flash erased?)");
+        }
+        else
+        {
+            // Authenticate license with code from RP2040 flash
+            fpga_wrcmd(FPGA_CMD_LICENSE_AUTH, PLATFORM_LICENSE_KEY_ADDR, 32);
+        }
+    }
+
     if (!fpga_selftest())
     {
         logmsg("ERROR: FPGA self-test failed");
@@ -284,20 +299,6 @@ bool fpga_init(bool force_reinit, bool do_auth)
         }
     }
 
-    if (reloaded && do_auth)
-    {
-        if (memcmp(PLATFORM_LICENSE_KEY_ADDR, "\x00\x00\x00\x00\x00", 5) == 0 ||
-            memcmp(PLATFORM_LICENSE_KEY_ADDR, "\xFF\xFF\xFF\xFF\xFF", 5) == 0)
-        {
-            logmsg("ERROR: FPGA license key missing from flash! (new device or flash erased?)");
-        }
-        else
-        {
-            // Authenticate license with code from RP2040 flash
-            fpga_wrcmd(FPGA_CMD_LICENSE_AUTH, PLATFORM_LICENSE_KEY_ADDR, 32);
-        }
-    }
-
     return true;
 }
 
@@ -324,7 +325,7 @@ static void fpga_release()
     pio_sm_set_consecutive_pindirs(FPGA_QSPI_PIO, FPGA_QSPI_PIO_SM, FPGA_QSPI_D0, 4, false);
 }
 
-void fpga_wrcmd(uint8_t cmd, const uint8_t *payload, size_t payload_len, uint16_t *crc)
+void fpga_wrcmd(uint8_t cmd, const uint8_t *payload, size_t payload_len, uint32_t *crc)
 {
     // Expecting a write-mode command
     assert(cmd & 0x80);
@@ -387,13 +388,13 @@ void fpga_wrcmd(uint8_t cmd, const uint8_t *payload, size_t payload_len, uint16_
         dma_channel_abort(FPGA_QSPI_DMA_TX);
         dma_sniffer_disable();
 
-        if (crc) *crc = dma_hw->sniff_data;
+        if (crc) *crc = (uint16_t)dma_hw->sniff_data;
     }
 
     fpga_release();
 }
 
-void fpga_rdcmd(uint8_t cmd, uint8_t *result, size_t result_len, uint16_t *crc, bool slow)
+void fpga_rdcmd(uint8_t cmd, uint8_t *result, size_t result_len, uint32_t *crc, bool slow)
 {
     // Expecting a read-mode command
     assert(!(cmd & 0x80));
@@ -470,7 +471,7 @@ void fpga_rdcmd(uint8_t cmd, uint8_t *result, size_t result_len, uint16_t *crc, 
         dma_channel_abort(FPGA_QSPI_DMA_TX);
         dma_sniffer_disable();
 
-        if (crc) *crc = dma_hw->sniff_data;
+        if (crc) *crc = (uint16_t)dma_hw->sniff_data;
     }
 
     fpga_release();

@@ -257,6 +257,12 @@ bool IDEATAPIDevice::cmd_packet(ide_registers_t *regs)
     m_atapi_state.dma_requested = regs->feature & 0x01;
     m_atapi_state.crc_errors = 0;
 
+    if (m_atapi_state.dma_requested && m_atapi_state.udma_mode < 0)
+    {
+        dbgmsg("---- Host requested DMA transfer while DMA mode is not selected, enabling UDMA0!");
+        m_atapi_state.udma_mode = 0;
+    }
+
     if (m_atapi_state.bytes_req == 0)
     {
         // "the host should not set the byte count limit to zero. If the host sets the byte count limit to
@@ -282,6 +288,13 @@ bool IDEATAPIDevice::cmd_packet(ide_registers_t *regs)
         if ((uint32_t)(millis() - start) > 10000)
         {
             logmsg("IDEATAPIDevice::cmd_packet() command read timeout");
+            ide_phy_stop_transfers();
+            return false;
+        }
+
+        if (ide_phy_is_command_interrupted())
+        {
+            dbgmsg("IDEATAPIDevice::cmd_packet() interrupted");
             ide_phy_stop_transfers();
             return false;
         }
@@ -411,6 +424,11 @@ bool IDEATAPIDevice::atapi_send_data_block(const uint8_t *data, uint16_t blocksi
                 logmsg("IDEATAPIDevice::atapi_send_data_block() data write timeout");
                 return false;
             }
+            if (ide_phy_is_command_interrupted())
+            {
+                dbgmsg("IDEATAPIDevice::atapi_send_data_block() interrupted");
+                return false;
+            }
         }
 
         ide_phy_write_block(data, blocksize);
@@ -429,6 +447,12 @@ bool IDEATAPIDevice::atapi_send_wait_finish()
         if ((uint32_t)(millis() - start) > 10000)
         {
             logmsg("IDEATAPIDevice::atapi_send_wait_finish() data write timeout");
+            return false;
+        }
+
+        if (ide_phy_is_command_interrupted())
+        {
+            dbgmsg("IDEATAPIDevice::atapi_send_wait_finish() interrupted");
             return false;
         }
     }
@@ -486,6 +510,12 @@ bool IDEATAPIDevice::atapi_recv_data(uint8_t *data, size_t blocksize, size_t num
                 ide_phy_stop_transfers();
                 return false;
             }
+
+            if (ide_phy_is_command_interrupted())
+            {
+                dbgmsg("IDEATAPIDevice::atapi_recv_data() interrupted");
+                return false;
+            }
         }
 
         // Read out previous block
@@ -519,6 +549,12 @@ bool IDEATAPIDevice::atapi_recv_data_block(uint8_t *data, uint16_t blocksize)
         {
             logmsg("IDEATAPIDevice::atapi_recv_data_block(", (int)blocksize, ") read timeout");
             ide_phy_stop_transfers();
+            return false;
+        }
+
+        if (ide_phy_is_command_interrupted())
+        {
+            dbgmsg("IDEATAPIDevice::atapi_recv_data_block() interrupted");
             return false;
         }
     }
@@ -606,6 +642,8 @@ bool IDEATAPIDevice::atapi_cmd_error(uint8_t sense_key, uint16_t sense_asc)
     ide_phy_get_regs(&regs);
     regs.error = IDE_ERROR_ABORT | (sense_key << 4);
     regs.sector_count = ATAPI_SCOUNT_IS_CMD | ATAPI_SCOUNT_TO_HOST;
+    regs.lba_mid = 0xFE;
+    regs.lba_high = 0xFF;
     ide_phy_set_regs(&regs);
     ide_phy_assert_irq(IDE_STATUS_DEVRDY | IDE_STATUS_ERR);
 
@@ -629,6 +667,8 @@ bool IDEATAPIDevice::atapi_cmd_ok()
     ide_phy_get_regs(&regs);
     regs.error = 0;
     regs.sector_count = ATAPI_SCOUNT_IS_CMD | ATAPI_SCOUNT_TO_HOST;
+    regs.lba_mid = 0xFE;
+    regs.lba_high = 0xFF;
     ide_phy_set_regs(&regs);
     ide_phy_assert_irq(IDE_STATUS_DEVRDY);
 

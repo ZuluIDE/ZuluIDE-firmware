@@ -41,6 +41,9 @@ void ide_phy_reset(const ide_phy_config_t* config);
 // Returns IDE_EVENT_NONE if no new events.
 ide_event_t ide_phy_get_events();
 
+// Check if there is an event that should interrupt current command execution
+bool ide_phy_is_command_interrupted();
+
 // Get current state of IDE registers
 void ide_phy_get_regs(ide_registers_t *regs);
 
