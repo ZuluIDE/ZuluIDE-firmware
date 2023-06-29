@@ -79,8 +79,6 @@ void ide_phy_reset(const ide_phy_config_t* config)
     g_ide_phy.config = *config;
     g_ide_phy.watchdog_error = false;
 
-    fpga_init();
-
     uint8_t cfg = 0;
     if (config->enable_dev0)       cfg |= 0x01;
     if (config->enable_dev1)       cfg |= 0x02;

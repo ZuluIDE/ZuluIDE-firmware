@@ -250,6 +250,21 @@ bool fpga_init(bool force_reinit, bool do_auth)
         logmsg("WARNING: FPGA reports protocol version ", (int)version, ", firmware is built for version ", (int)FPGA_PROTOCOL_VERSION);
     }
 
+    if (reloaded && do_auth)
+    {
+        delay(2);
+        if (memcmp(PLATFORM_LICENSE_KEY_ADDR, "\x00\x00\x00\x00\x00", 5) == 0 ||
+            memcmp(PLATFORM_LICENSE_KEY_ADDR, "\xFF\xFF\xFF\xFF\xFF", 5) == 0)
+        {
+            logmsg("ERROR: FPGA license key missing from flash! (new device or flash erased?)");
+        }
+        else
+        {
+            // Authenticate license with code from RP2040 flash
+            fpga_wrcmd(FPGA_CMD_LICENSE_AUTH, PLATFORM_LICENSE_KEY_ADDR, 32);
+        }
+    }
+
     if (!fpga_selftest())
     {
         logmsg("ERROR: FPGA self-test failed");
@@ -281,20 +296,6 @@ bool fpga_init(bool force_reinit, bool do_auth)
                 logmsg("Expected result:   ", regs[0], " ", regs[1]);
                 logmsg("Repeated readback: ", regs_readback[0], " ", regs_readback[1]);
             }
-        }
-    }
-
-    if (reloaded && do_auth)
-    {
-        if (memcmp(PLATFORM_LICENSE_KEY_ADDR, "\x00\x00\x00\x00\x00", 5) == 0 ||
-            memcmp(PLATFORM_LICENSE_KEY_ADDR, "\xFF\xFF\xFF\xFF\xFF", 5) == 0)
-        {
-            logmsg("ERROR: FPGA license key missing from flash! (new device or flash erased?)");
-        }
-        else
-        {
-            // Authenticate license with code from RP2040 flash
-            fpga_wrcmd(FPGA_CMD_LICENSE_AUTH, PLATFORM_LICENSE_KEY_ADDR, 32);
         }
     }
 
