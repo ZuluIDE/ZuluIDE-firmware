@@ -50,16 +50,29 @@ static IDEDevice *g_ide_device;
 #define BLINK_ERROR_NO_IMAGES    3
 #define BLINK_ERROR_NO_SD_CARD 5
 
-static int g_blink_status_code = -2;
+
+static int g_blink_status_count = 0;
+static bool g_blink_new_count = false;
 
 // Handle LED blinking without delaying other processing
 void blink_poll()
 {
     static bool prev_state;
     static bool prev_phase;
+    static int blink_status_code = -2;
+
+    if (g_blink_new_count)
+    {
+        if (blink_status_code <= -2)
+        {
+            blink_status_code = g_blink_status_count;
+            g_blink_new_count = false;
+        }
+    }
+
     bool phase = millis() & 256;
 
-    if (g_blink_status_code > 0)
+    if (blink_status_code > 0)
     {
         if (phase && !prev_phase)
         {
@@ -70,15 +83,15 @@ void blink_poll()
         {
             LED_OFF();
             prev_state = false;
-            g_blink_status_code -= 1;
+            blink_status_code -= 1;
         }
     }
-    else if (g_blink_status_code > -2)
+    else if (blink_status_code > -2)
     {
         // Implement delay between blink codes
         if (!phase && prev_phase)
         {
-            g_blink_status_code -= 1;
+            blink_status_code -= 1;
         }
     }
     else if (prev_state)
@@ -91,10 +104,9 @@ void blink_poll()
 
 void blinkStatus(int count)
 {
-    if (g_blink_status_code <= -2)
-    {
-        g_blink_status_code = count;
-    }
+    g_blink_status_count = count;
+    g_blink_new_count = true;
+
 }
 
 /*********************************/
@@ -262,41 +274,56 @@ void zuluide_setup(void)
 {
     platform_init();
     platform_late_init();
-
-    g_sdcard_present = mountSDCard();
-
-    if(!g_sdcard_present)
+    bool first_run = true;
+    for(;;)
     {
-        logmsg("SD card init failed, sdErrorCode: ", (int)SD.sdErrorCode(),
-                     " sdErrorData: ", (int)SD.sdErrorData());
-    }
-    else
-    {
-        if (SD.clusterCount() == 0)
+        g_sdcard_present = mountSDCard();
+
+        if(!g_sdcard_present)
         {
-            logmsg("SD card without filesystem!");
+            if (first_run)
+            {
+                logmsg("SD card init failed, sdErrorCode: ", (int)SD.sdErrorCode(),
+                            " sdErrorData: ", (int)SD.sdErrorData());
+            }
         }
-
-        print_sd_info();
-    }
-
-    if (g_sdcard_present)
-    {
-        load_image();
-
-        init_logfile();
-        if (ini_getbool("IDE", "DisableStatusLED", false, CONFIGFILE))
+        else
         {
-            platform_disable_led();
+            if (SD.clusterCount() == 0)
+            {
+                if (first_run)
+                {
+                    logmsg("SD card without filesystem!");
+                }
+            }
+
+            print_sd_info();
+            
+            if (g_sdcard_present)
+            {
+                load_image();
+
+                init_logfile();
+                if (ini_getbool("IDE", "DisableStatusLED", false, CONFIGFILE))
+                {
+                    platform_disable_led();
+                }
+
+                if (platform_get_device_id() == 1)
+                    ide_protocol_init(NULL, g_ide_device); // Secondary device
+                else
+                    ide_protocol_init(g_ide_device, NULL); // Primary device
+
+                logmsg("Initialization complete!");
+                blinkStatus(BLINK_STATUS_OK);
+                break;
+            }
+
         }
+        first_run = false;
+        blinkStatus(BLINK_ERROR_NO_SD_CARD);
+        blink_poll();
     }
-
-    if (platform_get_device_id() == 1)
-        ide_protocol_init(NULL, g_ide_device); // Secondary device
-    else
-        ide_protocol_init(g_ide_device, NULL); // Primary device
-
-    logmsg("Initialization complete!");
 }
 
 void zuluide_main_loop(void)
@@ -309,6 +336,7 @@ void zuluide_main_loop(void)
         // Give time for basic initialization to run
         // before checking SD card
         sd_card_check_time = millis() + 1000;
+        first_loop = false;
     }
 
     platform_reset_watchdog();
