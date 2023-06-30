@@ -54,6 +54,23 @@ static bool g_ide_reset_after_init_done;
 
 static void do_phy_reset()
 {
+    if (g_ide_config.enable_dev0 && !g_ide_config.enable_dev1)
+    {
+        bool force_drive1 = ini_getbool("IDE", "has_drive1", false, CONFIGFILE);
+        bool force_no_drive1 = !ini_getbool("IDE", "has_drive1", true, CONFIGFILE);
+
+        if (force_drive1)
+        {
+            dbgmsg("-- Config has_drive1=1, forcing second drive presence");
+            g_drive1_detected = true;
+        }
+        else if (force_no_drive1)
+        {
+            dbgmsg("-- Config has_drive1=0, forcing second drive absence");
+            g_drive1_detected = false;
+        }
+    }
+
     g_ide_config.enable_dev0 = (g_ide_devices[0] != NULL);
     g_ide_config.enable_dev1 = (g_ide_devices[1] != NULL);
     g_ide_config.enable_dev1_zeros = (g_ide_devices[0] != NULL)
