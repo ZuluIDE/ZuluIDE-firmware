@@ -323,6 +323,7 @@ void zuluide_setup(void)
         first_run = false;
         blinkStatus(BLINK_ERROR_NO_SD_CARD);
         blink_poll();
+        platform_poll();
     }
 }
 
