@@ -20,6 +20,7 @@ protected:
     virtual bool atapi_set_cd_speed(const uint8_t *cmd);
     virtual bool atapi_read_disc_information(const uint8_t *cmd);
     virtual bool atapi_read_track_information(const uint8_t *cmd);
+    virtual bool atapi_read_sub_channel(const uint8_t *cmd);
     virtual bool atapi_read_toc(const uint8_t *cmd);
     virtual bool atapi_read_header(const uint8_t *cmd);
     virtual bool atapi_read_cd(const uint8_t *cmd);
@@ -28,6 +29,11 @@ protected:
     bool doReadTOC(bool MSF, uint8_t track, uint16_t allocationLength);
     bool doReadSessionInfo(bool MSF, uint16_t allocationLength);
     bool doReadFullTOC(uint8_t session, uint16_t allocationLength, bool useBCD);
+    bool doReadSubChannel(bool time, bool subq, uint8_t parameter, uint8_t track_number, uint16_t allocation_length);
+
+
+    void cdromGetAudioPlaybackStatus(uint8_t *status, uint32_t *current_lba, bool current_only);
+
 
     // Read handling, possible conversion of sector formats
     struct {

@@ -31,6 +31,7 @@ X(ATAPI_CMD_VERIFY10                      , 0x2F) \
 X(ATAPI_CMD_SYNCHRONIZE_CACHE             , 0x35) \
 X(ATAPI_CMD_WRITE_BUFFER                  , 0x3B) \
 X(ATAPI_CMD_READ_BUFFER                   , 0x3C) \
+X(ATAPI_CMD_READ_SUB_CHANNEL              , 0x42) \
 X(ATAPI_CMD_READ_TOC                      , 0x43) \
 X(ATAPI_CMD_READ_HEADER                   , 0x44) \
 X(ATAPI_CMD_GET_CONFIGURATION             , 0x46) \
