@@ -363,6 +363,7 @@ bool IDECDROMDevice::handle_atapi_command(const uint8_t *cmd)
         case ATAPI_CMD_SET_CD_SPEED:            return atapi_set_cd_speed(cmd);
         case ATAPI_CMD_READ_DISC_INFORMATION:   return atapi_read_disc_information(cmd);
         case ATAPI_CMD_READ_TRACK_INFORMATION:  return atapi_read_track_information(cmd);
+        case ATAPI_CMD_READ_SUB_CHANNEL:        return atapi_read_sub_channel(cmd);
         case ATAPI_CMD_READ_TOC:                return atapi_read_toc(cmd);
         case ATAPI_CMD_READ_HEADER:             return atapi_read_header(cmd);
         case ATAPI_CMD_READ_CD:                 return atapi_read_cd(cmd);
@@ -480,6 +481,19 @@ bool IDECDROMDevice::atapi_read_track_information(const uint8_t *cmd)
 
     atapi_send_data(buf, std::min<uint32_t>(allocationLength, len));
     return atapi_cmd_ok();
+}
+
+bool IDECDROMDevice::atapi_read_sub_channel(const uint8_t * cmd)
+{
+    if (!m_image) return atapi_cmd_error(ATAPI_SENSE_NOT_READY, ATAPI_ASC_NO_MEDIUM);
+
+    bool time = (cmd[1] & 0x02);
+    bool subq = (cmd[2] & 0x40);
+    uint8_t parameter = cmd[3];
+    uint8_t track_number = cmd[6];
+    uint16_t allocationLength = (((uint32_t) cmd[7]) << 8) + cmd[8];
+
+    return doReadSubChannel(time, subq, parameter, track_number, allocationLength);
 }
 
 bool IDECDROMDevice::atapi_read_toc(const uint8_t *cmd)
@@ -718,6 +732,117 @@ bool IDECDROMDevice::doReadFullTOC(uint8_t session, uint16_t allocationLength, b
 
     atapi_send_data(buf, std::min<uint32_t>(allocationLength, len));
     return atapi_cmd_ok();
+}
+
+
+/**************************************/
+/* CD-ROM audio playback              */
+/**************************************/
+
+void IDECDROMDevice::cdromGetAudioPlaybackStatus(uint8_t *status, uint32_t *current_lba, bool current_only)
+{
+    IDEImageFile *image = (IDEImageFile*) m_image;
+#ifdef ENABLE_AUDIO_OUTPUT
+// TODO Implement for ZuluIDE - copied directly from ZuluSCSI
+    if (status) {
+        uint8_t target = img.scsiId & 7;
+        if (current_only) {
+            *status = audio_is_playing(target) ? 1 : 0;
+        } else {
+            *status = (uint8_t) audio_get_status_code(target);
+        }
+    }
+#else
+    if (status) *status = 0; // audio status code for 'unsupported/invalid' and not-playing indicator
+#endif
+    if (current_lba)
+    {
+        if (image && image->is_open()) {
+            *current_lba = image->file_position() / 2352;
+        } else {
+            *current_lba = 0;
+        }
+    }
+}
+
+bool IDECDROMDevice::doReadSubChannel(bool time, bool subq, uint8_t parameter, uint8_t track_number, uint16_t allocation_length)
+{
+    uint8_t *buf = m_buffer.bytes;
+
+    if (parameter == 0x01)
+    {
+        uint8_t audiostatus;
+        uint32_t lba;
+        cdromGetAudioPlaybackStatus(&audiostatus, &lba, false);
+        dbgmsg("------ Get audio playback position: status ", (int)audiostatus, " lba ", (int)lba);
+
+        // Fetch current track info
+        CUETrackInfo trackinfo = getTrackFromLBA(lba);
+
+        // Request sub channel data at current playback position
+        *buf++ = 0; // Reserved
+        *buf++ = audiostatus;
+
+        int len;
+        if (subq)
+        {
+            len = 12;
+            *buf++ = 0;  // Subchannel data length (MSB)
+            *buf++ = len; // Subchannel data length (LSB)
+            *buf++ = 0x01; // Subchannel data format
+            *buf++ = (trackinfo.track_mode == CUETrack_AUDIO ? 0x10 : 0x14);
+            *buf++ = trackinfo.track_number;
+            *buf++ = (lba >= trackinfo.data_start) ? 1 : 0; // Index number (0 = pregap)
+            if (time)
+            {
+                *buf++ = 0;
+                LBA2MSF(lba, buf, false);
+                dbgmsg("------ ABS M ", *buf, " S ", *(buf+1), " F ", *(buf+2));
+                buf += 3;
+            }
+            else
+            {
+                *buf++ = (lba >> 24) & 0xFF; // Absolute block address
+                *buf++ = (lba >> 16) & 0xFF;
+                *buf++ = (lba >>  8) & 0xFF;
+                *buf++ = (lba >>  0) & 0xFF;
+            }
+
+            int32_t relpos = (int32_t)lba - (int32_t)trackinfo.data_start;
+            if (time)
+            {
+                *buf++ = 0;
+                LBA2MSF(relpos, buf, true);
+                dbgmsg("------ REL M ", *buf, " S ", *(buf+1), " F ", *(buf+2));
+                buf += 3;
+            }
+            else
+            {
+                uint32_t urelpos = relpos;
+                *buf++ = (urelpos >> 24) & 0xFF; // Track relative position (may be negative)
+                *buf++ = (urelpos >> 16) & 0xFF;
+                *buf++ = (urelpos >>  8) & 0xFF;
+                *buf++ = (urelpos >>  0) & 0xFF;
+            }
+        }
+        else
+        {
+            len = 0;
+            *buf++ = 0;
+            *buf++ = 0;
+        }
+        len += 4;
+
+        if (len > allocation_length) len = allocation_length;
+        atapi_send_data(buf, std::min<uint32_t>(allocation_length, len));
+        return atapi_cmd_ok();
+    }
+    else
+    {
+        dbgmsg("---- Unsupported subchannel request");
+        return atapi_cmd_error(ATAPI_SENSE_ILLEGAL_REQ, ATAPI_ASC_INVALID_FIELD);;
+    }
+
 }
 
 bool IDECDROMDevice::doRead(uint32_t lba, uint32_t transfer_len)

@@ -74,6 +74,8 @@ public:
 
     virtual bool get_filename(char *buf, size_t buflen);
     virtual uint64_t capacity();
+    virtual uint64_t file_position();
+    virtual bool is_open();
     virtual bool writable();
     virtual bool read(uint64_t startpos, size_t blocksize, size_t num_blocks, Callback *callback);
     virtual bool write(uint64_t startpos, size_t blocksize, size_t num_blocks, Callback *callback);

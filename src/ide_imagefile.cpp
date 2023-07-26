@@ -221,6 +221,16 @@ uint64_t IDEImageFile::capacity()
     return m_capacity;
 }
 
+uint64_t IDEImageFile::file_position()
+{
+    return m_file.position();
+}
+
+bool IDEImageFile::is_open()
+{
+    return m_file.isOpen();
+}
+
 bool IDEImageFile::writable()
 {
     return !m_read_only;
