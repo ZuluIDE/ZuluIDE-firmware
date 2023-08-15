@@ -575,9 +575,19 @@ void usb_command_poll()
 // Can be left empty or used for platform-specific processing.
 void platform_poll()
 {
+    static uint32_t prev_poll_time;
     static bool license_log_done = false;
     static bool license_from_sd_done = false;
 
+    // No point polling the USB hardware more often than once per millisecond
+    uint32_t time_now = millis();
+    if (time_now == prev_poll_time)
+    {
+        return;
+    }
+    prev_poll_time = time_now;
+
+    // Check if there is license file on SD card
     if (!license_from_sd_done && g_sdcard_present)
     {
         license_from_sd_done = true;
@@ -596,7 +606,8 @@ void platform_poll()
         }
     }
 
-    if (!license_log_done && millis() >= 2000)
+    // Log FPGA license status after initial delay from boot
+    if (!license_log_done && time_now >= 2000)
     {
         uint8_t response[21];
         fpga_rdcmd(FPGA_CMD_LICENSE_CHECK, response, 21);
@@ -620,8 +631,9 @@ void platform_poll()
         license_log_done = true;
     }
 
-    usb_log_poll();
+    // Monitor supply voltage and process USB events
     adc_poll();
+    usb_log_poll();
     usb_command_poll();
 }
 
