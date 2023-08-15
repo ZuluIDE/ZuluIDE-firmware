@@ -340,50 +340,104 @@ bool IDEATAPIDevice::set_packet_device_signature(uint8_t error, bool was_reset)
     return true;
 }
 
-bool IDEATAPIDevice::atapi_send_data(const uint8_t *data, size_t blocksize, size_t num_blocks, bool wait_finish)
+bool IDEATAPIDevice::atapi_send_data(const uint8_t *data, size_t blocksize, size_t num_blocks)
 {
-    if (blocksize < 600 && wait_finish)
-    {
-        // Report data for command responses
-        dbgmsg("---- ATAPI send ", (int)num_blocks, "x", (int)blocksize, " bytes: ",
-            bytearray((const uint8_t*)data, blocksize * num_blocks));
-    }
+    // Report data for command responses
+    dbgmsg("---- ATAPI send ", (int)num_blocks, "x", (int)blocksize, " bytes: ",
+        bytearray((const uint8_t*)data, blocksize * num_blocks));
 
-    size_t phy_max_blocksize = m_phy_caps.max_blocksize;
-    size_t max_blocksize = std::min<size_t>(phy_max_blocksize, m_atapi_state.bytes_req);
-    if (blocksize > max_blocksize)
-    {
-        // Have to split the blocks for phy
-        size_t split = (blocksize + max_blocksize - 1) / max_blocksize;
-        assert(blocksize % split == 0);
-        blocksize /= split;
-        num_blocks *= split;
-    }
-    else
-    {
-        // Combine blocks for better performance
-        while (blocksize * 2 < max_blocksize && (num_blocks & 1) == 0)
-        {
-            blocksize *= 2;
-            num_blocks >>= 1;
-        }
-    }
+    size_t max_blocksize = std::min<size_t>(m_phy_caps.max_blocksize, m_atapi_state.bytes_req);
 
     for (size_t i = 0; i < num_blocks; i++)
     {
-        if (!atapi_send_data_block(data + blocksize * i, blocksize))
+        size_t sent = 0;
+        while (sent + max_blocksize < blocksize)
+        {
+            // Send smaller pieces when max block size exceeded
+            if (!atapi_send_data_block(data + blocksize * i + sent, max_blocksize))
+            {
+                return false;
+            }
+
+            sent += max_blocksize;
+        }
+
+        // Send rest as single block (common case)
+        if (!atapi_send_data_block(data + blocksize * i + sent, blocksize))
         {
             return false;
         }
     }
 
-    if (wait_finish)
+    return atapi_send_wait_finish();
+}
+
+ssize_t IDEATAPIDevice::atapi_send_data_async(const uint8_t *data, size_t blocksize, size_t num_blocks)
+{
+    if (m_atapi_state.data_state == ATAPI_DATA_WRITE &&
+        blocksize == m_atapi_state.blocksize)
     {
-        return atapi_send_wait_finish();
+        // Fast path, transfer size has already been set up
+        size_t blocks_sent = 0;
+        while (blocks_sent < num_blocks && ide_phy_can_write_block())
+        {
+            ide_phy_write_block(data, blocksize);
+            blocks_sent++;
+        }
+
+        if (blocks_sent == 0)
+        {
+            if (ide_phy_is_command_interrupted())
+            {
+                dbgmsg("atapi_send_data_async(): interrupted");
+                return -1;
+            }
+        }
+
+        return blocks_sent;
+    }
+
+    size_t max_blocksize = std::min<size_t>(m_phy_caps.max_blocksize, m_atapi_state.bytes_req);
+    if (blocksize > max_blocksize)
+    {
+        dbgmsg("-- atapi_send_data_async(): Block size ", (int)blocksize, " exceeds limit ", (int)max_blocksize,
+               ", using atapi_send_data() instead");
+
+        if (atapi_send_data(data, blocksize, num_blocks))
+        {
+            return num_blocks;
+        }
+        else
+        {
+            return -1;
+        }
     }
     else
     {
-        return true;
+        // Start transmission of first data block
+        if (atapi_send_data_block(data, blocksize))
+        {
+            return 1;
+        }
+        else
+        {
+            return -1;
+        }
+    }
+}
+
+bool IDEATAPIDevice::atapi_send_data_is_ready(size_t blocksize)
+{
+    if (m_atapi_state.data_state != ATAPI_DATA_WRITE
+        || blocksize != m_atapi_state.blocksize)
+    {
+        // Start of transfer or switch of block size
+        return ide_phy_is_write_finished();
+    }
+    else
+    {
+        // Continuation of transfer
+        return ide_phy_can_write_block();
     }
 }
 
@@ -1038,14 +1092,7 @@ bool IDEATAPIDevice::doRead(uint32_t lba, uint32_t transfer_len)
 ssize_t IDEATAPIDevice::read_callback(const uint8_t *data, size_t blocksize, size_t num_blocks)
 {
     platform_poll();
-    if (!atapi_send_data(data, blocksize, num_blocks, false))
-    {
-        return -1;
-    }
-    else
-    {
-        return num_blocks;
-    }
+    return atapi_send_data_async(data, blocksize, num_blocks);
 }
 
 // Parse ATAPI WRITE command

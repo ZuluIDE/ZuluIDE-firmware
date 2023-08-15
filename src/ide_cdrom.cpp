@@ -997,16 +997,23 @@ bool IDECDROMDevice::doReadCD(uint32_t lba, uint32_t length, uint8_t sector_type
 
 ssize_t IDECDROMDevice::read_callback(const uint8_t *data, size_t blocksize, size_t num_blocks)
 {
+    platform_poll();
+
+    if (num_blocks == 0)
+    {
+        return 0;
+    }
+
     if (m_cd_read_format.sector_length_file == m_cd_read_format.sector_length_out)
     {
         // Simple case, send data directly
-        atapi_send_data(data, blocksize, num_blocks, false);
-        return num_blocks;
+        return atapi_send_data_async(data, blocksize, num_blocks);
     }
 
     // Reformat sector data for transmission
     assert(sizeof(m_buffer) >= m_cd_read_format.sector_length_out);
-    for (size_t i = 0; i < num_blocks; i++)
+    size_t blocks_done = 0;
+    while (blocks_done < num_blocks && atapi_send_data_is_ready(m_cd_read_format.sector_length_out))
     {
         uint8_t *buf = m_buffer.bytes;
         uint32_t current_lba = m_cd_read_format.start_lba + m_cd_read_format.sectors_done;
@@ -1029,7 +1036,7 @@ ssize_t IDECDROMDevice::read_callback(const uint8_t *data, size_t blocksize, siz
 
         if (m_cd_read_format.sector_data_length > 0)
         {
-            const uint8_t *data_start = data + blocksize * i + m_cd_read_format.sector_data_skip;
+            const uint8_t *data_start = data + blocksize * blocks_done + m_cd_read_format.sector_data_skip;
             size_t data_length = m_cd_read_format.sector_data_length;
             memcpy(buf, data_start, data_length);
             buf += data_length;
@@ -1060,15 +1067,26 @@ ssize_t IDECDROMDevice::read_callback(const uint8_t *data, size_t blocksize, siz
         }
 
         assert(buf == m_buffer.bytes + m_cd_read_format.sector_length_out);
-        if (!atapi_send_data(m_buffer.bytes, m_cd_read_format.sector_length_out, 1, false))
+        ssize_t status = atapi_send_data_async(m_buffer.bytes, m_cd_read_format.sector_length_out, 1);
+
+        if (status < 0)
         {
             dbgmsg("-- IDECDROMDevice atapi_send_data failed, length ", (int)m_cd_read_format.sector_length_out);
             return -1;
         }
-        m_cd_read_format.sectors_done += 1;
+        else if (status == 0)
+        {
+            // Hardware buffer is now full, return from callback
+            break;
+        }
+        else
+        {
+            // Block written to hardware buffer successfully
+            m_cd_read_format.sectors_done += 1;
+        }
     }
 
-    return num_blocks;
+    return blocks_done;
 }
 
 bool IDECDROMDevice::loadAndValidateCueSheet(const char *cuesheetname)

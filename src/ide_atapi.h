@@ -96,10 +96,6 @@ protected:
         uint16_t word[1176];
         uint8_t bytes[2352];
     } m_buffer;
-
-    // // Data transfer state
-    // volatile ide_msg_status_t m_transfer_req_status[ATAPI_TRANSFER_REQ_COUNT];
-    // ide_phy_msg_t m_transfer_reqs[ATAPI_TRANSFER_REQ_COUNT];
     
     // IDE command handlers
     virtual bool cmd_set_features(ide_registers_t *regs);
@@ -108,12 +104,30 @@ protected:
     virtual bool set_packet_device_signature(uint8_t error, bool was_reset);
     
     // Methods used by ATAPI command implementations
-    bool set_atapi_byte_count(uint16_t byte_count);
-    bool atapi_send_data(const uint8_t *data, size_t blocksize, size_t num_blocks = 1, bool wait_finish = true);
+
+    // Send one or multiple data blocks synchronously and wait for transfer to finish
+    bool atapi_send_data(const uint8_t *data, size_t blocksize, size_t num_blocks = 1);
+
+    // Send one or multiple data block asynchronously.
+    // Returns number of blocks written to buffer, or negative on error.
+    ssize_t atapi_send_data_async(const uint8_t *data, size_t blocksize, size_t num_blocks = 1);
+
+    // Query whether calling atapi_send_data_block() would proceed immediately.
+    bool atapi_send_data_is_ready(size_t blocksize);
+
+    // Send single data block. Waits for space in buffer, but doesn't wait for new transfer to finish.
     bool atapi_send_data_block(const uint8_t *data, uint16_t blocksize);
+
+    // Wait for any previously started transfers to finish
     bool atapi_send_wait_finish();
+
+    // Receive one or multiple data blocks synchronously
     bool atapi_recv_data(uint8_t *data, size_t blocksize, size_t num_blocks = 1);
+
+    // Receive single data block
     bool atapi_recv_data_block(uint8_t *data, uint16_t blocksize);
+
+    // Report error or successful completion of ATAPI command
     bool atapi_cmd_error(uint8_t sense_key, uint16_t sense_asc);
     bool atapi_cmd_ok();
 
