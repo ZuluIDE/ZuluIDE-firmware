@@ -154,7 +154,10 @@ void ide_protocol_poll()
 
             if (!device)
             {
-                dbgmsg("-- Ignoring command for device not present");
+                dbgmsg("-- Command was for a device that is not present - reporting failure");
+                regs.error = IDE_ERROR_ABORT;
+                ide_phy_set_regs(&regs);
+                ide_phy_assert_irq(IDE_STATUS_DEVRDY | IDE_STATUS_ERR);
                 return;
             }
 
