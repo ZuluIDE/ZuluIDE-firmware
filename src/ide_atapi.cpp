@@ -70,6 +70,7 @@ bool IDEATAPIDevice::handle_command(ide_registers_t *regs)
             return set_packet_device_signature(IDE_ERROR_ABORT, false);
 
         // Supported IDE commands
+        case IDE_CMD_NOP: return cmd_nop(regs);
         case IDE_CMD_SET_FEATURES: return cmd_set_features(regs);
         case IDE_CMD_IDENTIFY_PACKET_DEVICE: return cmd_identify_packet_device(regs);
         case IDE_CMD_PACKET: return cmd_packet(regs);
@@ -90,6 +91,15 @@ void IDEATAPIDevice::handle_event(ide_event_t evt)
         m_atapi_state.sense_asc = ATAPI_ASC_RESET_OCCURRED;
         set_packet_device_signature(0, true);
     }
+}
+
+bool IDEATAPIDevice::cmd_nop(ide_registers_t *regs)
+{
+    // CMD_NOP always fails with CMD_ABORTED
+    regs->error = IDE_ERROR_ABORT;
+    ide_phy_set_regs(regs);
+    ide_phy_assert_irq(IDE_STATUS_DEVRDY | IDE_STATUS_ERR);
+    return true;
 }
 
 // Set configuration based on register contents

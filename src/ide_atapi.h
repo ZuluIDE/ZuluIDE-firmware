@@ -98,6 +98,7 @@ protected:
     } m_buffer;
     
     // IDE command handlers
+    virtual bool cmd_nop(ide_registers_t *regs);
     virtual bool cmd_set_features(ide_registers_t *regs);
     virtual bool cmd_identify_packet_device(ide_registers_t *regs);
     virtual bool cmd_packet(ide_registers_t *regs);
