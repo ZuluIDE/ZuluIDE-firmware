@@ -11,7 +11,7 @@ Currently `.iso` image files, as well as .bin/.cue files, are supported. First i
 Log files and error indications
 -------------------------------
 Log messages are stored in `zululog.txt`, which is cleared on every boot.
-Normally only basic initialization information is stored, but switching the `DBG` DIP switch on will cause every SCSI command to be logged, once the board is power cycled.
+Normally only basic initialization information is stored, but switching the `DEBUG` DIP switch on will cause every IDE command to be logged, once the board is power cycled.
 
 The indicator LED will normally report disk access.
 It also reports following status conditions:
@@ -43,11 +43,10 @@ DIP switches
 ------------
 There are 3 DIP switches on board:
 
-1. **CABLE SEL**: Enable cable selection of IDE drive id. (**TODO**: Implement and test)
-2. **PRI/SEC**: When CABLE SEL is off, this DIP switch determined IDE drive id. Set to OFF for primary drive and ON for secondary. (**TODO**: Implement and test)
+1. **CABLE SEL**: Enable cable selection of IDE drive id
+2. **PRI/SEC**: When CABLE SEL is off, this DIP switch determins IDE drive id. Set to OFF for primary drive and ON for secondary.
 3. **DEBUG**: Enable debug log messages
-
-In addition to the DIP switches, there is a momentary-contact button, labeled BOOTLDR. If the bootloader button is held down at power-on, the board will not load its firmware, and will instead boot the in-ROM bootloader, and will wait for a .uf2 file to be copied to it via USB.
+4. **BOOTLDR**: When BOOTLDR is on, the board will not load its firmware, and will instead boot the in-ROM bootloader, and will wait for a .uf2 file to be copied to it via USB.
 
 Project structure
 -----------------
