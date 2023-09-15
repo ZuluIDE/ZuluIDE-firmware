@@ -46,7 +46,14 @@ There are 3 DIP switches on board:
 1. **CABLE SEL**: Enable cable selection of IDE drive id
 2. **PRI/SEC**: When CABLE SEL is off, this DIP switch determins IDE drive id. Set to OFF for primary drive and ON for secondary.
 3. **DEBUG**: Enable debug log messages
-4. **BOOTLDR**: When BOOTLDR is on, the board will not load its firmware, and will instead boot the in-ROM bootloader, and will wait for a .uf2 file to be copied to it via USB.
+
+In addition to the DIP switches, there is a momentary-contact button,
+labeled BOOTLDR. If the bootloader button is held down at power-on,
+the board will not load its firmware, and will instead boot the in-ROM
+bootloader, and will wait for a .uf2 file to be copied to it via USB.
+
+In hardware revisions before PCB Rev 2023e there is a fourth DIP
+switch for BOOTLDR instead of a button.
 
 Project structure
 -----------------
