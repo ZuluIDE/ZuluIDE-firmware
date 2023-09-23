@@ -6,7 +6,7 @@ Currently it supports emulating ATAPI CD-ROM drives, by providing read-only acce
 
 Image files
 -----------
-Currently `.iso` image files, as well as .bin/.cue files, are supported. First image alphabetically is used.
+Currently `.iso` image files, as well as `.bin/.cue` files, are supported. The first image alphabetically is used.
 
 Log files and error indications
 -------------------------------
