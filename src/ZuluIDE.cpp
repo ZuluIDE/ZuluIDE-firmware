@@ -29,6 +29,7 @@
 #include "ide_protocol.h"
 #include "ide_cdrom.h"
 #include "ide_zipdrive.h"
+#include "ide_removable.h"
 
 bool g_sdcard_present;
 static FsFile g_logfile;
@@ -38,6 +39,7 @@ static uint32_t g_ide_buffer[IDE_BUFFER_SIZE / 4];
 // Currently supports one IDE device
 static IDECDROMDevice g_ide_cdrom;
 static IDEZipDrive g_ide_zipdrive;
+static IDERemovable g_ide_removable;
 static IDEImageFile g_ide_imagefile;
 static IDEDevice *g_ide_device;
 
@@ -117,8 +119,9 @@ static bool mountSDCard()
 {
     // Verify that all existing files have been closed
     g_logfile.close();
-    g_ide_cdrom.set_image(NULL);
-    g_ide_zipdrive.set_image(NULL);
+    g_ide_cdrom.set_image(nullptr);
+    g_ide_zipdrive.set_image(nullptr);
+    g_ide_removable.set_image(nullptr);
 
     // Check for the common case, FAT filesystem as first partition
     if (SD.begin(SD_CONFIG))
@@ -208,22 +211,47 @@ void load_image()
     // Clear any previous state
     g_ide_cdrom.set_image(nullptr);
     g_ide_zipdrive.set_image(nullptr);
+    g_ide_removable.set_image(nullptr);
     g_ide_imagefile = IDEImageFile((uint8_t*)g_ide_buffer, sizeof(g_ide_buffer));
     
     // Find image file
     char imagefile[MAX_FILE_PATH];
     if (g_ide_imagefile.find_next_image("/", NULL, imagefile, sizeof(imagefile)))
     {
-        int type = ini_getl("IDE", "type", 0, CONFIGFILE);
-        if (type == 2)
+        char device_name[65] = {0};
+        int type = 0;
+        ini_gets("IDE", "device", "", device_name, sizeof(device_name), CONFIGFILE);
+        if (strcasecmp(device_name, "cdrom") == 0)
+        {
+            type = 1;
+        }
+        else if (strcasecmp(device_name, "zip100") == 0)
+        {
+            type = 2;
+        }
+        else if (strcasecmp(device_name, "removable") == 0)
+        {
+            type = 3;
+        }
+        else if (type == 0)
+        {
+            type = ini_getl("IDE", "type", 0, CONFIGFILE);
+        }
+
+        if (type == 1)
+        {
+            logmsg("Device type: CD-ROM");
+            g_ide_device = &g_ide_cdrom;
+        }
+        else if (type == 2)
         {
             logmsg("Device type: ZIP drive");
             g_ide_device = &g_ide_zipdrive;
         }
-        else if (type == 1)
+        else if (type == 3)
         {
-            logmsg("Device type: CD-ROM");
-            g_ide_device = &g_ide_cdrom;
+            logmsg("Device type: Removable");
+            g_ide_device = &g_ide_removable;
         }
         else
         {
@@ -240,6 +268,11 @@ void load_image()
                 else if (strcasecmp(prefix, "zipd") == 0)
                 {
                     g_ide_device = &g_ide_zipdrive;
+                    g_ide_imagefile.set_prefix(prefix);
+                }
+                else if (strcasecmp(prefix, "remv") == 0)
+                {
+                    g_ide_device = &g_ide_removable;
                     g_ide_imagefile.set_prefix(prefix);
                 }
                 else
