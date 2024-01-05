@@ -1,5 +1,5 @@
 /**
- * ZuluIDE™ - Copyright (c) 2023 Rabbit Hole Computing™
+ * ZuluIDE™ - Copyright (c) 2024 Rabbit Hole Computing™
  *
  * ZuluIDE™ firmware is licensed under the GPL version 3 or any later version. 
  *
@@ -53,7 +53,6 @@ void IDERemovable::initialize(int devidx)
     m_removable.reinsert_media_on_inquiry =  ini_getbool("IDE", "reinsert_media_on_inquiry", true, CONFIGFILE);
 }
 
-// We always have the same capacity, no matter image size
 uint64_t IDERemovable::capacity()
 {
     return (m_image ? (m_image->capacity() / REMOVABLE_SECTORSIZE) * REMOVABLE_SECTORSIZE: 0);
