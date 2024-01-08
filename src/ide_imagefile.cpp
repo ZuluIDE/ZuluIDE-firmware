@@ -219,19 +219,24 @@ bool IDEImageFile::find_next_image(const char *directory, const char *prev_image
             // device type not defined by prefix
             if (extension)
             {
+                // if image is iso or bin/cue filter out non cdrom drives
                 if ((strcasecmp(extension, ".iso") == 0 ||
                     strcasecmp(extension, ".bin") == 0))
                 {
-                    if(get_drive_type() != DRIVE_TYPE_CDROM)
+                    if (get_drive_type() != DRIVE_TYPE_CDROM)
                     {
                         // device type does not match extention
                         continue;
                     }
                 }
-                else if (strcasecmp(extension, ".img") != 0)
+                // if device is cdrom filter out non iso and bin/cue files
+                if (get_drive_type() == DRIVE_TYPE_CDROM)
                 {
-                    // device type does not match extention
-                    continue;
+                    if ((strcasecmp(extension, ".iso") != 0 &&
+                        strcasecmp(extension, ".bin") != 0))
+                    {
+                            continue;
+                    }
                 }
             }
         }
