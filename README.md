@@ -2,11 +2,33 @@ ZuluIDE™ Firmware
 =================
 
 ZuluIDE™ is a hardware interface between IDE bus and SD cards.
-Currently it supports emulating ATAPI CD-ROM drives, by providing read-only access to image files stored on SD card.
+Currently it supports emulating ATAPI CD-ROM drives, Zip Drive 100, and a generic removable drive by providing access to image files stored on SD card.
+
+Drive Types
+-----------
+There are three ways to specify drive type
+1) In the zuluide.ini file under `[IDE]` set `Device = "[Type]"`
+    - `CDROM` - CD-ROM drive
+    - `Zip100` - Iomega Zip Drive 100
+    - `Removable` - Generic removable device
+2) Use a image filename prefix of:
+    - cdrm - for a CD-ROM drive
+    - zipd - for a Zip Drive 100
+    - remv - for a generic removable file
+3) If no prefix or `Device = [type]` used the drive will default to CD-ROM
 
 Image files
 -----------
-Currently `.iso` image files, as well as `.bin/.cue` files, are supported. The first image alphabetically is used.
+- Currently `.iso` image files, as well as `.bin/.cue` files, are supported for the CD-ROM drive. The images are  used alphabetically. 
+- For Zip drives and removable drives the extension is optional but also any extension is valid, except for `.iso`, `.bin/.cue`, and any extension on the [ignored list](#ignored-list). The images are used in alphabetic order.
+- If a prefix to specify the drive is used, all other files that wish to be inserted and ejected into the drive must have the same prefix. The files are used alphabetically.
+ - If ZuluIDE has defaulted to a CD-ROM drive, the first image that it finds on the SD card will be used a CD. 
+
+Any file on the [ignored list](#ignored-list) will not be used as an device image.
+
+Cycling Images
+--------------
+Currently the only way to cycle to the next image for a removable device is the eject the medium via the operating system. This will load the next valid file in alphabetic order.
 
 Log files and error indications
 -------------------------------
@@ -27,8 +49,6 @@ Hotplugging
 -----------
 The firmware supports hot-plug removal and reinsertion of SD card.
 The status led will blink continuously when card is not present, then blink once when card is reinserted successfully.
-
-When SD card is removed, the CD drive is reported as being empty.
 
 Programming & bootloader
 ------------------------
@@ -94,3 +114,13 @@ The firmware code is licensed under the GPL version 3 or any later version.
 The RP2040 platform utilizes a separate ICE5LP1K FPGA for IDE bus communication.
 Bitstream for the FPGA is provided in binary format and is licensed for free use and distribution on hardware produced by Rabbit Hole Computing™.
 Communication between the FPGA and the CPU uses QSPI interface documented in [rp2040_fpga.h](lib/ZuluIDE_platform_RP2040/rp2040_fpga.h).
+
+Ignored List
+------------
+Any file that starts with `zulu` is ignored
+
+The following common compression extensions are ignored:
+ ".tar", ".tgz", ".gz", ".bz2", ".tbz2", ".xz", ".zst", ".z", ".zip", ".zipx", ".rar", ".lzh", ".lha", ".lzo", ".lz4", ".arj", ".dmg", ".hqx", ".cpt", ".7z", ".s7z"
+
+The following document extensions are ignored:
+".cue", ".txt", ".rtf", ".md", ".nfo", ".pdf", ".doc"
