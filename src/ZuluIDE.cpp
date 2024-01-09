@@ -30,6 +30,7 @@
 #include "ide_cdrom.h"
 #include "ide_zipdrive.h"
 #include "ide_removable.h"
+#include "ide_imagefile.h"
 
 bool g_sdcard_present;
 static FsFile g_logfile;
@@ -214,83 +215,70 @@ void load_image()
     g_ide_removable.set_image(nullptr);
     g_ide_imagefile = IDEImageFile((uint8_t*)g_ide_buffer, sizeof(g_ide_buffer));
     
+    bool found_image = false;
+
+    char device_name[33] = {0};
+    ini_gets("IDE", "device", "", device_name, sizeof(device_name), CONFIGFILE);
+    drive_type_t type = DRIVE_TYPE_VIA_PREFIX;
+    if (strcasecmp(device_name, "cdrom") == 0)
+    {
+        type  = DRIVE_TYPE_CDROM;
+    }
+    else if (strcasecmp(device_name, "zip100") == 0)
+    {
+        type = DRIVE_TYPE_ZIP100;
+    }
+    else if (strcasecmp(device_name, "removable") == 0)
+    {
+        type = DRIVE_TYPE_REMOVABLE;
+    }
+    else if (device_name[0])
+    {
+        logmsg("Warning device = [name] invalid, defaulting to CDROM");
+        type = DRIVE_TYPE_CDROM;
+    }
+    else
+    {
+        type = (drive_type_t)ini_getl("IDE", "type", DRIVE_TYPE_VIA_PREFIX, CONFIGFILE);
+        if (type != DRIVE_TYPE_CDROM && type != DRIVE_TYPE_ZIP100 && type != DRIVE_TYPE_VIA_PREFIX)
+        {
+            logmsg("Warning type = ", (int) type, " is invalid, setting is also depreciated. Use device = [name]");
+            logmsg("Defaulting to device type using filename prefix");
+            type = DRIVE_TYPE_VIA_PREFIX;
+        }
+    }
+    g_ide_imagefile.set_drive_type(type);
+    
     // Find image file
     char imagefile[MAX_FILE_PATH];
     if (g_ide_imagefile.find_next_image("/", NULL, imagefile, sizeof(imagefile)))
     {
-        char device_name[65] = {0};
-        int type = 0;
-        ini_gets("IDE", "device", "", device_name, sizeof(device_name), CONFIGFILE);
-        if (strcasecmp(device_name, "cdrom") == 0)
-        {
-            type = 1;
-        }
-        else if (strcasecmp(device_name, "zip100") == 0)
-        {
-            type = 2;
-        }
-        else if (strcasecmp(device_name, "removable") == 0)
-        {
-            type = 3;
-        }
-        else if (type == 0)
-        {
-            type = ini_getl("IDE", "type", 0, CONFIGFILE);
-        }
+        found_image = true;
+    }
 
-        if (type == 1)
-        {
-            logmsg("Device type: CD-ROM");
-            g_ide_device = &g_ide_cdrom;
-        }
-        else if (type == 2)
-        {
-            logmsg("Device type: ZIP drive");
-            g_ide_device = &g_ide_zipdrive;
-        }
-        else if (type == 3)
-        {
-            logmsg("Device type: Removable");
-            g_ide_device = &g_ide_removable;
-        }
-        else
-        {
-            bool valid_imagefile = true;
-            if (strlen(imagefile) >= 4)
-            {
-                char prefix[5] = {0};
-                g_ide_imagefile.find_prefix(prefix, imagefile);
-                if (strcasecmp(prefix, "cdrm") == 0)
-                {
-                    g_ide_device = &g_ide_cdrom;
-                    g_ide_imagefile.set_prefix(prefix);
-                }
-                else if (strcasecmp(prefix, "zipd") == 0)
-                {
-                    g_ide_device = &g_ide_zipdrive;
-                    g_ide_imagefile.set_prefix(prefix);
-                }
-                else if (strcasecmp(prefix, "remv") == 0)
-                {
-                    g_ide_device = &g_ide_removable;
-                    g_ide_imagefile.set_prefix(prefix);
-                }
-                else
-                {
-                    valid_imagefile = false;
-                }
-            }
-            else
-            {
-                valid_imagefile = false;
-            }
-            
-            if (!valid_imagefile)
-            {
-                logmsg("Could not determine image type by filename, defaulting to: CD-ROM");
-                g_ide_device = &g_ide_cdrom;
-            }
-        }
+    switch (g_ide_imagefile.get_drive_type())
+    {
+    case DRIVE_TYPE_CDROM:
+        g_ide_device = &g_ide_cdrom;
+        logmsg("Device is a CDROM drive");
+        break;
+    case DRIVE_TYPE_ZIP100:
+        g_ide_device = &g_ide_zipdrive;
+        logmsg("Device is a Iomega Zip Drive 100");
+        break;
+    case DRIVE_TYPE_REMOVABLE:
+        g_ide_device = &g_ide_removable;
+        logmsg("Device is a generic removable drive");
+        break;
+    default:
+        g_ide_device = &g_ide_cdrom;
+        g_ide_imagefile.set_drive_type(DRIVE_TYPE_CDROM);
+        logmsg("Device defaulting to a CDROM drive");
+        break;
+    }
+
+    if (found_image)
+    {
         logmsg("Loading image ", imagefile);
         g_ide_imagefile.open_file(SD.vol(), imagefile, false);
         if (g_ide_device) g_ide_device->set_image(&g_ide_imagefile);
@@ -298,9 +286,11 @@ void load_image()
     }
     else
     {
+        
         logmsg("No image files found");
         blinkStatus(BLINK_ERROR_NO_IMAGES);
     }
+
 }
 
 void zuluide_setup(void)

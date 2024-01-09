@@ -36,7 +36,7 @@ IDEImageFile::IDEImageFile(): IDEImageFile(nullptr, 0)
 
 IDEImageFile::IDEImageFile(uint8_t *buffer, size_t buffer_size):
     m_blockdev(nullptr), m_contiguous(false), m_first_sector(0), m_capacity(0),
-    m_read_only(false), m_buffer(buffer), m_buffer_size(buffer_size)
+    m_read_only(false), m_buffer(buffer), m_buffer_size(buffer_size), m_drive_type(DRIVE_TYPE_VIA_PREFIX), m_lone_image(false)
 {
     memset(m_prefix, 0, sizeof(m_prefix));
 }
@@ -111,6 +111,49 @@ static bool is_valid_filename(const char *name)
         return false;
     }
 
+    if (name[0] && tolower(name[0] == 'z') &&
+        name[1] && tolower(name[1] == 'u') &&
+        name[2] && tolower(name[2] == 'l') &&
+        name[3] && tolower(name[3] == 'u')
+    )
+    {
+        // Ignore all files that start with "zulu"
+        return false;
+    }
+
+    // Check file extension
+    const char *extension = strrchr(name, '.');
+    if (extension)
+    {
+        const char *ignore_exts[] = {
+            ".cue", ".txt", ".rtf", ".md", ".nfo", ".pdf", ".doc",
+            NULL
+        };
+        const char *archive_exts[] = {
+            ".tar", ".tgz", ".gz", ".bz2", ".tbz2", ".xz", ".zst", ".z",
+            ".zip", ".zipx", ".rar", ".lzh", ".lha", ".lzo", ".lz4", ".arj",
+            ".dmg", ".hqx", ".cpt", ".7z", ".s7z",
+            NULL
+        };
+
+        for (int i = 0; ignore_exts[i]; i++)
+        {
+            if (strcasecmp(extension, ignore_exts[i]) == 0)
+            {
+                // ignore these without log message
+                return false;
+            }
+        }
+        for (int i = 0; archive_exts[i]; i++)
+        {
+            if (strcasecmp(extension, archive_exts[i]) == 0)
+            {
+                logmsg("-- Ignoring compressed file ", name);
+                return false;
+            }
+        }
+    }
+
     return true;
 }
 
@@ -132,11 +175,15 @@ bool IDEImageFile::load_next_image()
 }
 // Find the next image file in alphabetical order.
 // If prev_image is NULL, returns the first image file.
-bool IDEImageFile::find_next_image(const char *directory, const char *prev_image, char *result, size_t buflen)
+bool IDEImageFile::find_next_image(const char *directory, const char *prev_image, char *result, size_t buflen, bool lone_image)
 {
     FsFile root;
     FsFile file;
     bool first_search = prev_image == NULL;
+    if (lone_image && !m_lone_image )
+    {
+        m_lone_image = true;
+    }
 
     if (!root.open(directory))
     {
@@ -158,17 +205,82 @@ bool IDEImageFile::find_next_image(const char *directory, const char *prev_image
         {
             continue;
         }
-        if (!extension ||
-            (strcasecmp(extension, ".iso") != 0 &&
-             strcasecmp(extension, ".bin") != 0 &&
-             strcasecmp(extension, ".img") != 0))
+
+        if (m_lone_image)
         {
-            // Not an image file
-            continue;
+            // Assuming there has been an exhaustive search
+            // find the lone image ignoring a prefix and ignoring any extension
+            file.getName(result, buflen);
+            break;     
         }
+
+        if (get_drive_type() != DRIVE_TYPE_VIA_PREFIX || !get_prefix()[0])
+        {
+            // device type not defined by prefix
+            if (extension)
+            {
+                // if image is iso or bin/cue filter out non cdrom drives
+                if ((strcasecmp(extension, ".iso") == 0 ||
+                    strcasecmp(extension, ".bin") == 0))
+                {
+                    if (get_drive_type() != DRIVE_TYPE_CDROM)
+                    {
+                        // device type does not match extention
+                        continue;
+                    }
+                }
+                // if device is cdrom filter out non iso and bin/cue files
+                if (get_drive_type() == DRIVE_TYPE_CDROM)
+                {
+                    if ((strcasecmp(extension, ".iso") != 0 &&
+                        strcasecmp(extension, ".bin") != 0))
+                    {
+                            continue;
+                    }
+                }
+            }
+        }
+        if (first_search && get_drive_type() == DRIVE_TYPE_VIA_PREFIX)
+        {
+            bool valid_imagefile = true;
+            if (strlen(candidate) >= 4)
+            {
+                char prefix[5] = {0};
+                find_prefix(prefix, candidate);
+                if (strcasecmp(prefix, "cdrm") == 0)
+                {
+                    set_prefix(prefix);
+                    set_drive_type(DRIVE_TYPE_CDROM);
+                }
+                else if (strcasecmp(prefix, "zipd") == 0)
+                {
+                    set_prefix(prefix);
+                    set_drive_type(DRIVE_TYPE_ZIP100);
+                }
+                else if (strcasecmp(prefix, "remv") == 0)
+                {
+                    set_prefix(prefix);
+                    set_drive_type(DRIVE_TYPE_REMOVABLE);
+                }
+                else
+                {
+                    valid_imagefile = false;
+                }
+            }
+            else
+            {
+                valid_imagefile = false;
+            }
+            
+            if (!valid_imagefile)
+            {
+                continue;
+            }
+        }
+
         char prefix[5] = {0};
         find_prefix(prefix, candidate);
-        if (!first_search && !get_prefix()[0] && strcasecmp(get_prefix(), prefix) != 0)
+        if (!first_search && get_prefix()[0] && strcasecmp(get_prefix(), prefix) != 0)
         {
             // look for only image with the same prefix
             continue;
@@ -190,19 +302,45 @@ bool IDEImageFile::find_next_image(const char *directory, const char *prev_image
     }
     file.close();
     root.close();
-    // wrap search
-    if (result[0] == '\0' && !first_search)
+    if (result[0] == '\0' )
     {
-        find_next_image(directory, NULL, result, buflen);
+        if (first_search)
+        {
+            static bool lone_file_once = false;
+            if (lone_file_once == false)
+            {
+                lone_file_once = true;
+                // check for a lone file without extension restrictions or prefixes
+                find_next_image(directory, NULL, result, buflen, true);
+            }
+        }
+        else
+        {
+            // wrap search
+            find_next_image(directory, NULL, result, buflen);
+        }
     }
 
     return result[0] != '\0';
+}
+
+
+void IDEImageFile::set_drive_type(drive_type_t type)
+{
+    m_drive_type = type;
+}
+
+
+drive_type_t IDEImageFile::get_drive_type()
+{
+    return m_drive_type;
 }
 
 void IDEImageFile::set_prefix(char *prefix)
 {
     strcpy(m_prefix, prefix);
 }
+
 const char* const IDEImageFile::get_prefix()
 {
     return m_prefix;
