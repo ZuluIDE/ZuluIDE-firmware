@@ -88,6 +88,22 @@ void IDERemovable::set_image(IDEImage *image)
     }
 }
 
+void IDERemovable::change_image(IDEImage *image)
+{
+    if (image)
+    {
+        char filename[MAX_FILE_PATH] = "";
+        image->get_filename(filename, sizeof(filename));
+
+        if (image->capacity() % REMOVABLE_SECTORSIZE != 0)
+        {
+            logmsg("-- WARNING: Image file ", filename, " is not evenly divisible by sector size ", (int)REMOVABLE_SECTORSIZE, " bytes. Ignoring last partial sector");
+        }
+    }
+
+    IDEATAPIDevice::change_image(image);
+}
+
 bool IDERemovable::handle_atapi_command(const uint8_t *cmd)
 {
     switch (cmd[0])

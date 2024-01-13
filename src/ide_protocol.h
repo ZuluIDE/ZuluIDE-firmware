@@ -38,6 +38,9 @@ public:
     // Set image backing file to access
     virtual void set_image(IDEImage *image) = 0;
 
+    // Change image backing file to access without firing off scsi commands
+    virtual void change_image(IDEImage *image) = 0;
+
     // Called periodically by main loop
     virtual void poll() = 0;
 

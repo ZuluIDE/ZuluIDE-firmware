@@ -33,6 +33,8 @@ public:
 
     virtual void set_image(IDEImage *image);
 
+    virtual void change_image(IDEImage *image);
+
     virtual uint64_t capacity_lba() override;
 
 protected:

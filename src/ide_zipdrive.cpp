@@ -96,6 +96,27 @@ void IDEZipDrive::set_image(IDEImage *image)
     }
 }
 
+void IDEZipDrive::change_image(IDEImage *image)
+{
+    if (image)
+    {
+        char filename[MAX_FILE_PATH] = "";
+        image->get_filename(filename, sizeof(filename));
+        uint64_t actual_size = image->capacity();
+        uint64_t expected_size = ZIP100_SECTORSIZE * ZIP100_SECTORCOUNT;
+        if (actual_size < expected_size)
+        {
+            logmsg("-- WARNING: Image file ", filename, " is only ", (int)actual_size, " bytes, expecting ", (int)expected_size, " bytes");
+        }
+        else if (actual_size > expected_size)
+        {
+            logmsg("-- Image file ", filename, " is ", (int)actual_size, " bytes, ignoring anything past ", (int)expected_size);
+        }
+    }
+
+    IDEATAPIDevice::change_image(image);
+}
+
 bool IDEZipDrive::handle_atapi_command(const uint8_t *cmd)
 {
     switch (cmd[0])

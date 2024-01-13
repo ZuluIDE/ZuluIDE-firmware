@@ -39,6 +39,8 @@ public:
 
     virtual void set_image(IDEImage *image);
 
+    virtual void change_image(IDEImage *image);
+
     virtual void poll();
 
     virtual bool handle_command(ide_registers_t *regs);

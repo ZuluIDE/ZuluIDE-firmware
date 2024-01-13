@@ -52,6 +52,11 @@ void IDEATAPIDevice::set_image(IDEImage *image)
     m_atapi_state.sense_asc = ATAPI_ASC_MEDIUM_CHANGE;
 }
 
+void IDEATAPIDevice::change_image(IDEImage *image)
+{
+    m_image = image;
+}
+
 void IDEATAPIDevice::poll()
 {
 
@@ -764,7 +769,6 @@ bool IDEATAPIDevice::atapi_start_stop_unit(const uint8_t *cmd)
         if ((ATAPI_START_STOP_START & cmd_eject) == 0 && m_removable.ejected == false)
         {
             logmsg("Device ejecting media");
-            m_image->load_next_image();
             m_devinfo.media_status_events = ATAPI_MEDIA_EVENT_REMOVED;
             m_removable.ejected = true;
         }
@@ -1002,9 +1006,23 @@ bool IDEATAPIDevice::atapi_get_event_status_notification(const uint8_t *cmd)
         buf[0] = 0;
         buf[1] = 6; // EventDataLength
         buf[2] = 0x04; // Media status events
-        buf[3] = 0x04; // Supported events
+        buf[3] = 0x10; // Supported events
         buf[4] = m_devinfo.media_status_events;
-        buf[5] = 0x01; // Power status
+        if (m_removable.ejected)
+        {
+            buf[5] = 0x1;
+        }
+        else
+        {
+            if (m_devinfo.medium_type == ATAPI_MEDIUM_NONE)
+            {
+                buf[5] = 0x0;
+            }
+            else
+            {
+                buf[5] = 0x2;
+            }
+        }
         buf[6] = 0; // Start slot
         buf[7] = 0; // End slot
         if (!atapi_send_data(m_buffer.bytes, 8))
@@ -1022,7 +1040,7 @@ bool IDEATAPIDevice::atapi_get_event_status_notification(const uint8_t *cmd)
         buf[0] = 0;
         buf[1] = 2; // EventDataLength
         buf[2] = 0x00; // Media status events
-        buf[3] = 0x04; // Supported events
+        buf[3] = 0x10; // Supported events
         atapi_send_data(m_buffer.bytes, 4);
         return atapi_cmd_ok();
     }
@@ -1230,8 +1248,16 @@ void IDEATAPIDevice::insert_media()
 {
     if (m_devinfo.removable && m_removable.ejected)
     {
-            dbgmsg("-- Device loading media");
+        dbgmsg("-- Device loading media");
+        if (m_image->load_next_image())
+        {
+            change_image(m_image);
             m_devinfo.media_status_events = ATAPI_MEDIA_EVENT_NEW;
-            m_removable.ejected = false;
+        }
+        else
+        {
+            change_image(nullptr);
+        }
+        m_removable.ejected = false;
     }
 }

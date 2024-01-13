@@ -356,6 +356,63 @@ void IDECDROMDevice::set_image(IDEImage *image)
     }
 }
 
+void IDECDROMDevice::change_image(IDEImage *image)
+{
+    IDEATAPIDevice::change_image(image);
+
+    char filename[MAX_FILE_PATH];
+    bool valid = false;
+
+    if (image &&
+        image->get_filename(filename, sizeof(filename)) &&
+        strncasecmp(filename + strlen(filename) - 4, ".bin", 4) == 0)
+    {
+        char cuesheetname[MAX_FILE_PATH + 1] = {0};
+        strncpy(cuesheetname, filename, strlen(filename) - 4);
+        strlcat(cuesheetname, ".cue", sizeof(cuesheetname));
+
+        valid = loadAndValidateCueSheet(cuesheetname);
+    }
+
+    if (!valid)
+    {
+        // No cue sheet or parsing failed, use as plain binary image.
+        strcpy(m_cuesheet, R"(
+            FILE "x" BINARY
+            TRACK 01 MODE1/2048
+            INDEX 01 00:00:00
+        )");
+        m_cueparser = CUEParser(m_cuesheet);
+    }
+
+    if (image)
+    {
+        CUETrackInfo firsttrack, lasttrack;
+        getFirstLastTrackInfo(firsttrack, lasttrack);
+
+        bool firstaudio = (firsttrack.track_mode == CUETrack_AUDIO);
+        bool lastaudio = (lasttrack.track_mode == CUETrack_AUDIO);
+
+        if (firstaudio && lastaudio)
+        {
+            m_devinfo.medium_type = ATAPI_MEDIUM_CDDA;
+        }
+        else if (!firstaudio && !lastaudio)
+        {
+            m_devinfo.medium_type = ATAPI_MEDIUM_CDROM;
+        }
+        else
+        {
+            m_devinfo.medium_type = ATAPI_MEDIUM_CDMIXED;
+        }
+    }
+    else
+    {
+        m_devinfo.medium_type = ATAPI_MEDIUM_NONE;
+    }
+}
+
+
 bool IDECDROMDevice::handle_atapi_command(const uint8_t *cmd)
 {
     switch (cmd[0])
