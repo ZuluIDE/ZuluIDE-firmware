@@ -297,57 +297,43 @@ void zuluide_setup(void)
 {
     platform_init();
     platform_late_init();
-    bool first_run = true;
-    for(;;)
+    g_sdcard_present = mountSDCard();
+    bool sd_card_initialized = false;
+    if(!g_sdcard_present)
     {
-        g_sdcard_present = mountSDCard();
-
-        if(!g_sdcard_present)
-        {
-            if (first_run)
-            {
-                logmsg("SD card init failed, sdErrorCode: ", (int)SD.sdErrorCode(),
-                            " sdErrorData: ", (int)SD.sdErrorData());
-            }
-        }
-        else
-        {
-            if (SD.clusterCount() == 0)
-            {
-                if (first_run)
-                {
-                    logmsg("SD card without filesystem!");
-                }
-            }
-
-            print_sd_info();
-            
-            if (g_sdcard_present)
-            {
-                load_image();
-
-                init_logfile();
-                if (ini_getbool("IDE", "DisableStatusLED", false, CONFIGFILE))
-                {
-                    platform_disable_led();
-                }
-
-                if (platform_get_device_id() == 1)
-                    ide_protocol_init(NULL, g_ide_device); // Secondary device
-                else
-                    ide_protocol_init(g_ide_device, NULL); // Primary device
-
-                logmsg("Initialization complete!");
-                blinkStatus(BLINK_STATUS_OK);
-                break;
-            }
-
-        }
-        first_run = false;
+        logmsg("SD card init failed, sdErrorCode: ", (int)SD.sdErrorCode(),
+                    " sdErrorData: ", (int)SD.sdErrorData());
+        logmsg("No SD card detected, defaulting to CD-ROM");
         blinkStatus(BLINK_ERROR_NO_SD_CARD);
-        blink_poll();
-        platform_poll();
     }
+    else
+    {
+        if (SD.clusterCount() == 0)
+        {
+            logmsg("SD card without filesystem!");
+        }
+
+        print_sd_info();
+
+        if (g_sdcard_present)
+        {
+            init_logfile();
+            
+            if (ini_getbool("IDE", "DisableStatusLED", false, CONFIGFILE))
+            {
+                platform_disable_led();
+            }
+            blinkStatus(BLINK_STATUS_OK);
+        }
+
+    }
+    load_image();
+    
+    if (platform_get_device_id() == 1)
+        ide_protocol_init(NULL, g_ide_device); // Secondary device
+    else
+        ide_protocol_init(g_ide_device, NULL); // Primary device
+    logmsg("Initialization complete!");
 }
 
 void zuluide_main_loop(void)
@@ -385,7 +371,7 @@ void zuluide_main_loop(void)
                     g_sdcard_present = false;
                     logmsg("SD card removed, trying to reinit");
 
-                    g_ide_cdrom.set_image(NULL);
+                    g_ide_device->set_image(NULL);
                     g_ide_imagefile.close();
                 }
             }
