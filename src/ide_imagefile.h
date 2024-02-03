@@ -112,7 +112,8 @@ public:
 
     // Find next image in alphabetical order. If prev_image is NULL, find the first image
     virtual bool find_next_image(const char *directory, const char *prev_image, char *result, size_t buflen, bool lone_image = false);
-    
+    virtual bool find_next_prefix_image(const char *directory, const char *prev_image, char *result, size_t buflen);
+
     // Set drive type for filtering purposes
     virtual void set_drive_type(drive_type_t type);
     virtual drive_type_t get_drive_type();
