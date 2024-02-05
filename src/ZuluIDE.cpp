@@ -251,10 +251,7 @@ void load_image()
     
     // Find image file
     char imagefile[MAX_FILE_PATH];
-    if (g_ide_imagefile.find_next_image("/", NULL, imagefile, sizeof(imagefile)))
-    {
-        found_image = true;
-    }
+    found_image = g_ide_imagefile.find_next_image("/", NULL, imagefile, sizeof(imagefile));
 
     switch (g_ide_imagefile.get_drive_type())
     {

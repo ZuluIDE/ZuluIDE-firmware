@@ -36,7 +36,7 @@ IDEImageFile::IDEImageFile(): IDEImageFile(nullptr, 0)
 
 IDEImageFile::IDEImageFile(uint8_t *buffer, size_t buffer_size):
     m_blockdev(nullptr), m_contiguous(false), m_first_sector(0), m_capacity(0),
-    m_read_only(false), m_buffer(buffer), m_buffer_size(buffer_size), m_drive_type(DRIVE_TYPE_VIA_PREFIX), m_lone_image(false)
+    m_read_only(false), m_buffer(buffer), m_buffer_size(buffer_size), m_drive_type(DRIVE_TYPE_VIA_PREFIX)
 {
     memset(m_prefix, 0, sizeof(m_prefix));
 }
@@ -54,7 +54,7 @@ bool IDEImageFile::open_file(FsVolume *volume, const char *filename, bool read_o
     m_read_only = read_only;
     m_file.close();
     m_file = volume->open(filename, read_only ? O_RDONLY : O_RDWR);
-    
+
     if (!m_file.isOpen())
     {
         m_capacity = 0;
@@ -175,7 +175,7 @@ bool IDEImageFile::load_next_image()
 }
 // Find the next image file in alphabetical order.
 // If prev_image is NULL, returns the first image file.
-bool IDEImageFile::find_next_image(const char *directory, const char *prev_image, char *result, size_t buflen, bool lone_image)
+bool IDEImageFile::find_next_image(const char *directory, const char *prev_image, char *result, size_t buflen)
 {
 
     if (get_drive_type() == DRIVE_TYPE_VIA_PREFIX || get_prefix()[0] != '\0')
@@ -189,10 +189,6 @@ bool IDEImageFile::find_next_image(const char *directory, const char *prev_image
     FsFile root;
     FsFile file;
     bool first_search = prev_image == NULL;
-    if (lone_image && !m_lone_image )
-    {
-        m_lone_image = true;
-    }
 
     if (!root.open(directory))
     {
@@ -208,46 +204,10 @@ bool IDEImageFile::find_next_image(const char *directory, const char *prev_image
 
         char candidate[MAX_FILE_PATH];
         file.getName(candidate, sizeof(candidate));
-        const char *extension = strrchr(candidate, '.');
 
         if (!is_valid_filename(candidate))
         {
             continue;
-        }
-
-        if (m_lone_image)
-        {
-            // Assuming there has been an exhaustive search
-            // find the lone image ignoring a prefix and ignoring any extension
-            file.getName(result, buflen);
-            break;     
-        }
-
-        if (get_drive_type() != DRIVE_TYPE_VIA_PREFIX || !get_prefix()[0])
-        {
-            // device type not defined by prefix
-            if (extension)
-            {
-                // if image is iso or bin/cue filter out non cdrom drives
-                if ((strcasecmp(extension, ".iso") == 0 ||
-                    strcasecmp(extension, ".bin") == 0))
-                {
-                    if (get_drive_type() != DRIVE_TYPE_CDROM)
-                    {
-                        // device type does not match extention
-                        continue;
-                    }
-                }
-                // if device is cdrom filter out non iso and bin/cue files
-                if (get_drive_type() == DRIVE_TYPE_CDROM)
-                {
-                    if ((strcasecmp(extension, ".iso") != 0 &&
-                        strcasecmp(extension, ".bin") != 0))
-                    {
-                            continue;
-                    }
-                }
-            }
         }
 
         if (prev_image && strcasecmp(candidate, prev_image) <= 0)
@@ -269,21 +229,8 @@ bool IDEImageFile::find_next_image(const char *directory, const char *prev_image
     root.close();
     if (result[0] == '\0' )
     {
-        if (first_search)
-        {
-            static bool lone_file_once = false;
-            if (lone_file_once == false)
-            {
-                lone_file_once = true;
-                // check for a lone file without extension restrictions or prefixes
-                find_next_image(directory, NULL, result, buflen, true);
-            }
-        }
-        else
-        {
-            // wrap search
-            find_next_image(directory, NULL, result, buflen);
-        }
+        // wrap search
+        find_next_image(directory, NULL, result, buflen);
     }
 
     return result[0] != '\0';
