@@ -36,7 +36,7 @@ IDEImageFile::IDEImageFile(): IDEImageFile(nullptr, 0)
 
 IDEImageFile::IDEImageFile(uint8_t *buffer, size_t buffer_size):
     m_blockdev(nullptr), m_contiguous(false), m_first_sector(0), m_capacity(0),
-    m_read_only(false), m_buffer(buffer), m_buffer_size(buffer_size), m_drive_type(DRIVE_TYPE_VIA_PREFIX), m_lone_image(false)
+    m_read_only(false), m_buffer(buffer), m_buffer_size(buffer_size), m_drive_type(DRIVE_TYPE_VIA_PREFIX)
 {
     memset(m_prefix, 0, sizeof(m_prefix));
 }
@@ -54,7 +54,7 @@ bool IDEImageFile::open_file(FsVolume *volume, const char *filename, bool read_o
     m_read_only = read_only;
     m_file.close();
     m_file = volume->open(filename, read_only ? O_RDONLY : O_RDWR);
-    
+
     if (!m_file.isOpen())
     {
         m_capacity = 0;
@@ -175,15 +175,20 @@ bool IDEImageFile::load_next_image()
 }
 // Find the next image file in alphabetical order.
 // If prev_image is NULL, returns the first image file.
-bool IDEImageFile::find_next_image(const char *directory, const char *prev_image, char *result, size_t buflen, bool lone_image)
+bool IDEImageFile::find_next_image(const char *directory, const char *prev_image, char *result, size_t buflen)
 {
+
+    if (get_drive_type() == DRIVE_TYPE_VIA_PREFIX || get_prefix()[0] != '\0')
+    {
+        if(find_next_prefix_image(directory, prev_image, result, buflen))
+        {
+            return true;
+        }
+    }
+
     FsFile root;
     FsFile file;
     bool first_search = prev_image == NULL;
-    if (lone_image && !m_lone_image )
-    {
-        m_lone_image = true;
-    }
 
     if (!root.open(directory))
     {
@@ -199,99 +204,19 @@ bool IDEImageFile::find_next_image(const char *directory, const char *prev_image
 
         char candidate[MAX_FILE_PATH];
         file.getName(candidate, sizeof(candidate));
-        const char *extension = strrchr(candidate, '.');
 
         if (!is_valid_filename(candidate))
         {
             continue;
         }
 
-        if (m_lone_image)
-        {
-            // Assuming there has been an exhaustive search
-            // find the lone image ignoring a prefix and ignoring any extension
-            file.getName(result, buflen);
-            break;     
-        }
-
-        if (get_drive_type() != DRIVE_TYPE_VIA_PREFIX || !get_prefix()[0])
-        {
-            // device type not defined by prefix
-            if (extension)
-            {
-                // if image is iso or bin/cue filter out non cdrom drives
-                if ((strcasecmp(extension, ".iso") == 0 ||
-                    strcasecmp(extension, ".bin") == 0))
-                {
-                    if (get_drive_type() != DRIVE_TYPE_CDROM)
-                    {
-                        // device type does not match extention
-                        continue;
-                    }
-                }
-                // if device is cdrom filter out non iso and bin/cue files
-                if (get_drive_type() == DRIVE_TYPE_CDROM)
-                {
-                    if ((strcasecmp(extension, ".iso") != 0 &&
-                        strcasecmp(extension, ".bin") != 0))
-                    {
-                            continue;
-                    }
-                }
-            }
-        }
-        if (first_search && get_drive_type() == DRIVE_TYPE_VIA_PREFIX)
-        {
-            bool valid_imagefile = true;
-            if (strlen(candidate) >= 4)
-            {
-                char prefix[5] = {0};
-                find_prefix(prefix, candidate);
-                if (strcasecmp(prefix, "cdrm") == 0)
-                {
-                    set_prefix(prefix);
-                    set_drive_type(DRIVE_TYPE_CDROM);
-                }
-                else if (strcasecmp(prefix, "zipd") == 0)
-                {
-                    set_prefix(prefix);
-                    set_drive_type(DRIVE_TYPE_ZIP100);
-                }
-                else if (strcasecmp(prefix, "remv") == 0)
-                {
-                    set_prefix(prefix);
-                    set_drive_type(DRIVE_TYPE_REMOVABLE);
-                }
-                else
-                {
-                    valid_imagefile = false;
-                }
-            }
-            else
-            {
-                valid_imagefile = false;
-            }
-            
-            if (!valid_imagefile)
-            {
-                continue;
-            }
-        }
-
-        char prefix[5] = {0};
-        find_prefix(prefix, candidate);
-        if (!first_search && get_prefix()[0] && strcasecmp(get_prefix(), prefix) != 0)
-        {
-            // look for only image with the same prefix
-            continue;
-        }
         if (prev_image && strcasecmp(candidate, prev_image) <= 0)
         {
             // Alphabetically before the previous image
             continue;
         }
 
-        if (result[0] && strcasecmp(candidate, result) >= 0)
+        if (result[0] && strcasecmp(candidate, result) > 0)
         {
             // Alphabetically later than current result
             continue;
@@ -304,26 +229,115 @@ bool IDEImageFile::find_next_image(const char *directory, const char *prev_image
     root.close();
     if (result[0] == '\0' )
     {
-        if (first_search)
-        {
-            static bool lone_file_once = false;
-            if (lone_file_once == false)
-            {
-                lone_file_once = true;
-                // check for a lone file without extension restrictions or prefixes
-                find_next_image(directory, NULL, result, buflen, true);
-            }
-        }
-        else
-        {
-            // wrap search
-            find_next_image(directory, NULL, result, buflen);
-        }
+        // wrap search
+        find_next_image(directory, NULL, result, buflen);
     }
 
     return result[0] != '\0';
 }
 
+bool IDEImageFile::find_next_prefix_image(const char *directory, const char *prev_image, char *result, size_t buflen)
+{
+    FsFile root;
+    FsFile file;
+    char candidate[MAX_FILE_PATH];
+    char match[MAX_FILE_PATH] = {};
+    bool first_search = prev_image == NULL;
+
+    if (!root.open(directory))
+    {
+        logmsg("Could not open directory: ", directory);
+        return false;
+    }
+
+    while (file.openNext(&root, O_RDONLY))
+    {
+        if (file.isDirectory()) continue;
+
+        file.getName(candidate, sizeof(candidate));
+
+        if (!is_valid_filename(candidate))
+        {
+            continue;
+        }
+
+        bool valid_imagefile = true;
+        bool more_than_one_prefix = false;
+        if (strlen(candidate) >= 4)
+        {
+            char prefix[5] = {0};
+            find_prefix(prefix, candidate);
+            if (strcasecmp(prefix, "cdrm") == 0)
+            {
+                if (get_prefix()[0] == '\0')
+                {
+                    set_prefix(prefix);
+                    set_drive_type(DRIVE_TYPE_CDROM);
+                }
+                else more_than_one_prefix = true;
+            }
+            else if (strcasecmp(prefix, "zipd") == 0)
+            {
+                if (get_prefix()[0] == '\0')
+                {
+                    set_prefix(prefix);
+                    set_drive_type(DRIVE_TYPE_ZIP100);
+                }
+                else more_than_one_prefix = true;
+            }
+            else if (strcasecmp(prefix, "remv") == 0)
+            {
+                if (get_prefix()[0] == '\0')
+                {
+                    set_prefix(prefix);
+                    set_drive_type(DRIVE_TYPE_REMOVABLE);
+                }
+                else more_than_one_prefix = true;
+            }
+            else
+            {
+                valid_imagefile = false;
+            }
+
+            if (valid_imagefile && more_than_one_prefix && strcasecmp(prefix, get_prefix()))
+            {
+                logmsg("More than one drive type prefix found, using [", get_prefix(), "], ignoring file: ", candidate);
+                continue;
+            }
+        }
+        else
+        {
+            valid_imagefile = false;
+        }
+
+        if (!valid_imagefile)
+        {
+            continue;
+        }
+
+        if (first_search)
+        {
+            if (match[0] == '\0' || strcasecmp(candidate, match) <= 0)
+                strcpy(match, candidate);
+        }
+        else
+        {
+            if (strcasecmp(candidate, prev_image) <= 0)
+                continue;
+            else  if (match[0] == '\0' || (strcasecmp(candidate, prev_image) > 0 && strcasecmp(candidate, match) < 0))
+                strcpy(match, candidate);
+        }
+    }
+    file.close();
+    root.close();
+    if (match[0] != '\0')
+    {
+        strcpy(result, match);
+        return true;
+    }
+    return false;
+
+}
 
 void IDEImageFile::set_drive_type(drive_type_t type)
 {

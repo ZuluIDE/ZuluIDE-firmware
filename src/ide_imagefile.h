@@ -111,8 +111,9 @@ public:
     virtual bool load_next_image();
 
     // Find next image in alphabetical order. If prev_image is NULL, find the first image
-    virtual bool find_next_image(const char *directory, const char *prev_image, char *result, size_t buflen, bool lone_image = false);
-    
+    virtual bool find_next_image(const char *directory, const char *prev_image, char *result, size_t buflen);
+    virtual bool find_next_prefix_image(const char *directory, const char *prev_image, char *result, size_t buflen);
+
     // Set drive type for filtering purposes
     virtual void set_drive_type(drive_type_t type);
     virtual drive_type_t get_drive_type();
@@ -136,7 +137,6 @@ protected:
 
     char m_prefix[5];
     drive_type_t m_drive_type;
-    bool m_lone_image;
 
     struct sd_cb_state_t {
         IDEImage::Callback *callback;

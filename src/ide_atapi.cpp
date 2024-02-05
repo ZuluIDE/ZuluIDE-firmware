@@ -764,7 +764,11 @@ bool IDEATAPIDevice::atapi_start_stop_unit(const uint8_t *cmd)
         if ((ATAPI_START_STOP_START & cmd_eject) == 0 && m_removable.ejected == false)
         {
             logmsg("Device ejecting media");
-            if (m_image) m_image->load_next_image();
+            if (m_image)
+            {
+                m_image->load_next_image();
+                set_image(m_image);
+            }
             m_devinfo.media_status_events = ATAPI_MEDIA_EVENT_REMOVED;
             m_removable.ejected = true;
         }
