@@ -26,6 +26,11 @@
 #include <stdint.h>
 #include <Arduino.h>
 #include "ZuluIDE_platform_gpio.h"
+#include <Wire.h>
+#include <zuluide/observable.h>
+#include <zuluide/control/input_interface.h>
+#include <zuluide/control/display_state.h>
+#include <zuluide/status/system_status.h>
 
 /* These are used in debug output and default SCSI strings */
 extern const char *g_platform_name;
@@ -82,6 +87,16 @@ void platform_poll();
 // This can be used to implement simultaneous transfer to SCSI bus.
 typedef void (*sd_callback_t)(uint32_t bytes_complete);
 void platform_set_sd_callback(sd_callback_t func, const uint8_t *buffer);
+
+void platform_set_status_controller(zuluide::Observable<zuluide::status::SystemStatus>& statusController);
+
+void platform_set_display_controller(zuluide::Observable<zuluide::control::DisplayState>& displayController);
+
+/***
+    Sets the input receiver.
+ */
+void platform_set_input_interface(zuluide::control::InputReceiver* inputReceiver);
+void platform_poll_input();
 
 // FPGA bitstream is protected by a license key stored in RP2040 flash,
 // in the last page before 1 MB boundary.

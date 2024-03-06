@@ -22,14 +22,7 @@
 #pragma once
 #include <stddef.h>
 #include <SdFat.h>
-
-enum drive_type_t
-{
-    DRIVE_TYPE_VIA_PREFIX = 0,
-    DRIVE_TYPE_CDROM = 1,
-    DRIVE_TYPE_ZIP100 = 2,
-    DRIVE_TYPE_REMOVABLE
-};
+#include <zuluide/ide_drive_type.h>
 
 // Interface for emulated image files
 class IDEImage
@@ -99,6 +92,7 @@ public:
     IDEImageFile(uint8_t *buffer, size_t buffer_size);
 
     bool open_file(FsVolume *volume, const char *filename, bool read_only = false);
+    bool open_file(const char* filename, bool read_only = false);
     void close();
 
     virtual bool get_filename(char *buf, size_t buflen);

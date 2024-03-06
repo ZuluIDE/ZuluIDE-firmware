@@ -62,6 +62,14 @@
 // Expansion I2C bus
 #define GPIO_I2C_SDA 26
 #define GPIO_I2C_SCL 27
+#define GPIO_EXT_INTERRUPT 15
+
+// GPIO Expansion bus pins IO0-IO7
+#define EXP_ROT_A_PIN   0
+#define EXP_ROT_B_PIN   1
+#define EXP_EJECT_PIN   2
+#define EXP_ROT_PIN     5
+#define EXP_INSERT_PIN  3
 
 // DIP switch pins
 #define DIP_CABLESEL 29
