@@ -42,6 +42,10 @@ IDEImageFile::IDEImageFile(uint8_t *buffer, size_t buffer_size):
 }
 
 
+bool IDEImageFile::open_file(const char *filename, bool read_only)
+{
+  return open_file(SD.vol(), filename, read_only);
+}
 
 bool IDEImageFile::open_file(FsVolume *volume, const char *filename, bool read_only)
 {

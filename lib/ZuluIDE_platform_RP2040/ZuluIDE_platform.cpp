@@ -38,8 +38,11 @@
 #include <strings.h>
 #include <SerialUSB.h>
 #include <class/cdc/cdc_device.h>
-
-
+#include <Wire.h>
+#include <Adafruit_SSD1306.h>
+#include "ZuluIDE_platform_gpio.h"
+#include "display_ssd1306.h"
+#include "rotary_control.h"
 
 const char *g_platform_name = PLATFORM_NAME;
 static uint32_t g_flash_chip_size = 0;
@@ -48,6 +51,12 @@ static bool g_led_disabled = false;
 static bool g_led_blinking = false;
 static bool g_dip_drive_id, g_dip_cable_sel;
 static uint64_t g_flash_unique_id;
+static zuluide::control::RotaryControl g_rotary_input;
+static TwoWire g_wire(i2c1, GPIO_I2C_SDA, GPIO_I2C_SCL);
+
+static zuluide::DisplaySSD1306 display;
+
+//void mbed_error_hook(const mbed_error_ctx * error_context);
 
 /***************/
 /* GPIO init   */
@@ -123,8 +132,9 @@ void platform_init()
     // I2C pins
     //        pin             function       pup   pdown  out    state fast
     gpio_conf(GPIO_I2C_SCL,   GPIO_FUNC_I2C, true,false, false,  true, true);
-    // gpio_conf(GPIO_I2C_SDA,   GPIO_FUNC_I2C, true,false, false,  true, true);
-    gpio_conf(GPIO_I2C_SDA,   GPIO_FUNC_SIO, true,false, true,  true, true); // FIXME: DEBUG
+    gpio_conf(GPIO_I2C_SDA,   GPIO_FUNC_I2C, true,false, false,  true, true);
+    //gpio_conf(GPIO_I2C_SDA,   GPIO_FUNC_SIO, true,false, true,  true, true); // FIXME: DEBUG
+    //gpio_conf(GPIO_EXT_INTERRUPT,   GPIO_FUNC_SIO, true,false, false,  false, false);
 
     // FPGA bus
     // Signals will be switched between SPI/PIO by rp2040_fpga.cpp, but pull-ups are configured here.
@@ -160,6 +170,27 @@ void platform_late_init()
     {
         logmsg("ERROR: FPGA initialization failed");
     }
+}
+
+void platform_set_status_controller(zuluide::Observable<zuluide::status::SystemStatus>& statusController) {
+  logmsg("Initialized platform controller with the status controller.");
+  display.init(&g_wire);
+  statusController.AddObserver([&] (auto current) -> void {display.HandleUpdate(current);});
+}
+
+void platform_set_display_controller(zuluide::Observable<zuluide::control::DisplayState>& displayController) {
+  logmsg("Initialized platform controller with the display controller.");
+  displayController.AddObserver([&] (auto current) -> void {display.HandleUpdate(current);});  
+}
+
+void platform_set_input_interface(zuluide::control::InputReceiver* inputReceiver) {
+  g_rotary_input.SetI2c(&g_wire);
+  g_rotary_input.SetReciever(inputReceiver);
+  g_rotary_input.StartSendingEvents();
+}
+
+void platform_poll_input() {
+  g_rotary_input.Poll();
 }
 
 void platform_write_led(bool state)
