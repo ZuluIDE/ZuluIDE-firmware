@@ -1004,6 +1004,12 @@ ssize_t IDECDROMDevice::read_callback(const uint8_t *data, size_t blocksize, siz
         return 0;
     }
 
+    if (ide_phy_is_command_interrupted())
+    {
+        dbgmsg("---- IDECDROMDevice::read_callback interrupted by host, sectors_done ", m_cd_read_format.sectors_done);
+        return num_blocks;
+    }
+
     if (m_cd_read_format.sector_length_file == m_cd_read_format.sector_length_out)
     {
         // Simple case, send data directly
@@ -1083,6 +1089,7 @@ ssize_t IDECDROMDevice::read_callback(const uint8_t *data, size_t blocksize, siz
         {
             // Block written to hardware buffer successfully
             m_cd_read_format.sectors_done += 1;
+            blocks_done += 1;
         }
     }
 

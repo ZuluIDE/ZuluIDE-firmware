@@ -172,6 +172,13 @@ void ide_protocol_poll()
                 ide_phy_set_regs(&regs);
                 ide_phy_assert_irq(IDE_STATUS_DEVRDY | IDE_STATUS_ERR);
             }
+            else if (ide_phy_is_command_interrupted())
+            {
+                logmsg("-- Command was interrupted");
+                regs.error = IDE_ERROR_ABORT;
+                ide_phy_set_regs(&regs);
+                ide_phy_assert_irq(IDE_STATUS_DEVRDY | IDE_STATUS_ERR);
+            }
             else
             {
                 dbgmsg("-- Command complete");
