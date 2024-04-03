@@ -42,6 +42,7 @@ const char *g_platform_name = PLATFORM_NAME;
 static uint32_t g_flash_chip_size = 0;
 static bool g_uart_initialized = false;
 static bool g_led_disabled = false;
+static bool g_led_blinking = false;
 static bool g_dip_drive_id, g_dip_cable_sel;
 static uint64_t g_flash_unique_id;
 
@@ -163,11 +164,23 @@ void platform_late_init()
 
 void platform_write_led(bool state)
 {
-    if (g_led_disabled) return;
+    if (g_led_disabled || g_led_blinking) return;
 
     gpio_put(STATUS_LED, state);
 }
 
+void platform_set_blink_status(bool status)
+{
+    g_led_blinking = status;
+}
+
+void platform_write_led_override(bool state)
+{
+    if (g_led_disabled) return;
+
+    gpio_put(STATUS_LED, state);
+
+}
 void platform_disable_led(void)
 {   
     g_led_disabled = true;

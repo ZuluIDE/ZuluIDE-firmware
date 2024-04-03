@@ -53,63 +53,56 @@ static IDEDevice *g_ide_device;
 #define BLINK_ERROR_NO_IMAGES    3
 #define BLINK_ERROR_NO_SD_CARD 5
 
+static uint16_t blink_count = 0;
+static uint32_t blink_start = 0;
+static uint32_t blink_delay = 0;
+static uint32_t blink_end_delay= 0;
 
-static int g_blink_status_count = 0;
-static bool g_blink_new_count = false;
-
-// Handle LED blinking without delaying other processing
-void blink_poll()
+bool blink_poll()
 {
-    static bool prev_state;
-    static bool prev_phase;
-    static int blink_status_code = -2;
-
-    if (g_blink_new_count)
+    bool is_blinking = true;
+    
+    if (blink_count == 0)
     {
-        if (blink_status_code <= -2)
-        {
-            blink_status_code = g_blink_status_count;
-            g_blink_new_count = false;
-        }
+        is_blinking = false;
+    }
+    else if (blink_count == 1 && ((uint32_t)(millis() - blink_start)) > blink_end_delay )
+    {
+        LED_OFF_OVERRIDE();
+        blink_count = 0;
+        is_blinking = false;
+    }
+    else if (blink_count > 1 && ((uint32_t)(millis() - blink_start)) > blink_delay)
+    {
+        if (1 & blink_count)
+            LED_ON_OVERRIDE();
+        else
+            LED_OFF_OVERRIDE();
+        blink_count--;
+        blink_start = millis();
     }
 
-    bool phase = millis() & 256;
-
-    if (blink_status_code > 0)
-    {
-        if (phase && !prev_phase)
-        {
-            LED_ON();
-            prev_state = true;
-        }
-        else if (!phase && prev_phase)
-        {
-            LED_OFF();
-            prev_state = false;
-            blink_status_code -= 1;
-        }
-    }
-    else if (blink_status_code > -2)
-    {
-        // Implement delay between blink codes
-        if (!phase && prev_phase)
-        {
-            blink_status_code -= 1;
-        }
-    }
-    else if (prev_state)
-    {
-        LED_OFF();
-    }
-
-    prev_phase = phase;
+    if (!is_blinking)
+        platform_set_blink_status(false);
+    return is_blinking;
 }
 
-void blinkStatus(int count)
+void blink_cancel()
 {
-    g_blink_status_count = count;
-    g_blink_new_count = true;
+    blink_count = 0;
+}
 
+void blinkStatus(uint8_t times, uint32_t delay = 500, uint32_t end_delay = 1250)
+{
+    if (!blink_poll() && blink_count == 0)
+    {
+        blink_start = millis();
+        blink_count = 2 * times + 1;
+        blink_delay = delay / 2;
+        blink_end_delay =  end_delay;
+        platform_set_blink_status(true);
+        LED_OFF_OVERRIDE();
+    }
 }
 
 /*********************************/
