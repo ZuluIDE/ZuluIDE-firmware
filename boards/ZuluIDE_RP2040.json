@@ -1,6 +1,6 @@
 {
     "name": "ZuluIDE RP2040",
-    "url": "https://github.com/ZuluSCSI/ZuluSCSI-firmware",
+    "url": "https://github.com/rabbitholecomputing/ZuluIDE-firmware",
     "vendor": "ZuluIDE",
     "build": {
         "core": "arduino",
