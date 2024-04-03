@@ -227,7 +227,7 @@ bool IDEImageFile::find_next_image(const char *directory, const char *prev_image
     }
     file.close();
     root.close();
-    if (result[0] == '\0' )
+    if (!first_search && result[0] == '\0')
     {
         // wrap search
         find_next_image(directory, NULL, result, buflen);
