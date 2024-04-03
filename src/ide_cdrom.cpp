@@ -1089,6 +1089,7 @@ ssize_t IDECDROMDevice::read_callback(const uint8_t *data, size_t blocksize, siz
         {
             // Block written to hardware buffer successfully
             m_cd_read_format.sectors_done += 1;
+            blocks_done += 1;
         }
     }
 
