@@ -52,6 +52,8 @@ static ide_registers_t g_prev_ide_regs;
 static int g_ide_busy_secs;
 static bool g_ide_reset_after_init_done;
 
+bool g_ignore_cmd_interrupt;
+
 static void do_phy_reset()
 {
     if (g_ide_config.enable_dev0 && !g_ide_config.enable_dev1)
@@ -172,13 +174,15 @@ void ide_protocol_poll()
                 ide_phy_set_regs(&regs);
                 ide_phy_assert_irq(IDE_STATUS_DEVRDY | IDE_STATUS_ERR);
             }
-            else if (ide_phy_is_command_interrupted())
-            {
-                logmsg("-- Command was interrupted");
-                regs.error = IDE_ERROR_ABORT;
-                ide_phy_set_regs(&regs);
-                ide_phy_assert_irq(IDE_STATUS_DEVRDY | IDE_STATUS_ERR);
-            }
+            // \todo figure out if possibly reading the status from the FPGA is causing
+            // `ide_phy_is_command_interrupted` to crash the board on certain IDE controllers
+            // else if (ide_phy_is_command_interrupted())
+            // {
+            //     logmsg("-- Command was interrupted");
+            //     regs.error = IDE_ERROR_ABORT;
+            //     ide_phy_set_regs(&regs);
+            //     ide_phy_assert_irq(IDE_STATUS_DEVRDY | IDE_STATUS_ERR);
+            // }
             else
             {
                 dbgmsg("-- Command complete");
@@ -321,6 +325,11 @@ void IDEDevice::initialize(int devidx)
     logmsg("-- Max UDMA mode: ", m_devconfig.max_udma_mode, " (phy max ", m_phy_caps.max_udma_mode, ")");
     logmsg("-- Max blocksize: ", m_devconfig.max_blocksize, " (phy max ", (int)m_phy_caps.max_blocksize, ")");
 
+    g_ignore_cmd_interrupt = ini_getl("IDE", "ignore_command_interrupt", 1, CONFIGFILE);
+    if (!g_ignore_cmd_interrupt)
+    {
+        logmsg("-- New commands may interrupt previous command - ignore_command_interrupt set to 0");
+    }
     m_phy_caps.max_udma_mode = std::min(m_phy_caps.max_udma_mode, m_devconfig.max_udma_mode);
     m_phy_caps.max_pio_mode = std::min(m_phy_caps.max_pio_mode, m_devconfig.max_pio_mode);
     m_phy_caps.max_blocksize = std::min<int>(m_phy_caps.max_blocksize, m_devconfig.max_blocksize);

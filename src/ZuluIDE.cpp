@@ -288,7 +288,6 @@ void zuluide_setup(void)
     platform_init();
     platform_late_init();
     g_sdcard_present = mountSDCard();
-    bool sd_card_initialized = false;
     if(!g_sdcard_present)
     {
         logmsg("SD card init failed, sdErrorCode: ", (int)SD.sdErrorCode(),
