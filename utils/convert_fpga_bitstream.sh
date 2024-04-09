@@ -22,7 +22,8 @@
 # This script converts .bin file from Icecube2 design tool
 # to a .h file that can be included in code.
 
-INFILE="fpga/icecube2_ice5lp1k/ZuluIDE/ZuluIDE_Implmnt/sbt/outputs/bitmap/ice5lp1k_top_bitmap.bin"
+# INFILE="fpga/icecube2_ice5lp1k/ZuluIDE/ZuluIDE_Implmnt/sbt/outputs/bitmap/ice5lp1k_top_bitmap.bin"
+INFILE=$1
 OUTFILE="lib/ZuluIDE_platform_RP2040/fpga_bitstream.h"
 DATE=$(date +%Y-%m-%d)
 
