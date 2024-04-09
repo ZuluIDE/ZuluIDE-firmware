@@ -81,7 +81,7 @@ static bool fpga_load_bitstream()
     // Initialize SPI bus used for configuration
     // ICE5LP1K supports 1-25 MHz baudrate
     // The bitstream size is 70 kB
-    _spi_init(FPGA_SPI, 10000000);
+    spi_init(FPGA_SPI, 10000000);
     spi_set_format(FPGA_SPI, 8, SPI_CPOL_0, SPI_CPHA_0, SPI_MSB_FIRST);
 
     // Dummy clocks with chip unselected

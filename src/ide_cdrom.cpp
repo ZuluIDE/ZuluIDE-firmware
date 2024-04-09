@@ -742,19 +742,8 @@ bool IDECDROMDevice::doReadFullTOC(uint8_t session, uint16_t allocationLength, b
 void IDECDROMDevice::cdromGetAudioPlaybackStatus(uint8_t *status, uint32_t *current_lba, bool current_only)
 {
     IDEImageFile *image = (IDEImageFile*) m_image;
-#ifdef ENABLE_AUDIO_OUTPUT
-// TODO Implement for ZuluIDE - copied directly from ZuluSCSI
-    if (status) {
-        uint8_t target = img.scsiId & 7;
-        if (current_only) {
-            *status = audio_is_playing(target) ? 1 : 0;
-        } else {
-            *status = (uint8_t) audio_get_status_code(target);
-        }
-    }
-#else
+
     if (status) *status = 0; // audio status code for 'unsupported/invalid' and not-playing indicator
-#endif
     if (current_lba)
     {
         if (image && image->is_open()) {

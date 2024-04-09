@@ -27,16 +27,19 @@
 #include <SdFat.h>
 #include <assert.h>
 #include <hardware/gpio.h>
+#include <hardware/adc.h>
 #include <hardware/uart.h>
 #include <hardware/spi.h>
 #include <hardware/structs/xip_ctrl.h>
 #include <hardware/structs/iobank0.h>
 #include <hardware/flash.h>
-#include <platform/mbed_error.h>
-#include <multicore.h>
-#include <USB/PluggableUSBSerial.h>
+#include <pico/multicore.h>
 #include "rp2040_fpga.h"
 #include <strings.h>
+#include <SerialUSB.h>
+#include <class/cdc/cdc_device.h>
+
+
 
 const char *g_platform_name = PLATFORM_NAME;
 static uint32_t g_flash_chip_size = 0;
@@ -45,8 +48,6 @@ static bool g_led_disabled = false;
 static bool g_led_blinking = false;
 static bool g_dip_drive_id, g_dip_cable_sel;
 static uint64_t g_flash_unique_id;
-
-void mbed_error_hook(const mbed_error_ctx * error_context);
 
 /***************/
 /* GPIO init   */
@@ -86,7 +87,6 @@ void platform_init()
     gpio_conf(SWO_PIN,        GPIO_FUNC_UART,false,false, true,  false, true);
     uart_init(uart0, 1000000); // Debug UART at 1 MHz baudrate
     g_uart_initialized = true;
-    mbed_set_error_hook(mbed_error_hook);
 
     logmsg("Platform: ", g_platform_name);
     logmsg("FW Version: ", g_log_firmwareversion);
@@ -211,6 +211,7 @@ int platform_get_device_id(void)
 
 extern SdFs SD;
 extern uint32_t __StackTop;
+static void usb_log_poll();
 
 void platform_emergency_log_save()
 {
@@ -235,18 +236,27 @@ void platform_emergency_log_save()
     crashfile.close();
 }
 
-void mbed_error_hook(const mbed_error_ctx * error_context)
+extern "C" __attribute__((noinline))
+void show_hardfault(uint32_t *sp)
 {
+    uint32_t pc = sp[6];
+    uint32_t lr = sp[5];
+
     logmsg("--------------");
     logmsg("CRASH!");
     logmsg("Platform: ", g_platform_name);
     logmsg("FW Version: ", g_log_firmwareversion);
-    logmsg("error_status: ", (uint32_t)error_context->error_status);
-    logmsg("error_address: ", error_context->error_address);
-    logmsg("error_value: ", error_context->error_value);
+    logmsg("SP: ", (uint32_t)sp);
+    logmsg("PC: ", pc);
+    logmsg("LR: ", lr);
+    logmsg("R0: ", sp[0]);
+    logmsg("R1: ", sp[1]);
+    logmsg("R2: ", sp[2]);
+    logmsg("R3: ", sp[3]);
 
-    uint32_t *p = (uint32_t*)((uint32_t)error_context->thread_current_sp & ~3);
-    for (int i = 0; i < 16; i++)
+    uint32_t *p = (uint32_t*)((uint32_t)sp & ~3);
+
+    for (int i = 0; i < 8; i++)
     {
         if (p == &__StackTop) break; // End of stack
 
@@ -254,34 +264,36 @@ void mbed_error_hook(const mbed_error_ctx * error_context)
         p += 4;
     }
 
-    if (sio_hw->cpuid == 1)
-    {
-        // Don't try to save files from core 1
-        // Core 0 will reset this to recover
-        logmsg("--- CORE1 CRASH HANDLER END");
-        while(1);
-    }
-
     platform_emergency_log_save();
 
     while (1)
     {
+        usb_log_poll();
         // Flash the crash address on the LED
         // Short pulse means 0, long pulse means 1
-        int base_delay = 200000;
+        platform_set_blink_status(false);
+        int base_delay = 500;
         for (int i = 31; i >= 0; i--)
         {
             LED_OFF();
-            delayMicroseconds(base_delay);
+            for (int j = 0; j < base_delay; j++) busy_wait_ms(1);
 
-            int delay = (error_context->error_address & (1 << i)) ? (3 * base_delay) : base_delay;
+            int delay = (pc & (1 << i)) ? (3 * base_delay) : base_delay;
             LED_ON();
-            delayMicroseconds(delay);
+            for (int j = 0; j < delay; j++) busy_wait_ms(1);
             LED_OFF();
         }
 
-        delayMicroseconds(base_delay);
+        for (int j = 0; j < base_delay * 10; j++) busy_wait_ms(1);
     }
+}
+
+extern "C" __attribute__((naked, interrupt))
+void isr_hardfault(void)
+{
+    // Copies stack pointer into first argument
+    asm("mrs r0, msp\n"
+        "bl show_hardfault": : : "r0");
 }
 
 /*****************************************/
@@ -301,21 +313,20 @@ static void usb_log_poll()
 {
     static uint32_t logpos = 0;
 
-    if (_SerialUSB.ready())
+    if (Serial.availableForWrite())
     {
         // Retrieve pointer to log start and determine number of bytes available.
         uint32_t available = 0;
         const char *data = log_get_buffer(&logpos, &available);
-
-        // Limit to CDC packet size
+                // Limit to CDC packet size
         uint32_t len = available;
         if (len == 0) return;
-        if (len > CDC_MAX_PACKET_SIZE) len = CDC_MAX_PACKET_SIZE;
-
+        if (len > CFG_TUD_CDC_EP_BUFSIZE) len = CFG_TUD_CDC_EP_BUFSIZE;
+        
         // Update log position by the actual number of bytes sent
         // If USB CDC buffer is full, this may be 0
         uint32_t actual = 0;
-        _SerialUSB.send_nb((uint8_t*)data, len, &actual);
+        actual = Serial.write(data, len);
         logpos -= available - actual;
     }
 }
@@ -398,7 +409,7 @@ static void watchdog_callback(unsigned alarm_num)
             logmsg("WATCHDOG TIMEOUT, attempting bus reset");
             logmsg("GPIO states: out ", sio_hw->gpio_out, " oe ", sio_hw->gpio_oe, " in ", sio_hw->gpio_in);
 
-            uint32_t *p = (uint32_t*)__get_PSP();
+            uint32_t *p = (uint32_t*)__get_MSP();
             for (int i = 0; i < 16; i++)
             {
                 if (p == &__StackTop) break; // End of stack
@@ -419,7 +430,7 @@ static void watchdog_callback(unsigned alarm_num)
             logmsg("FW Version: ", g_log_firmwareversion);
             logmsg("GPIO states: out ", sio_hw->gpio_out, " oe ", sio_hw->gpio_oe, " in ", sio_hw->gpio_in);
 
-            uint32_t *p = (uint32_t*)__get_PSP();
+            uint32_t *p = (uint32_t*)__get_MSP();
             for (int i = 0; i < 16; i++)
             {
                 if (p == &__StackTop) break; // End of stack
@@ -441,7 +452,7 @@ static void watchdog_callback(unsigned alarm_num)
         }
     }
 
-    hardware_alarm_set_target(3, delayed_by_ms(get_absolute_time(), 1000));
+    hardware_alarm_set_target(alarm_num, delayed_by_ms(get_absolute_time(), 1000));
 }
 
 // This function can be used to periodically reset watchdog timer for crash handling.
@@ -453,9 +464,23 @@ void platform_reset_watchdog()
 
     if (!g_watchdog_initialized)
     {
-        hardware_alarm_claim(3);
-        hardware_alarm_set_callback(3, &watchdog_callback);
-        hardware_alarm_set_target(3, delayed_by_ms(get_absolute_time(), 1000));
+        int alarm_num = -1;
+        for (int i = 0; i < NUM_TIMERS; i++)
+        {
+            if (!hardware_alarm_is_claimed(i))
+            {
+                alarm_num = i;
+                break;
+            }
+        }
+        if (alarm_num == -1)
+        {
+            logmsg("No free watchdog hardware alarms to claim");
+            return;
+        }
+        hardware_alarm_claim(alarm_num);
+        hardware_alarm_set_callback(alarm_num, &watchdog_callback);
+        hardware_alarm_set_target(alarm_num, delayed_by_ms(get_absolute_time(), 1000));
         g_watchdog_initialized = true;
     }
 
@@ -463,7 +488,6 @@ void platform_reset_watchdog()
     // get passed to USB.
     usb_log_poll();
 }
-
 // Install FPGA license key to RP2040 flash
 // buf is pointer to hex string with 26 bytes (encoding 13 bytes)
 bool install_license(char *buf)
@@ -550,11 +574,11 @@ void usb_command_poll()
     static uint8_t rx_buf[64];
     static int rx_len;
 
-    uint32_t available = _SerialUSB.available();
+    uint32_t available = Serial.available();
     if (available > 0)
     {
         available = std::min<uint32_t>(available, sizeof(rx_buf) - rx_len);
-        _SerialUSB.readBytes(rx_buf + rx_len, available);
+        Serial.readBytes(rx_buf + rx_len, available);
         rx_len += available;
     }
 
@@ -739,30 +763,3 @@ __attribute__((section(".btldr_vectors")))
 const void * btldr_vectors[2] = {&__StackTop, (void*)&btldr_reset_handler};
 
 #endif
-
-/* Logging from mbed */
-
-static class LogTarget: public mbed::FileHandle {
-public:
-    virtual ssize_t read(void *buffer, size_t size) { return 0; }
-    virtual ssize_t write(const void *buffer, size_t size)
-    {
-        // A bit inefficient but mbed seems to write() one character
-        // at a time anyways.
-        for (int i = 0; i < size; i++)
-        {
-            char buf[2] = {((const char*)buffer)[i], 0};
-            log_raw(buf);
-        }
-        return size;
-    }
-
-    virtual off_t seek(off_t offset, int whence = SEEK_SET) { return offset; }
-    virtual int close() { return 0; }
-    virtual off_t size() { return 0; }
-} g_LogTarget;
-
-mbed::FileHandle *mbed::mbed_override_console(int fd)
-{
-    return &g_LogTarget;
-}
