@@ -236,7 +236,7 @@ void platform_emergency_log_save()
     crashfile.close();
 }
 
-__attribute__((noinline))
+extern "C" __attribute__((noinline))
 void show_hardfault(uint32_t *sp)
 {
     uint32_t pc = sp[6];
@@ -271,6 +271,7 @@ void show_hardfault(uint32_t *sp)
         usb_log_poll();
         // Flash the crash address on the LED
         // Short pulse means 0, long pulse means 1
+        platform_set_blink_status(false);
         int base_delay = 500;
         for (int i = 31; i >= 0; i--)
         {
@@ -287,7 +288,7 @@ void show_hardfault(uint32_t *sp)
     }
 }
 
-__attribute__((naked, interrupt))
+extern "C" __attribute__((naked, interrupt))
 void isr_hardfault(void)
 {
     // Copies stack pointer into first argument
@@ -408,7 +409,7 @@ static void watchdog_callback(unsigned alarm_num)
             logmsg("WATCHDOG TIMEOUT, attempting bus reset");
             logmsg("GPIO states: out ", sio_hw->gpio_out, " oe ", sio_hw->gpio_oe, " in ", sio_hw->gpio_in);
 
-            uint32_t *p = (uint32_t*)__get_PSP();
+            uint32_t *p = (uint32_t*)__get_MSP();
             for (int i = 0; i < 16; i++)
             {
                 if (p == &__StackTop) break; // End of stack
@@ -429,7 +430,7 @@ static void watchdog_callback(unsigned alarm_num)
             logmsg("FW Version: ", g_log_firmwareversion);
             logmsg("GPIO states: out ", sio_hw->gpio_out, " oe ", sio_hw->gpio_oe, " in ", sio_hw->gpio_in);
 
-            uint32_t *p = (uint32_t*)__get_PSP();
+            uint32_t *p = (uint32_t*)__get_MSP();
             for (int i = 0; i < 16; i++)
             {
                 if (p == &__StackTop) break; // End of stack
@@ -451,7 +452,7 @@ static void watchdog_callback(unsigned alarm_num)
         }
     }
 
-    hardware_alarm_set_target(3, delayed_by_ms(get_absolute_time(), 1000));
+    hardware_alarm_set_target(alarm_num, delayed_by_ms(get_absolute_time(), 1000));
 }
 
 // This function can be used to periodically reset watchdog timer for crash handling.

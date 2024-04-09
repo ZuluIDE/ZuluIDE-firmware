@@ -55,13 +55,13 @@ public:
     };
 
     // Return filename or false if not file-backed
-    virtual bool get_filename(char *buf, size_t buflen);
+    virtual bool get_filename(char *buf, size_t buflen) = 0;
 
     // Return image size in bytes
-    virtual uint64_t capacity();
+    virtual uint64_t capacity() = 0;
     
     // Is the image file writable?
-    virtual bool writable();
+    virtual bool writable() = 0;
 
     // Read data from image file using a callback interface.
     // The callback function is passed a data pointer and number of blocks available.
