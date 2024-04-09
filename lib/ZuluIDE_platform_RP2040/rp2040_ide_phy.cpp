@@ -40,6 +40,8 @@ static struct {
 
 #define BLOCK_CRC_VALID 0x10000
 
+extern bool g_ignore_cmd_interrupt;
+
 // Compare the CRC we calculated with DMA when writing to FPGA
 // against the CRC received from the host in UltraDMA mode.
 static void verify_crc(uint32_t *block_crc)
@@ -162,8 +164,7 @@ bool ide_phy_is_command_interrupted()
 
     if (status & FPGA_STATUS_IDE_RST) return true;
     if (status & FPGA_STATUS_IDE_SRST) return true;
-    if (status & FPGA_STATUS_IDE_CMD) return true;
-
+    if (!g_ignore_cmd_interrupt && (status & FPGA_STATUS_IDE_CMD)) return true;
     return false;
 }
 
@@ -206,6 +207,21 @@ bool ide_phy_can_write_block()
 {
     uint8_t status;
     fpga_rdcmd(FPGA_CMD_READ_STATUS, &status, 1);
+
+    if (!(status & FPGA_STATUS_DATA_DIR))
+    {
+        if (status & (FPGA_STATUS_IDE_RST | FPGA_STATUS_IDE_SRST | FPGA_STATUS_IDE_CMD))
+        {
+            dbgmsg("---- ide_phy_can_write_block(): Host aborted request, FPGA status ", status);
+        }
+        else
+        {
+            logmsg("---- ide_phy_can_write_block(): Wrong data buffer direction, FPGA status ", status);
+        }
+
+        return false;
+    }
+
     assert(status & FPGA_STATUS_DATA_DIR);
     return (status & FPGA_STATUS_TX_CANWRITE);
 }
