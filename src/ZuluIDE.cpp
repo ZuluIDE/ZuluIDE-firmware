@@ -318,13 +318,7 @@ void zuluide_setup(void)
 {
     platform_init();
     platform_late_init();
-
     zuluide_setup_sd_card();
-
-    if (platform_get_device_id() == 1)
-        ide_protocol_init(NULL, g_ide_device); // Secondary device
-    else
-        ide_protocol_init(g_ide_device, NULL); // Primary device
 
 #ifdef PLATFORM_MASS_STORAGE
   static bool check_mass_storage = true;
@@ -342,6 +336,12 @@ void zuluide_setup(void)
   }
 #endif
     load_image();
+
+    if (platform_get_device_id() == 1)
+        ide_protocol_init(NULL, g_ide_device); // Secondary device
+    else
+        ide_protocol_init(g_ide_device, NULL); // Primary device
+
     blinkStatus(BLINK_STATUS_OK);
     logmsg("Initialization complete!");
 }
