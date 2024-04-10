@@ -25,6 +25,7 @@
 #include "ZuluIDE.h"
 #include "ZuluIDE_config.h"
 #include "ZuluIDE_platform.h"
+#include "ZuluIDE_msc.h"
 #include "ZuluIDE_log.h"
 #include "ide_protocol.h"
 #include "ide_cdrom.h"
@@ -279,14 +280,11 @@ void load_image()
         
         logmsg("No image files found");
         blinkStatus(BLINK_ERROR_NO_IMAGES);
-    }
+  }
 
 }
-
-void zuluide_setup(void)
+static void zuluide_setup_sd_card()
 {
-    platform_init();
-    platform_late_init();
     g_sdcard_present = mountSDCard();
     if(!g_sdcard_present)
     {
@@ -312,16 +310,39 @@ void zuluide_setup(void)
             {
                 platform_disable_led();
             }
-            blinkStatus(BLINK_STATUS_OK);
         }
-
     }
-    load_image();
-    
+}
+
+void zuluide_setup(void)
+{
+    platform_init();
+    platform_late_init();
+
+    zuluide_setup_sd_card();
+
     if (platform_get_device_id() == 1)
         ide_protocol_init(NULL, g_ide_device); // Secondary device
     else
         ide_protocol_init(g_ide_device, NULL); // Primary device
+
+#ifdef PLATFORM_MASS_STORAGE
+  static bool check_mass_storage = true;
+  if (check_mass_storage && ini_getbool("IDE", "enable_usb_mass_storage", false, CONFIGFILE))
+  {
+    check_mass_storage = false;
+
+    // perform checks to see if a computer is attached and return true if we should enter MSC mode.
+    if (platform_sense_msc())
+    {
+      zuluide_msc_loop();
+      logmsg("Re-processing filenames and zuluide.ini config parameters");
+      zuluide_setup_sd_card();
+    }
+  }
+#endif
+    load_image();
+    blinkStatus(BLINK_STATUS_OK);
     logmsg("Initialization complete!");
 }
 
