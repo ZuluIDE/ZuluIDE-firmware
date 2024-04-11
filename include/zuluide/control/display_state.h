@@ -21,81 +21,18 @@
 
 #pragma once
 
-#include <memory>
 #include <zuluide/images/image.h>
+#include "status_state.h"
+#include "menu_state.h"
+#include "eject_state.h"
+#include "select_state.h"
+#include "new_image_state.h"
+#include "about_state.h"
 
 using namespace zuluide::images;
 
 namespace zuluide::control {
   enum class Mode { Status, Menu, Eject, Select, NewImage };
-
-  class StatusState {
-  public:
-    StatusState (int imgNameOffset = 0);
-    StatusState (const StatusState& src);
-    int GetImageNameOffset () const;
-    void IncrementImageNameOffset();
-    void DecrementImageNameOffset();
-    void ResetImageNameOffset();
-    StatusState& operator=(const StatusState& src);
-  private:
-    int imageNameOffset;
-  };
-
-  class MenuState {
-  public:
-    enum class Entry { Eject, Select, New, Back };
-    MenuState (Entry value = Entry::Eject);
-    MenuState (const MenuState& src);
-    Entry GetCurrentEntry () const;
-    void MoveToNextEntry();
-    void MoveToPreviousEntry();
-    MenuState& operator=(const MenuState& src);
-  private:
-    Entry currentEntry;
-  };
-
-  class EjectState {
-  public:
-    enum class Entry { Eject, Back };
-    EjectState (Entry value = Entry::Eject);
-    EjectState (const EjectState& src);
-    Entry GetCurrentEntry () const;
-    void MoveToNextCurrentEntry();
-    EjectState& operator=(const EjectState& src);
-  private:
-    Entry currentEntry;
-  };
-
-  class SelectState {
-  public:
-    SelectState (int imageNameOffset = 0);
-    SelectState (const SelectState& src);
-    int GetImageNameOffset () const;
-    void SetImageNameOffset(int value);
-    SelectState& operator=(const SelectState& src);
-    void SetCurrentImage(std::unique_ptr<zuluide::images::Image> image);
-    const zuluide::images::Image& GetCurrentImage() const;
-    bool HasCurrentImage() const;
-    bool IsShowingBack() const;
-    void SetIsShowingBack(bool value);
-  private:
-    int imageNameOffset;
-    std::unique_ptr<zuluide::images::Image> currentImage;
-    bool isShowingBack;
-  };
-
-  class NewImageState {
-  public:
-    NewImageState (int imgIndex = 0);
-    NewImageState (const NewImageState& src);
-    int GetImageIndex () const;
-    NewImageState& operator++(int);
-    NewImageState& operator--(int);
-    NewImageState& operator=(const NewImageState& src);
-  private:
-    int imageIndex;
-  };
 
   class DisplayState {
   public:
