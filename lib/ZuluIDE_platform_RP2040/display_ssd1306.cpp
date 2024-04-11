@@ -124,17 +124,70 @@ void DisplaySSD1306::displayStatus() {
     graph.drawBitmap(0, 8, cdrom_empty, 32, 16, WHITE);
     graph.print("[NO IMAGE]");
   }
+
+  // Display primary/secondary
+  int16_t x=0, y=0;
+  uint16_t h=0, w=0;
+  const char* text = currentSysStatus->IsPrimary() ? "pri" : "sec";  
+  graph.getTextBounds(text, 0 ,0, &x, &y, &w, &h);
+  graph.setCursor(128 - w, 0);
+  graph.print(text);
   
   graph.display();
 }
+
+#define MENU_OFFSET 1
 
 void DisplaySSD1306::displayMenu() {
   graph.clearDisplay();
   graph.setTextColor(WHITE, BLACK);
 
-  const char* menuText = toString(currentDispState->GetMenuState().GetCurrentEntry());
-  graph.setCursor(centerText(menuText, graph), centerBase);
-  graph.print(menuText);
+  int16_t x=0, y=0;
+  uint16_t h=0, w=0;
+
+  graph.getTextBounds("-- Menu --", 0 ,0, &x, &y, &w, &h);
+  graph.setCursor((128 - w) / 2, 0);
+  graph.print("-- Menu --");
+
+  const char* selectMenuText = toString(zuluide::control::MenuState::Entry::Select);
+  if (currentDispState->GetMenuState().GetCurrentEntry() == zuluide::control::MenuState::Entry::Select) {
+    graph.setTextColor(BLACK, WHITE);
+  }
+  graph.getTextBounds(selectMenuText, 0 ,0, &x, &y, &w, &h);
+  graph.setCursor(32 - w / 2, 8 + MENU_OFFSET);
+  graph.print(selectMenuText);
+  graph.setTextColor(WHITE, BLACK);
+
+  selectMenuText = toString(zuluide::control::MenuState::Entry::Eject);
+  if (currentDispState->GetMenuState().GetCurrentEntry() == zuluide::control::MenuState::Entry::Eject) {
+    graph.setTextColor(BLACK, WHITE);
+  }
+  
+  graph.getTextBounds(selectMenuText, 0 ,0, &x, &y, &w, &h);
+  graph.setCursor(96 - w / 2, 8 + MENU_OFFSET);
+  graph.print(selectMenuText);
+  graph.setTextColor(WHITE, BLACK);
+
+  selectMenuText = toString(zuluide::control::MenuState::Entry::New);
+  if (currentDispState->GetMenuState().GetCurrentEntry() == zuluide::control::MenuState::Entry::New) {
+    graph.setTextColor(BLACK, WHITE);
+  }
+  
+  graph.getTextBounds(selectMenuText, 0 ,0, &x, &y, &w, &h);
+  graph.setCursor(32 - w / 2, 24 + MENU_OFFSET);
+  graph.print(selectMenuText);
+  graph.setTextColor(WHITE, BLACK);
+
+  selectMenuText = toString(zuluide::control::MenuState::Entry::Back);
+  if (currentDispState->GetMenuState().GetCurrentEntry() == zuluide::control::MenuState::Entry::Back) {
+    graph.setTextColor(BLACK, WHITE);
+  }
+  
+  graph.getTextBounds(selectMenuText, 0 ,0, &x, &y, &w, &h);
+  graph.setCursor(96 - w / 2, 24 + MENU_OFFSET);
+  graph.print(selectMenuText);
+  graph.setTextColor(WHITE, BLACK);
+    
   graph.display();
 }
 
@@ -142,9 +195,29 @@ void DisplaySSD1306::displayEject() {
   graph.clearDisplay();
   graph.setTextColor(WHITE, BLACK);
 
-  const char* menuText = toString(currentDispState->GetEjectState().GetCurrentEntry());
-  graph.setCursor(centerText(menuText, graph), centerBase);
-  graph.print(menuText);
+  int16_t x=0, y=0;
+  uint16_t h=0, w=0;
+  graph.getTextBounds("-- Confirm Eject --", 0 ,0, &x, &y, &w, &h);
+  graph.setCursor((128 - w) / 2, 0);
+  graph.print("-- Confirm Eject --");
+
+  const char* selectMenuText = " Yes ";
+  if (currentDispState->GetEjectState().GetCurrentEntry() == zuluide::control::EjectState::Entry::Eject) {
+    graph.setTextColor(BLACK, WHITE);
+  }
+  graph.getTextBounds(selectMenuText, 0 ,0, &x, &y, &w, &h);
+  graph.setCursor(32 - w / 2, 16 + MENU_OFFSET);
+  graph.print(selectMenuText);
+  graph.setTextColor(WHITE, BLACK);
+
+  selectMenuText = " No ";
+  if (currentDispState->GetEjectState().GetCurrentEntry() == zuluide::control::EjectState::Entry::Back) {
+    graph.setTextColor(BLACK, WHITE);
+  }
+  graph.getTextBounds(selectMenuText, 0 ,0, &x, &y, &w, &h);
+  graph.setCursor(96 - w / 2, 16 + MENU_OFFSET);
+  graph.print(selectMenuText);
+  graph.setTextColor(WHITE, BLACK);
 
   graph.display();
 }
@@ -152,6 +225,12 @@ void DisplaySSD1306::displayEject() {
 void DisplaySSD1306::displaySelect() {
   graph.clearDisplay();
   graph.setTextColor(WHITE, BLACK);
+
+  int16_t x=0, y=0;
+  uint16_t h=0, w=0;
+  graph.getTextBounds("-- Select Image --", 0 ,0, &x, &y, &w, &h);
+  graph.setCursor((128 - w) / 2, 0);
+  graph.print("-- Select Image --");
 
   const char* toShow;
   if (!currentDispState->GetSelectState().IsShowingBack() && currentDispState->GetSelectState().HasCurrentImage()) {

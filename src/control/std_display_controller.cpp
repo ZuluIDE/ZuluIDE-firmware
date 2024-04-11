@@ -45,7 +45,7 @@ void StdDisplayController::SetMode(Mode newMode)
   }
     
   case Mode::Menu: {
-    MenuState empty;
+    MenuState empty(MenuState::Entry::Select);
     UpdateState(empty);
     menuController->Reset(empty);
     break;
