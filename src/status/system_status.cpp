@@ -94,7 +94,7 @@ bool SystemStatus::LoadedImagesAreEqual(const SystemStatus& src) const {
     return *loadedImage == *src.loadedImage;
   }
 
-  return !loadedImage && !loadedImage;
+  return false;
 }
 
 bool SystemStatus::IsPrimary() const {
