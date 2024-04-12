@@ -294,6 +294,15 @@ bool IDEImageFile::find_next_prefix_image(const char *directory, const char *pre
                 }
                 else more_than_one_prefix = true;
             }
+            else if (strcasecmp(prefix, "hrdd") == 0)
+            {
+                if (get_prefix()[0] == '\0')
+                {
+                    set_prefix(prefix);
+                    set_drive_type(DRIVE_TYPE_RIGID);
+                }
+                else more_than_one_prefix = true;
+            }
             else
             {
                 valid_imagefile = false;

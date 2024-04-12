@@ -30,6 +30,7 @@
 #include "ide_cdrom.h"
 #include "ide_zipdrive.h"
 #include "ide_removable.h"
+#include "ide_rigid.h"
 #include "ide_imagefile.h"
 
 bool g_sdcard_present;
@@ -41,6 +42,7 @@ static uint32_t g_ide_buffer[IDE_BUFFER_SIZE / 4];
 static IDECDROMDevice g_ide_cdrom;
 static IDEZipDrive g_ide_zipdrive;
 static IDERemovable g_ide_removable;
+static IDERigidDevice g_ide_rigid;
 static IDEImageFile g_ide_imagefile;
 static IDEDevice *g_ide_device;
 
@@ -116,6 +118,7 @@ static bool mountSDCard()
     g_ide_cdrom.set_image(nullptr);
     g_ide_zipdrive.set_image(nullptr);
     g_ide_removable.set_image(nullptr);
+    g_ide_rigid.set_image(nullptr);
 
     // Check for the common case, FAT filesystem as first partition
     if (SD.begin(SD_CONFIG))
@@ -206,6 +209,7 @@ void load_image()
     g_ide_cdrom.set_image(nullptr);
     g_ide_zipdrive.set_image(nullptr);
     g_ide_removable.set_image(nullptr);
+    g_ide_rigid.set_image(nullptr);
     g_ide_imagefile = IDEImageFile((uint8_t*)g_ide_buffer, sizeof(g_ide_buffer));
     
     bool found_image = false;
@@ -224,6 +228,10 @@ void load_image()
     else if (strcasecmp(device_name, "removable") == 0)
     {
         type = DRIVE_TYPE_REMOVABLE;
+    }
+    else if (strcasecmp(device_name, "hdd") == 0)
+    {
+        type = DRIVE_TYPE_RIGID;
     }
     else if (device_name[0])
     {
@@ -259,6 +267,10 @@ void load_image()
     case DRIVE_TYPE_REMOVABLE:
         g_ide_device = &g_ide_removable;
         logmsg("Device is a generic removable drive");
+        break;
+    case DRIVE_TYPE_RIGID:
+        g_ide_device = &g_ide_rigid;
+        logmsg("Device is a hard drive");
         break;
     default:
         g_ide_device = &g_ide_cdrom;

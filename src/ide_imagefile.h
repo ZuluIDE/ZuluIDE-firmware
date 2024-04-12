@@ -28,7 +28,8 @@ enum drive_type_t
     DRIVE_TYPE_VIA_PREFIX = 0,
     DRIVE_TYPE_CDROM = 1,
     DRIVE_TYPE_ZIP100 = 2,
-    DRIVE_TYPE_REMOVABLE
+    DRIVE_TYPE_REMOVABLE,
+    DRIVE_TYPE_RIGID
 };
 
 // Interface for emulated image files
