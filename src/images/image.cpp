@@ -23,13 +23,13 @@
 
 using namespace zuluide::images;
 
-Image::Image(std::string filename)
-  : filenm(filename), imgType(Image::ImageType::unknown)
+Image::Image(std::string filename, uint64_t sizeInBytes)
+  : filenm(filename), imgType(Image::ImageType::unknown), fileSizeBytes(sizeInBytes)
 {
 }
 
-Image::Image(std::string filename, Image::ImageType imageType)
-  : filenm(filename), imgType(imageType)
+Image::Image(std::string filename, Image::ImageType imageType, uint64_t sizeInBytes)
+  : filenm(filename), imgType(imageType), fileSizeBytes(sizeInBytes)
 {
 }
 
@@ -43,4 +43,8 @@ Image::ImageType Image::GetImageType() {
 
 bool Image::operator==(const Image& other) {
   return false;
+}
+
+const uint64_t Image::GetFileSizeBytes() const {
+  return fileSizeBytes;
 }
