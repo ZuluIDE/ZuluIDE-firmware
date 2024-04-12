@@ -144,6 +144,15 @@ void ControlInterface::SecondaryButtonPressed() {
     displayController->GetSelectController().IncrementImageNameOffset();
     break;
   }
+
+  case Mode::Status: {
+    if (currentStatus.HasLoadedImage()) {
+      displayController->SetMode(Mode::Eject);
+    }
+    
+    break;
+  }
+    
   default:
     break;      
   }

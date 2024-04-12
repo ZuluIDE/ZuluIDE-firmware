@@ -339,6 +339,7 @@ void load_image(const zuluide::images::Image& toLoad)
   
   blinkStatus(BLINK_STATUS_OK);
 }
+
 static void zuluide_setup_sd_card()
 {
     g_sdcard_present = mountSDCard();
