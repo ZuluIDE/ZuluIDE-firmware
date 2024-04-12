@@ -32,6 +32,8 @@ using namespace zuluide::status;
 static const char* toString(const zuluide::control::MenuState::Entry value);
 static const char* toString(const zuluide::control::EjectState::Entry value);
 static uint16_t centerText(const char* text, Adafruit_SSD1306& graph);
+static void truncate(std::string& toProcess);
+static std::string makeImageSizeStr(uint64_t size);
 
 DisplaySSD1306::DisplaySSD1306()
 {
@@ -119,6 +121,14 @@ void DisplaySSD1306::displayStatus() {
       graph.print(filename + offset);
     } else {
       graph.print(filename + (strlen(filename) - 1));
+    }
+
+    auto size = currentSysStatus->GetLoadedImage().GetFileSizeBytes();
+    if (size != 0) {      
+      auto sizeStr = makeImageSizeStr(size);
+      auto toShow = sizeStr.c_str();
+      graph.setCursor(32, centerBase + lineHeight);
+      graph.print(toShow);
     }
   } else {
     graph.drawBitmap(0, 8, cdrom_empty, 32, 16, WHITE);
@@ -234,13 +244,23 @@ void DisplaySSD1306::displaySelect() {
 
   const char* toShow;
   if (!currentDispState->GetSelectState().IsShowingBack() && currentDispState->GetSelectState().HasCurrentImage()) {
-    toShow = currentDispState->GetSelectState().GetCurrentImage().GetFilename().c_str();
+    auto img = currentDispState->GetSelectState().GetCurrentImage();
+    toShow = img.GetFilename().c_str();
+    graph.setCursor(centerText(toShow, graph), centerBase);
+    graph.print(toShow);
+
+    auto size = img.GetFileSizeBytes();
+    if (size != 0) {      
+      auto sizeStr = makeImageSizeStr(size);
+      toShow = sizeStr.c_str();
+      graph.setCursor(centerText(toShow, graph), centerBase + h);
+      graph.print(toShow);
+    }
   } else {
     toShow = "[Back]";
+    graph.setCursor(centerText(toShow, graph), centerBase);
+    graph.print(toShow);
   }
-
-  graph.setCursor(centerText(toShow, graph), centerBase);
-  graph.print(toShow);
 
   graph.display();
 }
@@ -279,5 +299,31 @@ static const char* toString(const zuluide::control::EjectState::Entry value) {
     return "Yes";
   default:
     return "No";
+  }
+}
+
+static void truncate(std::string& toProcess) {
+  auto idx = toProcess.find('.');
+  if (idx != std::string::npos && idx + 2 < toProcess.length()) {
+    toProcess.erase(idx+2);
+  }
+}
+
+static std::string makeImageSizeStr(uint64_t size) {
+  if (size > 1073741824) {
+    auto sizeStr = std::to_string(size / 1073741824.0d);
+    truncate(sizeStr);
+    sizeStr += " GB";
+    return sizeStr;
+  } else if (size > 1048576) {
+    auto sizeStr = std::to_string(size / 1048576.0d);
+    truncate(sizeStr);
+    sizeStr += " MB";
+    return sizeStr;
+  } else {
+    auto sizeStr = std::to_string(size);
+    truncate(sizeStr);
+    sizeStr += " B";
+    return sizeStr;
   }
 }

@@ -47,7 +47,7 @@ bool ImageIterator::IsEmpty() {
     requires: Previous call to MoveNext to have returned true.
  */
 Image ImageIterator::Get() {
-  return Image(std::string(candidate));
+  return Image(std::string(candidate), candidateSizeInBytes);
 }
 
 /***
@@ -74,6 +74,7 @@ bool ImageIterator::MoveNext() {
       memset(candidate, 0, sizeof(candidate));
       currentFile.getName(candidate, sizeof(candidate));
       bool isValid = fileIsValidImage(currentFile, candidate);
+      candidateSizeInBytes = currentFile.fileSize();
       currentFile.close();
       if (isValid) {
         currentIsLast = (next == lastIdx);
@@ -114,6 +115,7 @@ bool ImageIterator::MovePrevious() {
       memset(candidate, 0, sizeof(candidate));
       currentFile.getName(candidate, sizeof(candidate));
       bool isValid = fileIsValidImage(currentFile, candidate);
+      candidateSizeInBytes = currentFile.fileSize();
       currentFile.close();
       if (isValid) {
         currentIsLast = (next == lastIdx);
