@@ -143,6 +143,7 @@ protected:
     // IDE command handlers
     virtual bool cmd_nop(ide_registers_t *regs);
     virtual bool cmd_set_features(ide_registers_t *regs);
+    virtual bool cmd_write_sectors(ide_registers_t *regs);
     virtual bool cmd_read_sectors(ide_registers_t *regs);
     virtual bool cmd_read_dma(ide_registers_t *regs);
     virtual bool cmd_init_dev_params(ide_registers_t *regs);
@@ -153,8 +154,14 @@ protected:
     // Methods used by ATA command implementations
     // send data via PIO
     ssize_t ata_send_data_pio(const uint8_t *data, size_t blocksize, size_t num_blocks);
+    // Send single data block. Waits for space in buffer, but doesn't wait for new transfer to finish.
     bool ata_send_data_block(const uint8_t *data, uint16_t blocksize);
+    // Wait for any previously started transfers to finish
     bool ata_send_wait_finish();
+    // Receive one or multiple data blocks synchronously
+    bool ata_recv_data(uint8_t *data, size_t blocksize, size_t num_blocks = 1);
+    // Receive single data block
+    bool ata_recv_data_block(uint8_t *data, uint16_t blocksize);
 
     // Methods used by ATAPI command implementations
 

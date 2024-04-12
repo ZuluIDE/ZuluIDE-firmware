@@ -74,6 +74,7 @@ bool IDERigidDevice::handle_command(ide_registers_t *regs)
 //        case IDE_CMD_IDENTIFY_PACKET_DEVICE: return cmd_identify_packet_device(regs);
 //        case IDE_CMD_READ_DMA: return cmd_read_dma(regs);
         case IDE_CMD_READ_SECTORS: return cmd_read_sectors(regs);
+        case IDE_CMD_WRITE_SECTORS: return cmd_write_sectors(regs);
         case IDE_CMD_PACKET: return cmd_packet(regs);
         case IDE_CMD_INIT_DEV_PARAMS: return cmd_init_dev_params(regs);
         case IDE_CMD_IDENTIFY_DEVICE: return cmd_identify_packet_device(regs);
@@ -215,6 +216,81 @@ bool IDERigidDevice::cmd_read_sectors(ide_registers_t *regs)
     if (status)
     {
         ata_send_wait_finish();
+        ide_phy_get_regs(regs);
+        uint32_t new_lba = lba + sector_count - 1;
+        if (lba_mode)
+        {
+            regs->device |= (0x0F) & (new_lba >> 24);
+            regs->lba_high = new_lba >> 16;
+            regs->lba_mid = new_lba >> 8;
+            regs->lba_low = new_lba;
+        }
+        else
+        {
+            sector = (new_lba % m_rigidinfo.sectors_per_track) + 1;
+            cylinder = (new_lba / m_rigidinfo.sectors_per_track) / m_rigidinfo.heads;
+            head = (new_lba / m_rigidinfo.sectors_per_track) % m_rigidinfo.heads;
+            regs->device |= (0x0F) & head;
+            regs->lba_high = cylinder >> 8;
+            regs->lba_mid = cylinder;
+            regs->lba_low = sector;
+
+        }
+        regs->status = IDE_STATUS_DEVRDY;
+        ide_phy_set_regs(regs);
+        ide_phy_assert_irq(IDE_STATUS_DEVRDY);
+    }
+    else
+    {
+        // \todo do something if the read fails
+    }
+    return status;
+}
+
+
+bool IDERigidDevice::cmd_write_sectors(ide_registers_t *regs)
+{
+    bool lba_mode = false;
+    uint32_t lba = 0;
+    uint16_t sector_count = regs->sector_count == 0 ? 256 : regs->sector_count;
+    uint8_t head = 0;
+    uint16_t cylinder = 0;
+    uint8_t sector = 0;
+    bool status = false;
+    lba_mode = !!(regs->device & 0x40);
+    if (lba_mode)
+    {
+        lba |= 0xF & (regs->device) << 24;
+        lba |= regs->lba_high << 16;
+        lba |= regs->lba_mid << 8;
+        lba |= regs->lba_low;
+    }
+    else
+    {
+        head = 0xF & (regs->device);
+        cylinder = regs->lba_high << 8;
+        cylinder |= regs->lba_mid;
+        sector = regs->lba_low;
+        lba = (cylinder * m_rigidinfo.heads + head) * m_rigidinfo.sectors_per_track + (sector - 1);
+    }
+
+
+
+    dbgmsg("Command write data lba: ", (int) lba, " sector count: ", (int) sector_count, " mode: ", lba_mode ? "LBA" : "CHS");
+
+    // \todo temp_bytes_per_sector replace with a setting
+    const uint32_t temp_bytes_per_sector = 512;
+
+     if (m_image && m_image->writable())
+     {
+        status = m_image->write((uint64_t)lba * temp_bytes_per_sector,
+                                temp_bytes_per_sector, sector_count,
+                                this);
+     }
+
+    if (status)
+    {
+        ide_phy_get_regs(regs);
         uint32_t new_lba = lba + sector_count - 1;
         if (lba_mode)
         {
@@ -586,7 +662,7 @@ ssize_t IDERigidDevice::ata_send_data_pio(const uint8_t *data, size_t blocksize,
         return blocks_sent;
     }
 
-    size_t max_blocksize = std::min<size_t>(m_phy_caps.max_blocksize, /*m_atapi_state.bytes_req*/ 512);
+    size_t max_blocksize = std::min<size_t>(m_phy_caps.max_blocksize, /*m_atapi_state.bytes_req*/ 512); // \todo get this value from a setting
     if (blocksize > max_blocksize)
     {
         dbgmsg("-- atapi_send_data_async(): Block size ", (int)blocksize, " exceeds limit ", (int)max_blocksize,
@@ -613,24 +689,6 @@ ssize_t IDERigidDevice::ata_send_data_pio(const uint8_t *data, size_t blocksize,
             return -1;
         }
     }
-
-    // size_t blocks_sent = 0;
-    // while (blocks_sent < num_blocks && ide_phy_can_write_block())
-    // {
-    //     ide_phy_write_block(data, blocksize);
-    //     blocks_sent++;
-    // }
-
-    // if (blocks_sent == 0)
-    // {
-    //     if (ide_phy_is_command_interrupted())
-    //     {
-    //         dbgmsg("ata_send_data_pio(): interrupted");
-    //         return -1;
-    //     }
-    // }
-
-    // return blocks_sent;
 }
 
 bool IDERigidDevice::ata_send_data_block(const uint8_t *data, uint16_t blocksize)
@@ -704,6 +762,109 @@ bool IDERigidDevice::ata_send_wait_finish()
     }
     return true;
 }
+
+
+bool IDERigidDevice::ata_recv_data(uint8_t *data, size_t blocksize, size_t num_blocks)
+{
+    size_t phy_max_blocksize = m_phy_caps.max_blocksize;
+    size_t max_blocksize = std::min<size_t>(phy_max_blocksize, /* m_atapi_state.bytes_req*/ 512 ); // \todo get from setting
+    if (blocksize > max_blocksize)
+    {
+        // Have to split the blocks for phy
+        size_t split = (blocksize + max_blocksize - 1) / max_blocksize;
+        assert(blocksize % split == 0);
+        blocksize /= split;
+        num_blocks *= split;
+    }
+    else
+    {
+        // Combine blocks for better performance
+        while (blocksize * 2 < max_blocksize && (num_blocks & 1) == 0)
+        {
+            blocksize *= 2;
+            num_blocks >>= 1;
+        }
+    }
+
+    // Set number bytes to transfer to registers
+    ide_registers_t regs = {};
+    ide_phy_get_regs(&regs);
+    regs.status = IDE_STATUS_BSY;
+    regs.sector_count = 0; // Data transfer to device
+    regs.lba_mid = (uint8_t)blocksize;
+    regs.lba_high = (uint8_t)(blocksize >> 8);
+    ide_phy_set_regs(&regs);
+
+    // Start data transfer for first block
+    int udma_mode = -1; /*(m_atapi_state.dma_requested ? m_atapi_state.udma_mode : -1); */ // \todo enable udma mode
+    ide_phy_start_read(blocksize, udma_mode);
+
+    // Receive blocks
+    for (size_t i = 0; i < num_blocks; i++)
+    {
+        uint32_t start = millis();
+        while (!ide_phy_can_read_block())
+        {
+            if ((uint32_t)(millis() - start) > 10000)
+            {
+                logmsg("IDERigidDevice::ata_recv_data read timeout on block ", (int)(i + 1), "/", (int)num_blocks);
+                ide_phy_stop_transfers();
+                return false;
+            }
+
+            if (ide_phy_is_command_interrupted())
+            {
+                dbgmsg("IDERigidDevice::ata_recv_data() interrupted");
+                return false;
+            }
+        }
+
+        // Read out previous block
+        bool continue_transfer = (i + 1 < num_blocks);
+        ide_phy_read_block(data + blocksize * i, blocksize, continue_transfer);
+    }
+
+    ide_phy_stop_transfers();
+    return true;
+}
+
+bool IDERigidDevice::ata_recv_data_block(uint8_t *data, uint16_t blocksize)
+{
+    // Set number bytes to transfer to registers
+    ide_registers_t regs = {};
+    ide_phy_get_regs(&regs);
+    regs.status = IDE_STATUS_BSY;
+    regs.sector_count = 0; // Data transfer to device
+    regs.lba_mid = (uint8_t)blocksize;
+    regs.lba_high = (uint8_t)(blocksize >> 8);
+    ide_phy_set_regs(&regs);
+
+    // Start data transfer
+    int udma_mode = -1; /* (m_atapi_state.dma_requested ? m_atapi_state.udma_mode : -1); */ // \todo enable udma mode
+    ide_phy_start_read(blocksize, udma_mode);
+
+    uint32_t start = millis();
+    while (!ide_phy_can_read_block())
+    {
+        if ((uint32_t)(millis() - start) > 10000)
+        {
+            logmsg("IDERigidDevice::atapi_recv_data_block(", (int)blocksize, ") read timeout");
+            ide_phy_stop_transfers();
+            return false;
+        }
+
+        if (ide_phy_is_command_interrupted())
+        {
+            dbgmsg("IDERigidDevice::atapi_recv_data_block() interrupted");
+            return false;
+        }
+    }
+
+    ide_phy_read_block(data, blocksize);
+    ide_phy_stop_transfers();
+    return true;
+}
+
 
 
 ssize_t IDERigidDevice::atapi_send_data_async(const uint8_t *data, size_t blocksize, size_t num_blocks)
@@ -1499,7 +1660,7 @@ bool IDERigidDevice::doWrite(uint32_t lba, uint32_t transfer_len)
 // Called by IDEImage to request reception of more data from IDE bus
 ssize_t IDERigidDevice::write_callback(uint8_t *data, size_t blocksize, size_t num_blocks)
 {
-    if (atapi_recv_data(data, blocksize, num_blocks))
+    if (ata_recv_data(data, blocksize, num_blocks))
     {
         return num_blocks;
     }
