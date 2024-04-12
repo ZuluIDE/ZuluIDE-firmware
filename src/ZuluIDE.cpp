@@ -331,6 +331,27 @@ void load_image(const zuluide::images::Image& toLoad)
     g_ide_imagefile.set_drive_type(newDriveType);
   }
 
+  switch (g_ide_imagefile.get_drive_type())
+  {
+  case DRIVE_TYPE_CDROM:
+      g_ide_device = &g_ide_cdrom;
+      logmsg("Device is a CDROM drive");
+      break;
+  case DRIVE_TYPE_ZIP100:
+      g_ide_device = &g_ide_zipdrive;
+      logmsg("Device is a Iomega Zip Drive 100");
+      break;
+  case DRIVE_TYPE_REMOVABLE:
+      g_ide_device = &g_ide_removable;
+      logmsg("Device is a generic removable drive");
+      break;
+  default:
+      g_ide_device = &g_ide_cdrom;
+      g_ide_imagefile.set_drive_type(DRIVE_TYPE_CDROM);
+      logmsg("Device defaulting to a CDROM drive");
+      break;
+  }
+
   logmsg("Loading image ", toLoad.GetFilename().c_str());
   g_ide_imagefile.open_file(toLoad.GetFilename().c_str(), false);
   if (g_ide_device) {
@@ -393,13 +414,14 @@ void zuluide_setup(void)
   }
 #endif
 
+  
+    // Setup the status controller.
+    setupStatusController();
+
     if (platform_get_device_id() == 1)
         ide_protocol_init(NULL, g_ide_device); // Secondary device
     else
         ide_protocol_init(g_ide_device, NULL); // Primary device
-
-    // Setup the status controller.
-    setupStatusController();
 
     blinkStatus(BLINK_STATUS_OK);
 
