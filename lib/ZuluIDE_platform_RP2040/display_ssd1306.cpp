@@ -32,6 +32,7 @@ using namespace zuluide::status;
 static const char* toString(const zuluide::control::MenuState::Entry value);
 static const char* toString(const zuluide::control::EjectState::Entry value);
 static uint16_t centerText(const char* text, Adafruit_SSD1306& graph);
+static uint16_t centerText(const std::string& text, Adafruit_SSD1306& graph);
 static void truncate(std::string& toProcess);
 static std::string makeImageSizeStr(uint64_t size);
 
@@ -117,7 +118,7 @@ void DisplaySSD1306::displayStatus() {
     graph.drawBitmap(0, 8, cdrom_loaded, 32, 16, WHITE);
     int offset = currentDispState->GetStatusState().GetImageNameOffset();
     const char* filename = currentSysStatus->GetLoadedImage().GetFilename().c_str();
-    if (offset < strlen(filename)) {
+    if (offset < currentSysStatus->GetLoadedImage().GetFilename().length()) {
       graph.print(filename + offset);
     } else {
       graph.print(filename + (strlen(filename) - 1));
@@ -238,16 +239,22 @@ void DisplaySSD1306::displaySelect() {
 
   int16_t x=0, y=0;
   uint16_t h=0, w=0;
-  graph.getTextBounds("-- Select Image --", 0 ,0, &x, &y, &w, &h);
+  graph.getTextBounds(SELECT_IMAGE_MENU_TEXT, 0 ,0, &x, &y, &w, &h);
   graph.setCursor((128 - w) / 2, 0);
-  graph.print("-- Select Image --");
+  graph.print(SELECT_IMAGE_MENU_TEXT);
 
   const char* toShow;
   if (!currentDispState->GetSelectState().IsShowingBack() && currentDispState->GetSelectState().HasCurrentImage()) {
     auto img = currentDispState->GetSelectState().GetCurrentImage();
-    toShow = img.GetFilename().c_str();
-    graph.setCursor(centerText(toShow, graph), centerBase);
-    graph.print(toShow);
+    graph.setCursor(centerText(img.GetFilename(), graph), centerBase);
+
+    auto offset = currentDispState->GetSelectState().GetImageNameOffset();
+    auto filename = img.GetFilename().c_str();
+    if (offset < img.GetFilename().length()) {
+      graph.print(filename + offset);
+    } else {
+      graph.print(filename + (img.GetFilename().length() - 1));
+    }
 
     auto size = img.GetFileSizeBytes();
     if (size != 0) {      
@@ -276,6 +283,10 @@ static uint16_t centerText(const char* text, Adafruit_SSD1306& graph) {
   }
 
   return (128 - w) / 2;
+}
+
+static uint16_t centerText(const std::string& text, Adafruit_SSD1306& graph) {
+  return centerText(text.c_str(), graph);
 }
 
 static const char* toString(const zuluide::control::MenuState::Entry value) {

@@ -33,7 +33,7 @@ Image::Image(std::string filename, Image::ImageType imageType, uint64_t sizeInBy
 {
 }
 
-const std::string Image::GetFilename() const {
+const std::string& Image::GetFilename() const {
   return filenm;
 }
 

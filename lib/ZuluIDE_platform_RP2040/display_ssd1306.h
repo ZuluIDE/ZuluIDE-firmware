@@ -94,3 +94,5 @@ namespace zuluide {
 
   };
 }
+
+#define SELECT_IMAGE_MENU_TEXT "-- Select Image --"

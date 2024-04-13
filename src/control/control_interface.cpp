@@ -129,7 +129,7 @@ void ControlInterface::PrimaryButtonPressed() {
   logmsg("Primary Button Pressed");
   switch(currentDisplayMode) {
   case Mode::Select: {
-    displayController->SetMode(Mode::Status);
+    displayController->GetSelectController().DecreaseImageNameOffset();
     break;
   }
   default:
