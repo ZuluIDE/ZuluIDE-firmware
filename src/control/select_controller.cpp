@@ -37,14 +37,18 @@ SelectController::SelectController(StdDisplayController* cntrlr, zuluide::status
 
 void SelectController::IncrementImageNameOffset() {
   auto value = state.GetImageNameOffset();
-  state.SetImageNameOffset(value + 1);
-  controller->UpdateState(state);
+  if (!state.IsShowingBack() && state.HasCurrentImage() && value + 1 < state.GetCurrentImage().GetFilename().length()) {
+    state.SetImageNameOffset(value + 1);
+    controller->UpdateState(state);
+  }
 }
 
 void SelectController::DecreaseImageNameOffset() {
   auto value = state.GetImageNameOffset();
-  state.SetImageNameOffset(value - 1);
-  controller->UpdateState(state);
+  if (value > 0) {
+    state.SetImageNameOffset(value - 1);
+    controller->UpdateState(state);
+  }  
 }
 
 void SelectController::ResetImageNameOffset() {

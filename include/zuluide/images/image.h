@@ -40,7 +40,7 @@ namespace zuluide::images {
     Image(std::string filename, uint64_t sizeInBytes = 0);
     Image(std::string filename, ImageType imageType, uint64_t sizeInBytes = 0);
     
-    const std::string GetFilename() const;
+    const std::string& GetFilename() const;
     ImageType GetImageType();
     bool operator==(const Image& other);
     const uint64_t GetFileSizeBytes() const;

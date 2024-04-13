@@ -25,7 +25,7 @@
 #include <memory>
 #include <SdFat.h>
 
-#define MAX_FILE_PATH 64
+#define MAX_FILE_PATH 255
 
 namespace zuluide::images {
 
@@ -44,7 +44,7 @@ namespace zuluide::images {
   private:
     FsFile currentFile;
     FsFile root;
-    char candidate[MAX_FILE_PATH];
+    char candidate[MAX_FILE_PATH + 1];
     uint64_t candidateSizeInBytes;
     bool isOnImageFile;
     int fileCount;
