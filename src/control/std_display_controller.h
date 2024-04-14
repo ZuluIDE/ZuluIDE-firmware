@@ -31,6 +31,7 @@
 #include "eject_controller.h"
 #include "select_controller.h"
 #include "new_controller.h"
+#include "info_controller.h"
 
 namespace zuluide::control {
   
@@ -44,11 +45,13 @@ namespace zuluide::control {
     EjectController& GetEjectController();
     SelectController& GetSelectController();
     NewController& GetNewController();
+    InfoController& GetInfoController();
     void UpdateState(StatusState& newState);
     void UpdateState(MenuState& newState);
     void UpdateState(SelectState& newState);
     void UpdateState(EjectState& newState);
     void UpdateState(NewImageState& newState);
+    void UpdateState(InfoState& newState);
     void SetMode(Mode value);
   private:
     void notifyObservers();    
@@ -60,5 +63,6 @@ namespace zuluide::control {
     std::unique_ptr<SelectController> selectController;
     std::unique_ptr<NewController> newController;
     zuluide::status::StatusController* statController;
+    std::unique_ptr<InfoController> infoController;
   };
 }

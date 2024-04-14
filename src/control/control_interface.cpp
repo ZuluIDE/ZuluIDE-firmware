@@ -92,6 +92,21 @@ void ControlInterface::RotaryUpdate(int offset) {
     displayController->GetNewController().CreateAndSelect();
     break;
   }
+
+  case Mode::Info: {
+    int cur = offset;
+    while (cur > 0) {
+      displayController->GetInfoController().DecreaseFirmwareOffset();
+      cur--;
+    }
+    
+    while (cur < 0) {
+      displayController->GetInfoController().IncrementFirmwareOffset();
+      cur++;
+    }
+    
+    break;
+  }
   }
 }
 
@@ -120,6 +135,11 @@ void ControlInterface::RotaryButtonPressed() {
 
   case Mode::NewImage: {
     displayController->GetNewController().CreateAndSelect();
+    break;
+  }
+
+  case Mode::Info: {
+    displayController->SetMode(Mode::Status);
     break;
   }
   }

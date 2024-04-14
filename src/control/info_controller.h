@@ -21,19 +21,23 @@
 
 #pragma once
 
-namespace zuluide::control {
+#include "../status/status_controller.h"
+#include <zuluide/control/display_state.h>
 
-  class MenuState {
+namespace zuluide::control {
+  class StdDisplayController;
+  /**
+     Controls state when the UI is selecting a new image..
+   */
+  class InfoController {
   public:
-    enum class Entry { Eject, Select, New, Back, Info };
-    MenuState (Entry value = Entry::Eject);
-    MenuState (const MenuState& src);
-    Entry GetCurrentEntry () const;
-    void MoveToNextEntry();
-    void MoveToPreviousEntry();
-    MenuState& operator=(const MenuState& src);
+    InfoController(StdDisplayController* cntrlr);
+    void IncrementFirmwareOffset();
+    void DecreaseFirmwareOffset();
+    void ResetImageNameOffset();    
+    void Reset(const InfoState& newState);
   private:
-    Entry currentEntry;
+    StdDisplayController* controller;
+    InfoState state;
   };
-  
 }

@@ -52,6 +52,7 @@ namespace zuluide {
     void displayMenu();
     void displayEject();
     void displaySelect();
+    void displayInfo();
     uint8_t cdrom_loaded[16*4] =
       {
 0x0,0xf,0xe0,0x0,
@@ -96,3 +97,6 @@ namespace zuluide {
 }
 
 #define SELECT_IMAGE_MENU_TEXT "-- Select Image --"
+
+#define INFO_MENU_TEXT "-- About --"
+#define ZULUIDE_TITLE "ZuluIDE"

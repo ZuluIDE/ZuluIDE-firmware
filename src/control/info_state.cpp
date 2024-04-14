@@ -19,21 +19,20 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
 **/
 
-#pragma once
+#include <zuluide/control/info_state.h>
 
-namespace zuluide::control {
+using namespace zuluide::control;
 
-  class MenuState {
-  public:
-    enum class Entry { Eject, Select, New, Back, Info };
-    MenuState (Entry value = Entry::Eject);
-    MenuState (const MenuState& src);
-    Entry GetCurrentEntry () const;
-    void MoveToNextEntry();
-    void MoveToPreviousEntry();
-    MenuState& operator=(const MenuState& src);
-  private:
-    Entry currentEntry;
-  };
-  
+InfoState::InfoState () : firmwareOffset(0) {
+}
+
+InfoState::InfoState (const InfoState& src) : firmwareOffset(src.firmwareOffset) {
+}
+
+const int InfoState::GetFirmwareOffset() const {
+  return firmwareOffset;
+}
+
+void InfoState::SetFirmwareOffset(int value) {
+  firmwareOffset = value;
 }

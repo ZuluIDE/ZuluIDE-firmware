@@ -23,6 +23,7 @@
 #include "new_controller.h"
 #include "eject_controller.h"
 #include "menu_controller.h"
+#include "info_controller.h"
 #include "ZuluIDE_log.h"
 
 #include <functional>
@@ -65,10 +66,17 @@ void StdDisplayController::SetMode(Mode newMode)
     break;
   }
     
-  case Mode::NewImage:{
+  case Mode::NewImage: {
     NewImageState empty;
     UpdateState(empty);
     newController->Reset(empty);
+    break;
+  }
+
+  case Mode::Info: {
+    InfoState empty;
+    UpdateState(empty);
+    infoController->Reset(empty);
     break;
   }
   }
@@ -109,6 +117,13 @@ void StdDisplayController::UpdateState(EjectState& newState)
   notifyObservers();
 }
 
+void StdDisplayController::UpdateState(InfoState& newState)
+{
+  // Copy the new state into a new memory location.
+  currentState = std::move(DisplayState(newState));
+  notifyObservers();
+}
+
 void StdDisplayController::notifyObservers() {
   std::for_each(observers.begin(), observers.end(), [this](auto observer) {
     // Make a copy so observers cannot mutate system state.
@@ -139,10 +154,15 @@ NewController& StdDisplayController::GetNewController() {
   return *newController;
 }
 
+InfoController& StdDisplayController::GetInfoController() {
+  return *infoController;
+}
+
 StdDisplayController::StdDisplayController(zuluide::status::StatusController* statCtrlr) : statController(statCtrlr) {
   statusController = std::make_unique<StatusController>(this);
   menuController = std::make_unique<MenuController>(this);
   ejectController = std::make_unique<EjectController>(this, statController);
   selectController = std::make_unique<SelectController>(this, statController);
   newController = std::make_unique<NewController>(this, statController);
+  infoController = std::make_unique<InfoController>(this);
 }

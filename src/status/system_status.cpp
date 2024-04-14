@@ -112,3 +112,7 @@ template <class T> const T& SystemStatus::GetDeviceStatus() const {
 drive_type_t SystemStatus::GetDeviceType() const {
   return primary->GetDriveType();
 }
+
+const std::string& SystemStatus::GetFirmwareVersion() const {
+  return firmwareVersion;
+}

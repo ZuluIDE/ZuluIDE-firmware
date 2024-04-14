@@ -48,6 +48,11 @@ void MenuController::ChangeToSelectedEntry() {
     controller->SetMode(Mode::Select);
     break;
   }
+
+  case MenuState::Entry::Info: {
+    controller->SetMode(Mode::Info);
+    break;
+  }
     
   case MenuState::Entry::New: {
     controller->SetMode(Mode::NewImage);

@@ -19,21 +19,31 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
 **/
 
-#pragma once
+#include <zuluide/control/eject_state.h>
 
-namespace zuluide::control {
+using namespace zuluide::control;
 
-  class MenuState {
-  public:
-    enum class Entry { Eject, Select, New, Back, Info };
-    MenuState (Entry value = Entry::Eject);
-    MenuState (const MenuState& src);
-    Entry GetCurrentEntry () const;
-    void MoveToNextEntry();
-    void MoveToPreviousEntry();
-    MenuState& operator=(const MenuState& src);
-  private:
-    Entry currentEntry;
-  };
-  
+EjectState::EjectState (Entry value)
+  : currentEntry(value) {
+}
+
+EjectState::EjectState (const EjectState& src)
+  : currentEntry(src.currentEntry) {
+}
+
+EjectState::Entry EjectState::GetCurrentEntry () const {
+  return currentEntry;
+}
+
+void EjectState::MoveToNextCurrentEntry() {
+  if (currentEntry == Entry::Eject) {
+    currentEntry = Entry::Back;
+  } else {
+    currentEntry = Entry::Eject;
+  }
+}
+
+EjectState& EjectState::operator=(const EjectState& src) {
+  currentEntry = src.currentEntry;
+  return *this;
 }
