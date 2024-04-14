@@ -60,7 +60,8 @@ DisplayState::DisplayState(const DisplayState& state) :
   menuState(state.menuState),
   selectState(state.selectState),
   newImageState(state.newImageState),
-  ejectState(state.ejectState)
+  ejectState(state.ejectState),
+  infoState(state.infoState)
 {}
 
 DisplayState& DisplayState::operator=(DisplayState&& src) {
@@ -70,6 +71,7 @@ DisplayState& DisplayState::operator=(DisplayState&& src) {
   selectState = std::move(src.selectState);
   newImageState = std::move(src.newImageState);
   ejectState = std::move(src.ejectState);
+  infoState = std::move(src.infoState);
   return *this;
 }
 
@@ -81,6 +83,10 @@ DisplayState::DisplayState(DisplayState&& src) :
   selectState = std::move(src.selectState);
   newImageState = std::move(src.newImageState);
   ejectState = std::move(src.ejectState);
+}
+
+DisplayState::DisplayState(InfoState &state) :
+  currentMode(Mode::Info), infoState(state) {
 }
 
 Mode DisplayState::GetCurrentMode() const {
@@ -103,27 +109,7 @@ const StatusState& DisplayState::GetStatusState() const {
   return statusState;
 }
 
-EjectState::EjectState (Entry value)
-  : currentEntry(value) {
+const InfoState& DisplayState::GetInfoState() const {
+  return infoState;
 }
 
-EjectState::EjectState (const EjectState& src)
-  : currentEntry(src.currentEntry) {
-}
-
-EjectState::Entry EjectState::GetCurrentEntry () const {
-  return currentEntry;
-}
-
-void EjectState::MoveToNextCurrentEntry() {
-  if (currentEntry == Entry::Eject) {
-    currentEntry = Entry::Back;
-  } else {
-    currentEntry = Entry::Eject;
-  }
-}
-
-EjectState& EjectState::operator=(const EjectState& src) {
-  currentEntry = src.currentEntry;
-  return *this;
-}

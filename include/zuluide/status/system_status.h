@@ -48,6 +48,7 @@ namespace zuluide::status {
     bool HasLoadedImage() const;
     bool LoadedImagesAreEqual(const SystemStatus& src) const;
     bool HasCurrentImage() const;
+    const std::string& GetFirmwareVersion() const;
   private:
     std::unique_ptr<IDeviceStatus> primary;
     std::string firmwareVersion;

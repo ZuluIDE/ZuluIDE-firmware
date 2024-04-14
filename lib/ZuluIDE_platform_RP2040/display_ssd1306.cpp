@@ -97,6 +97,10 @@ void DisplaySSD1306::updateDisplay() {
       break;
     case zuluide::control::Mode::NewImage:
       break;
+    case zuluide::control::Mode::Info: {
+      displayInfo();
+      break;
+    }
     }
   } else {
     // Show loading message.
@@ -179,8 +183,8 @@ void DisplaySSD1306::displayMenu() {
   graph.print(selectMenuText);
   graph.setTextColor(WHITE, BLACK);
 
-  selectMenuText = toString(zuluide::control::MenuState::Entry::New);
-  if (currentDispState->GetMenuState().GetCurrentEntry() == zuluide::control::MenuState::Entry::New) {
+  selectMenuText = toString(zuluide::control::MenuState::Entry::Info);
+  if (currentDispState->GetMenuState().GetCurrentEntry() == zuluide::control::MenuState::Entry::Info) {
     graph.setTextColor(BLACK, WHITE);
   }
   
@@ -272,6 +276,32 @@ void DisplaySSD1306::displaySelect() {
   graph.display();
 }
 
+void DisplaySSD1306::displayInfo() {
+  graph.clearDisplay();
+  graph.setTextColor(WHITE, BLACK);
+
+  int16_t x=0, y=0;
+  uint16_t h=0, w=0;
+  graph.getTextBounds(INFO_MENU_TEXT, 0 ,0, &x, &y, &w, &h);
+  graph.setCursor((128 - w) / 2, 0);
+  graph.print(INFO_MENU_TEXT);
+
+  graph.setCursor(centerText(ZULUIDE_TITLE, graph), centerBase);
+  graph.print(ZULUIDE_TITLE);
+  
+  auto firmwareVersion = currentSysStatus->GetFirmwareVersion().c_str();
+  graph.setCursor(centerText(firmwareVersion, graph), centerBase + h);
+  
+  auto offset = currentDispState->GetInfoState().GetFirmwareOffset();
+  if (offset < currentSysStatus->GetFirmwareVersion().length()) {
+    graph.print(firmwareVersion + offset);
+  } else {
+    graph.print(firmwareVersion + (currentSysStatus->GetFirmwareVersion().length() - 1));
+  }
+  
+  graph.display();
+}
+
 static uint16_t centerText(const char* text, Adafruit_SSD1306& graph) {
   int16_t x=0, y=0;
   uint16_t h=0, w=0;
@@ -299,6 +329,8 @@ static const char* toString(const zuluide::control::MenuState::Entry value) {
     return "[ NEW ]";
   case zuluide::control::MenuState::Entry::Back:
     return "[ BACK ]";
+  case zuluide::control::MenuState::Entry::Info:
+    return "[ INFO ]";
   default:
     return "ERROR";
   }

@@ -23,17 +23,14 @@
 
 namespace zuluide::control {
 
-  class MenuState {
+  class InfoState {
   public:
-    enum class Entry { Eject, Select, New, Back, Info };
-    MenuState (Entry value = Entry::Eject);
-    MenuState (const MenuState& src);
-    Entry GetCurrentEntry () const;
-    void MoveToNextEntry();
-    void MoveToPreviousEntry();
-    MenuState& operator=(const MenuState& src);
+    InfoState ();
+    InfoState (const InfoState& src);
+    const int GetFirmwareOffset() const;
+    void SetFirmwareOffset(int value);
   private:
-    Entry currentEntry;
+    int firmwareOffset;
   };
   
 }

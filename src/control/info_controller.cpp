@@ -19,16 +19,33 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
 **/
 
-#pragma once
+#include "info_controller.h"
+#include "std_display_controller.h"
 
+using namespace zuluide::control;
 
-namespace zuluide::control {
+InfoController::InfoController(StdDisplayController* cntrlr) : controller(cntrlr) {
+}
 
-  class AboutState {
-  public:    
-    AboutState ();
-    AboutState (const NewImageState& src);
-    AboutState& operator=(const AboutState& src);
-  };
-  
+void InfoController::IncrementFirmwareOffset() {
+  auto value = state.GetFirmwareOffset();
+  state.SetFirmwareOffset(value + 1);
+  controller->UpdateState(state);  
+}
+
+void InfoController::DecreaseFirmwareOffset() {
+  auto value = state.GetFirmwareOffset();
+  if (value > 0) {
+    state.SetFirmwareOffset(value - 1);
+    controller->UpdateState(state);
+  }
+}
+
+void InfoController::ResetImageNameOffset() {
+  state.SetFirmwareOffset(0);
+  controller->UpdateState(state);
+}
+
+void InfoController::Reset(const InfoState& newState) {
+  state = newState;
 }
