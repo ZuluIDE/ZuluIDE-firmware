@@ -38,6 +38,7 @@ namespace zuluide::control {
     virtual void StartSendingEvents();
     virtual void StopSendingEvents();
     virtual bool CheckForDevice() override;
+    virtual bool GetDeviceExists() override;
     void Poll();
 
   private:
