@@ -74,5 +74,12 @@ namespace zuluide::control {
      * \return true if device exists, false otherwise
     */
     virtual bool CheckForDevice() = 0;
+
+    /***
+     * Checks for input device and disables device polling if it doesn't exist
+     * \return true if device exists, false otherwise
+    */
+    virtual bool GetDeviceExists() = 0;
+
   };
 }

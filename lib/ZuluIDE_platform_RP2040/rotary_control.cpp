@@ -53,6 +53,11 @@ bool RotaryControl::CheckForDevice()
   return deviceExists;
 }
 
+bool RotaryControl::GetDeviceExists()
+{
+  return deviceExists;
+}
+
 RotaryControl::RotaryControl(int addr) :
   pcaAddr(addr), isSending(false), clockHigh(false), tickCount(0), deviceExists(false) {
 }
