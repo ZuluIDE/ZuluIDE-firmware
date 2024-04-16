@@ -37,12 +37,14 @@ namespace zuluide::control {
     virtual void SetReciever(InputReceiver* reciever);
     virtual void StartSendingEvents();
     virtual void StopSendingEvents();
+    virtual bool CheckForDevice() override;
     void Poll();
 
   private:
     uint8_t getValue();
     InputReceiver* inputReceiver;
     int pcaAddr;
+    bool deviceExists;
     bool isSending;
     TwoWire *wire;
     bool buttonIsPressed(bool isDown, uint32_t* lastDownMillis, uint32_t checkTime);

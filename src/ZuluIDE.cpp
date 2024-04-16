@@ -240,21 +240,27 @@ void setupStatusController()
     g_StatusController.SetIsPrimary(isPrimary);
     g_StatusController.UpdateDeviceStatus(std::move(device));
   }
-
   g_StatusController.AddObserver(status_observer);
-  platform_set_status_controller(g_StatusController);
-  platform_set_display_controller(g_DisplayController);
 
-  g_ControlInterface.SetDisplayController(&g_DisplayController);
-  g_ControlInterface.SetStatusController(&g_StatusController);  
-  
-  platform_set_input_interface(&g_ControlInterface);
+  if (platform_check_for_controller())
+  {
+    platform_set_status_controller(g_StatusController);
+    platform_set_display_controller(g_DisplayController);
 
-  // Force an update.
-  g_StatusController.EndUpdate();
+    g_ControlInterface.SetDisplayController(&g_DisplayController);
+    g_ControlInterface.SetStatusController(&g_StatusController);
 
-  g_DisplayController.SetMode(zuluide::control::Mode::Status);
+    platform_set_input_interface(&g_ControlInterface);
 
+    // Force an update.
+    g_StatusController.EndUpdate();
+
+    g_DisplayController.SetMode(zuluide::control::Mode::Status);
+  }
+  else
+  {
+    g_StatusController.EndUpdate();
+  }
   loadFirstImage();  
 }
 
@@ -413,8 +419,6 @@ void zuluide_setup(void)
     }
   }
 #endif
-
-  
     // Setup the status controller.
     setupStatusController();
 

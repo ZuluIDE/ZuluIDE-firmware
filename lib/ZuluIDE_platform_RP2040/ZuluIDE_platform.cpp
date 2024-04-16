@@ -172,6 +172,12 @@ void platform_late_init()
     }
 }
 
+bool platform_check_for_controller()
+{
+  g_rotary_input.SetI2c(&g_wire);
+  return g_rotary_input.CheckForDevice();
+}
+
 void platform_set_status_controller(zuluide::Observable<zuluide::status::SystemStatus>& statusController) {
   logmsg("Initialized platform controller with the status controller.");
   display.init(&g_wire);
@@ -184,7 +190,6 @@ void platform_set_display_controller(zuluide::Observable<zuluide::control::Displ
 }
 
 void platform_set_input_interface(zuluide::control::InputReceiver* inputReceiver) {
-  g_rotary_input.SetI2c(&g_wire);
   g_rotary_input.SetReciever(inputReceiver);
   g_rotary_input.StartSendingEvents();
 }

@@ -88,6 +88,8 @@ void platform_poll();
 typedef void (*sd_callback_t)(uint32_t bytes_complete);
 void platform_set_sd_callback(sd_callback_t func, const uint8_t *buffer);
 
+bool platform_check_for_controller();
+
 void platform_set_status_controller(zuluide::Observable<zuluide::status::SystemStatus>& statusController);
 
 void platform_set_display_controller(zuluide::Observable<zuluide::control::DisplayState>& displayController);

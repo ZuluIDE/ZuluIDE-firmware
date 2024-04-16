@@ -44,8 +44,17 @@ void RotaryControl::StopSendingEvents() {
   isSending = false;
 }
 
+bool RotaryControl::CheckForDevice()
+{
+  wire->begin();
+  wire->setTimeout(1, false);
+  wire->beginTransmission(pcaAddr);
+  deviceExists = 0 == wire->endTransmission();
+  return deviceExists;
+}
+
 RotaryControl::RotaryControl(int addr) :
-  pcaAddr(addr), isSending(false), clockHigh(false), tickCount(0) {
+  pcaAddr(addr), isSending(false), clockHigh(false), tickCount(0), deviceExists(false) {
 }
 
 uint8_t RotaryControl::getValue() {
@@ -68,7 +77,7 @@ void RotaryControl::SetI2c(TwoWire* i2c) {
 }
 
 void RotaryControl::Poll() {  
-  if(!isSending) {
+  if(!deviceExists || !isSending) {
     return;
   }
   

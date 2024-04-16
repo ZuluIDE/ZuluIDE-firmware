@@ -68,5 +68,11 @@ namespace zuluide::control {
         Tells the hardware interface to stop sending events to the receiver.
      */
     virtual void StopSendingEvents() = 0;
+
+    /***
+     * Checks for input device and disables device polling if it doesn't exist
+     * \return true if device exists, false otherwise
+    */
+    virtual bool CheckForDevice() = 0;
   };
 }
