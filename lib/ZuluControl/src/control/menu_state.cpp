@@ -39,7 +39,7 @@ MenuState& MenuState::operator=(const MenuState& src) {
 void MenuState::MoveToNextEntry() {
   switch (currentEntry) {
   case Entry::Eject: {
-    currentEntry = Entry::Info;
+    currentEntry = Entry::Back;
     break;
   }
     
@@ -49,12 +49,12 @@ void MenuState::MoveToNextEntry() {
   }
     
   case Entry::Info: {
-    currentEntry = Entry::Back;
+    currentEntry = Entry::Select;
     break;
   }
     
   case Entry::Back: {
-    currentEntry = Entry::Select;
+    currentEntry = Entry::Info;
     break;
   }
   }
@@ -63,22 +63,22 @@ void MenuState::MoveToNextEntry() {
 void MenuState::MoveToPreviousEntry() {
   switch (currentEntry) {
   case Entry::Eject: {
-    currentEntry = Entry::Back;
-    break;
-  }
-    
-  case Entry::Select: {
-    currentEntry = Entry::Eject;
-    break;
-  }
-    
-  case Entry::Info: {
     currentEntry = Entry::Select;
     break;
   }
     
-  case Entry::Back: {
+  case Entry::Select: {
     currentEntry = Entry::Info;
+    break;
+  }
+    
+  case Entry::Info: {
+    currentEntry = Entry::Back;
+    break;
+  }
+    
+  case Entry::Back: {
+    currentEntry = Entry::Eject;
     break;
   }
   }
