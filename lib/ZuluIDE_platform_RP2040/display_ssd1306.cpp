@@ -42,7 +42,6 @@ DisplaySSD1306::DisplaySSD1306()
 
 void DisplaySSD1306::init(TwoWire* wire) {
   m_wire = wire;
-  m_wire->begin();
   graph = Adafruit_SSD1306(128, 32, m_wire, -1, 400000, 100000);
   m_i2c_addr = SS1306_ADDR;
 
