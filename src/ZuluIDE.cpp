@@ -53,6 +53,7 @@ static IDEZipDrive g_ide_zipdrive;
 static IDERemovable g_ide_removable;
 static IDEImageFile g_ide_imagefile;
 static IDEDevice *g_ide_device;
+static bool g_stop_2nd_core = false;
 
 zuluide::status::StatusController g_StatusController;
 zuluide::control::StdDisplayController g_DisplayController(&g_StatusController);
@@ -259,6 +260,7 @@ void setupStatusController()
   }
   else
   {
+    g_stop_2nd_core = true;
     g_StatusController.EndUpdate();
   }
   loadFirstImage();  
@@ -398,7 +400,7 @@ static void zuluide_setup_sd_card()
     }
 }
 
-void zuluide_setup(void)
+void zuluide_init(void)
 {
     platform_init();
     platform_late_init();
@@ -429,7 +431,16 @@ void zuluide_setup(void)
 
     blinkStatus(BLINK_STATUS_OK);
 
+
     logmsg("Initialization complete!");
+}
+
+void zuluide_setup(void)
+{
+  if (g_stop_2nd_core)
+  {
+    multicore_reset_core1();
+  }
 }
 
 void zuluide_main_loop(void)
@@ -448,7 +459,6 @@ void zuluide_main_loop(void)
     platform_reset_watchdog();
     platform_poll();
     blink_poll();
-    platform_poll_input();
 
     save_logfile();
 
@@ -497,4 +507,14 @@ void zuluide_main_loop(void)
 
         sd_card_check_time = millis();
     }
+}
+
+void zuluide_setup1(void)
+{
+
+}
+
+void zuluide_main_loop1(void)
+{
+    platform_poll_input();
 }
