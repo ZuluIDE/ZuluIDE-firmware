@@ -184,7 +184,7 @@ void ide_phy_set_regs(const ide_registers_t *regs)
 // Data writes to IDE bus
 void ide_phy_start_write(uint32_t blocklen, int udma_mode)
 {
-    // dbgmsg("ide_phy_start_write(", (int)blocklen, ", ", udma_mode, ")");
+    dbgmsg("ide_phy_start_write(", (int)blocklen, ", ", udma_mode, ")");
     g_ide_phy.crc_errors = 0;
     g_ide_phy.block_crc1 = g_ide_phy.block_crc0 = 0;
     uint16_t last_word_idx = (blocklen + 1) / 2 - 1;
