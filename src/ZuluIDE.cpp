@@ -284,12 +284,15 @@ drive_type_t searchForDriveType() {
   zuluide::images::ImageIterator imgIter;
   imgIter.Reset();
   while(imgIter.MoveNext()) {
-    auto image = imgIter.Get().GetFilename().c_str();
+    auto image = imgIter.Get().GetFilename().substr(0,4).c_str();
     if (strncasecmp(image, "cdrm", sizeof("cdrm")) == 0) {
+      g_ide_imagefile.set_prefix(image);
       return DRIVE_TYPE_CDROM;
     } else if (strncasecmp(image, "zipd", sizeof("zipd")) == 0) {
+      g_ide_imagefile.set_prefix(image);
       return DRIVE_TYPE_ZIP100;
     } else if (strncasecmp(image, "remv", sizeof("remv")) == 0) {
+      g_ide_imagefile.set_prefix(image);
       return DRIVE_TYPE_REMOVABLE;
     }
   }

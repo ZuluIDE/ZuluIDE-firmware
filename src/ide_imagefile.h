@@ -113,7 +113,7 @@ public:
     virtual drive_type_t get_drive_type();
 
     // Set the prefix string of the filename, to match next file to insert after ejection
-    virtual void set_prefix(char* prefix);
+    virtual void set_prefix(const char* prefix);
     virtual const char* const get_prefix();
     virtual void find_prefix(char* prefix, const char* file_name); 
 
