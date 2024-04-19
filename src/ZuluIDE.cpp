@@ -240,7 +240,9 @@ void setupStatusController()
     g_StatusController.SetIsPrimary(isPrimary);
     g_StatusController.UpdateDeviceStatus(std::move(device));
   }
+  
   g_StatusController.AddObserver(status_observer);
+  
 
   if (platform_check_for_controller())
   {
@@ -452,6 +454,7 @@ void zuluide_main_loop(void)
     platform_reset_watchdog();
     platform_poll();
     blink_poll();
+    g_StatusController.ProcessUpdates();
 
     save_logfile();
 

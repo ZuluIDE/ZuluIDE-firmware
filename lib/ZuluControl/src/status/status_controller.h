@@ -26,6 +26,9 @@
 #include <zuluide/images/image.h>
 #include <zuluide/images/image_iterator.h>
 #include <zuluide/observable.h>
+#include <zuluide/observable_safe.h>
+#include <zuluide/status/device_control_safe.h>
+#include <pico/util/queue.h>
 
 #include <functional>
 #include <memory>
@@ -33,11 +36,12 @@
 
 namespace zuluide::status {
 
-  class StatusController : public Observable<SystemStatus>
+  class StatusController : public Observable<SystemStatus>, public ObservableSafe<SystemStatus>, public DeviceControlSafe
   {
   public:
     StatusController();
-    void AddObserver(std::function<void(const SystemStatus& current)> callback);    
+    void AddObserver(std::function<void(const SystemStatus& current)> callback);
+    void AddObserver(queue_t* dest);
     void LoadImage(zuluide::images::Image i);
     void EjectImage();
     void BeginUpdate();
@@ -47,13 +51,34 @@ namespace zuluide::status {
     void SetFirmwareVersion(std::string firmwareVersion);
     const SystemStatus& GetStatus();
     void Reset();
-
+    virtual void LoadImageSafe(zuluide::images::Image i);
+    virtual void EjectImageSafe();
+    void ProcessUpdates();
   private:
     bool isUpdating;
     void notifyObservers();
     std::vector<std::function<void(const SystemStatus&)>> observers;
     SystemStatus status;
-    
+    /***
+        Stores queues where updated system status pointers are copied.
+     **/
+    std::vector<queue_t*> observerQueues;
+    /***
+        Stores updates that come from another thread. These are processed through calss to ProcessUpdates.
+     **/
+    queue_t updateQueue;
+
+    /***
+        Simple class for storing updates. As we currently only have the load or eject image updates,
+        this class is overly simple.
+     **/
+    class UpdateAction {
+    public:
+      /***
+          If the value is null, this is an eject.
+       **/
+      std::unique_ptr<zuluide::images::Image> ToLoad;
+    };
   };
   
 }

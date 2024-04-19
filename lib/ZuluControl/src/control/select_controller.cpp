@@ -31,7 +31,7 @@ void SelectController::Reset(const SelectState& newState) {
   GetNextImageEntry();
 }
 
-SelectController::SelectController(StdDisplayController* cntrlr, zuluide::status::StatusController* statCtrlr) :
+SelectController::SelectController(StdDisplayController* cntrlr, zuluide::status::DeviceControlSafe* statCtrlr) :
   controller(cntrlr), statusController(statCtrlr), imgIterator(true) {  
 }
 
@@ -60,7 +60,7 @@ void SelectController::SelectImage() {
   if (state.IsShowingBack()) {
     controller->SetMode(Mode::Menu);
   } else if (state.HasCurrentImage()) {    
-    statusController->LoadImage(state.GetCurrentImage());
+    statusController->LoadImageSafe(state.GetCurrentImage());
   }
   
   controller->SetMode(Mode::Status);
