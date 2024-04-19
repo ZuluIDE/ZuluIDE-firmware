@@ -24,7 +24,7 @@
 
 using namespace zuluide::control;
 
-EjectController::EjectController(StdDisplayController* cntrlr, zuluide::status::StatusController* statCtrlr) :
+EjectController::EjectController(StdDisplayController* cntrlr, zuluide::status::DeviceControlSafe* statCtrlr) :
   controller(cntrlr), statusController(statCtrlr) {
 }
 
@@ -41,7 +41,7 @@ void EjectController::MoveToPreviousEntry() {
 
 void EjectController::DoSelectedEntry() {
   if (state.GetCurrentEntry() == EjectState::Entry::Eject) {
-    statusController->EjectImage();
+    statusController->EjectImageSafe();
   }
   
   controller->SetMode(Mode::Status);

@@ -22,16 +22,17 @@
 #pragma once
 
 #include "../status/status_controller.h"
+#include <zuluide/status/device_control_safe.h>
 #include <zuluide/control/display_state.h>
 
 namespace zuluide::control {
   class StdDisplayController;
   /**
-     Controls state when the UI is selecting a new image..
+     Controls state when the UI is selecting a new image.
    */
   class SelectController {
   public:
-    SelectController(StdDisplayController* cntrlr, zuluide::status::StatusController* statCtrlr);
+    SelectController(StdDisplayController* cntrlr, zuluide::status::DeviceControlSafe* statCtrlr);
     void IncrementImageNameOffset();
     void DecreaseImageNameOffset();
     void ResetImageNameOffset();
@@ -42,7 +43,7 @@ namespace zuluide::control {
     void Reset(const SelectState& newState);
   private:
     StdDisplayController* controller;
-    zuluide::status::StatusController* statusController;
+    zuluide::status::DeviceControlSafe* statusController;
     SelectState state;
     zuluide::images::ImageIterator imgIterator;
   };

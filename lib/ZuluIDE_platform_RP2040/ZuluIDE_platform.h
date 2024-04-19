@@ -28,9 +28,11 @@
 #include "ZuluIDE_platform_gpio.h"
 #include <Wire.h>
 #include <zuluide/observable.h>
+#include <zuluide/observable_safe.h>
 #include <zuluide/control/input_interface.h>
 #include <zuluide/control/display_state.h>
 #include <zuluide/status/system_status.h>
+#include <pico/util/queue.h>
 
 /* These are used in debug output and default SCSI strings */
 extern const char *g_platform_name;
@@ -90,7 +92,7 @@ void platform_set_sd_callback(sd_callback_t func, const uint8_t *buffer);
 
 bool platform_check_for_controller();
 
-void platform_set_status_controller(zuluide::Observable<zuluide::status::SystemStatus>& statusController);
+void platform_set_status_controller(zuluide::ObservableSafe<zuluide::status::SystemStatus>& statusController);
 
 void platform_set_display_controller(zuluide::Observable<zuluide::control::DisplayState>& displayController);
 

@@ -21,24 +21,18 @@
 
 #pragma once
 
-#include <zuluide/status/device_control_safe.h>
-#include <zuluide/control/display_state.h>
+#include <zuluide/images/image.h>
 
-namespace zuluide::control {
-  class StdDisplayController;
-  /**
-     Controls state when the UI is showing the menu.
-   */
-  class EjectController {
+namespace zuluide::status {
+
+  /***
+      Provides multi-core safe interface for changing state of the device. Any changes from a UI running on a concurrent core should go through
+      this interface instead of directly through the status controller. The status control is the final point through which all device status updates
+      should go into. From there they go back out to observers.
+   **/
+  class DeviceControlSafe {
   public:
-    EjectController(StdDisplayController* cntrlr, zuluide::status::DeviceControlSafe* statCtrlr);
-    void MoveToNextEntry();
-    void MoveToPreviousEntry();
-    void DoSelectedEntry();
-    void Reset(const EjectState newState);
-  private:
-    StdDisplayController* controller;
-    EjectState state;
-    zuluide::status::DeviceControlSafe *statusController;
-  };
+    virtual void LoadImageSafe(zuluide::images::Image i) = 0;
+    virtual void EjectImageSafe() = 0;
+  };    
 }

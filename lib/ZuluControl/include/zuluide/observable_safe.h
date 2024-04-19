@@ -21,24 +21,12 @@
 
 #pragma once
 
-#include <zuluide/status/device_control_safe.h>
-#include <zuluide/control/display_state.h>
+#include <functional>
+#include <pico/util/queue.h>
 
-namespace zuluide::control {
-  class StdDisplayController;
-  /**
-     Controls state when the UI is showing the menu.
-   */
-  class EjectController {
+namespace zuluide {
+  template <class T> class ObservableSafe {
   public:
-    EjectController(StdDisplayController* cntrlr, zuluide::status::DeviceControlSafe* statCtrlr);
-    void MoveToNextEntry();
-    void MoveToPreviousEntry();
-    void DoSelectedEntry();
-    void Reset(const EjectState newState);
-  private:
-    StdDisplayController* controller;
-    EjectState state;
-    zuluide::status::DeviceControlSafe *statusController;
+    virtual void AddObserver(queue_t* dest) = 0;
   };
 }

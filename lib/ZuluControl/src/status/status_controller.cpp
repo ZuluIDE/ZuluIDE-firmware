@@ -1,6 +1,8 @@
 
 #include "status_controller.h"
 
+#include "ZuluIDE_log.h"
+
 #include <algorithm>
 #include <utility>
 #include <memory>
@@ -49,6 +51,11 @@ void StatusController::notifyObservers() {
       // verified given this isn't a public API.
       observer(SystemStatus(status));
     });
+
+    std::for_each(observerQueues.begin(), observerQueues.end(), [this](auto observer) {
+      SystemStatus *update = new SystemStatus(status);
+      queue_try_add(observer, &update);
+    });
   }
 }
 
@@ -62,9 +69,43 @@ const SystemStatus& StatusController::GetStatus() {
 }
 
 void StatusController::Reset() {
+  queue_init(&updateQueue, sizeof(UpdateAction*), 5);
 }
 
 void StatusController::LoadImage(zuluide::images::Image i) {
   status.SetLoadedImage(std::make_unique<zuluide::images::Image>(i));
   notifyObservers();
+}
+
+void StatusController::LoadImageSafe(zuluide::images::Image i) {
+  UpdateAction* actionToExecute = new UpdateAction();
+  actionToExecute->ToLoad = std::make_unique<zuluide::images::Image>(i);
+  if(!queue_try_add(&updateQueue, &actionToExecute)) {
+    logmsg("Load image failed to enqueue.");
+  }
+}
+
+void StatusController::EjectImageSafe() {
+  UpdateAction* actionToExecute = new UpdateAction();
+  if(!queue_try_add(&updateQueue, &actionToExecute)) {
+    logmsg("Eject image failed to enqueue.");
+  }
+}
+
+void StatusController::ProcessUpdates() {
+  UpdateAction* actionToExecute;
+  if (queue_try_remove(&updateQueue, &actionToExecute)) {
+    // An action was on the queue, execute it.
+    if (actionToExecute->ToLoad) {
+      LoadImage(*actionToExecute->ToLoad);
+    } else {
+      EjectImage();
+    }
+   
+    delete(actionToExecute);
+  }
+}
+
+void StatusController::AddObserver(queue_t* dest) {
+  observerQueues.push_back(dest);
 }
