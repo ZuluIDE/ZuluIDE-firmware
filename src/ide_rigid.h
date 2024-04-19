@@ -103,9 +103,8 @@ protected:
     // IDE command handlers
     virtual bool cmd_nop(ide_registers_t *regs);
     virtual bool cmd_set_features(ide_registers_t *regs);
-    virtual bool cmd_write_sectors(ide_registers_t *regs);
-    virtual bool cmd_read_sectors(ide_registers_t *regs);
-    virtual bool cmd_read_dma(ide_registers_t *regs);
+    virtual bool cmd_read(ide_registers_t *regs, bool dma_transfer);
+    virtual bool cmd_write(ide_registers_t *regs, bool dma_transfer);
     virtual bool cmd_init_dev_params(ide_registers_t *regs);
     virtual bool cmd_identify_device(ide_registers_t *regs);
     virtual bool set_packet_device_signature(uint8_t error, bool was_reset);
@@ -128,7 +127,7 @@ protected:
     // Methods used by ATAPI command implementations
 
     // Send one or multiple data blocks synchronously and wait for transfer to finish
-    bool atapi_send_data(const uint8_t *data, size_t blocksize, size_t num_blocks = 1);
+    bool ata_send_chunked_data(const uint8_t *data, size_t blocksize, size_t num_blocks = 1);
 
     // Report error or successful completion of ATAPI command
     bool atapi_cmd_error(uint8_t sense_key, uint16_t sense_asc);

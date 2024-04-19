@@ -73,16 +73,15 @@ bool IDERigidDevice::handle_command(ide_registers_t *regs)
         case IDE_CMD_EXECUTE_DEVICE_DIAGNOSTIC:
         case IDE_CMD_DEVICE_RESET:
         case IDE_CMD_READ_SECTORS_EXT:
-//        case IDE_CMD_IDENTIFY_PACKET_DEVICE:
             return set_packet_device_signature(IDE_ERROR_ABORT, false);
 
         // Supported IDE commands
         case IDE_CMD_NOP: return cmd_nop(regs);
         case IDE_CMD_SET_FEATURES: return cmd_set_features(regs);
-//        case IDE_CMD_IDENTIFY_PACKET_DEVICE: return cmd_identify_packet_device(regs);
-        case IDE_CMD_READ_DMA: return cmd_read_dma(regs);
-        case IDE_CMD_READ_SECTORS: return cmd_read_sectors(regs);
-        case IDE_CMD_WRITE_SECTORS: return cmd_write_sectors(regs);
+        case IDE_CMD_READ_DMA: return cmd_read(regs, true);
+        case IDE_CMD_WRITE_DMA: return cmd_write(regs, true);
+        case IDE_CMD_READ_SECTORS: return cmd_read(regs, false);
+        case IDE_CMD_WRITE_SECTORS: return cmd_write(regs, false);
         case IDE_CMD_INIT_DEV_PARAMS: return cmd_init_dev_params(regs);
         case IDE_CMD_IDENTIFY_DEVICE: return cmd_identify_device(regs);
 
@@ -171,8 +170,11 @@ static void copy_id_string(uint16_t *dst, size_t maxwords, const char *src)
     }
 }
 
-bool IDERigidDevice::cmd_read_sectors(ide_registers_t *regs)
+bool IDERigidDevice::cmd_read(ide_registers_t *regs, bool dma_transfer)
 {
+    if (dma_transfer && m_phy_caps.max_udma_mode < 0)
+        return false;
+
     bool lba_mode = false;
     uint32_t lba = 0;
     uint16_t sector_count = regs->sector_count == 0 ? 256 : regs->sector_count;
@@ -180,12 +182,14 @@ bool IDERigidDevice::cmd_read_sectors(ide_registers_t *regs)
     uint16_t cylinder = 0;
     uint8_t sector = 0;
     m_ata_state.data_state = ATA_DATA_IDLE;
+    m_ata_state.dma_requested = dma_transfer;
     m_ata_state.crc_errors = 0;
+
 
     lba_mode = !!(regs->device & 0x40);
     if (lba_mode)
     {
-        lba |= 0xF & (regs->device) << 24;
+        lba |= 0xF & (regs->device << 24);
         lba |= regs->lba_high << 16;
         lba |= regs->lba_mid << 8;
         lba |= regs->lba_low;
@@ -198,163 +202,12 @@ bool IDERigidDevice::cmd_read_sectors(ide_registers_t *regs)
         sector = regs->lba_low;
         lba = (cylinder * m_devinfo.heads + head) * m_devinfo.sectors_per_track + (sector - 1);
     }
-
-
-
-    dbgmsg("Command read data lba: ", (int) lba, " sector count: ", (int) sector_count, " mode: ", lba_mode ? "LBA" : "CHS");
-
-    // \todo temp_bytes_per_sector replace with a setting
-    const uint32_t temp_bytes_per_sector = 512;
-    bool status = m_image->read((uint64_t)lba * temp_bytes_per_sector, temp_bytes_per_sector, sector_count, this);
-
+    bool status = m_image->read((uint64_t)lba * m_devinfo.bytes_per_sector, m_devinfo.bytes_per_sector, sector_count, this);
+    status = status && ata_send_wait_finish();
     if (status)
     {
-        ata_send_wait_finish();
+        uint32_t new_lba = lba + sector_count - 1;
         ide_phy_get_regs(regs);
-        uint32_t new_lba = lba + sector_count - 1;
-        if (lba_mode)
-        {
-            regs->device |= (0x0F) & (new_lba >> 24);
-            regs->lba_high = new_lba >> 16;
-            regs->lba_mid = new_lba >> 8;
-            regs->lba_low = new_lba;
-        }
-        else
-        {
-            sector = (new_lba % m_devinfo.sectors_per_track) + 1;
-            cylinder = (new_lba / m_devinfo.sectors_per_track) / m_devinfo.heads;
-            head = (new_lba / m_devinfo.sectors_per_track) % m_devinfo.heads;
-            regs->device |= (0x0F) & head;
-            regs->lba_high = cylinder >> 8;
-            regs->lba_mid = cylinder;
-            regs->lba_low = sector;
-
-        }
-        regs->status = IDE_STATUS_DEVRDY;
-        ide_phy_set_regs(regs);
-        ide_phy_assert_irq(IDE_STATUS_DEVRDY);
-    }
-    else
-    {
-        // \todo do something if the read fails
-    }
-    return status;
-}
-
-
-bool IDERigidDevice::cmd_write_sectors(ide_registers_t *regs)
-{
-    bool lba_mode = false;
-    uint32_t lba = 0;
-    uint16_t sector_count = regs->sector_count == 0 ? 256 : regs->sector_count;
-    uint8_t head = 0;
-    uint16_t cylinder = 0;
-    uint8_t sector = 0;
-    bool status = false;
-    m_ata_state.data_state = ATA_DATA_IDLE;
-    m_ata_state.crc_errors = 0;
-
-    lba_mode = !!(regs->device & 0x40);
-    if (lba_mode)
-    {
-        lba |= 0xF & (regs->device) << 24;
-        lba |= regs->lba_high << 16;
-        lba |= regs->lba_mid << 8;
-        lba |= regs->lba_low;
-    }
-    else
-    {
-        head = 0xF & (regs->device);
-        cylinder = regs->lba_high << 8;
-        cylinder |= regs->lba_mid;
-        sector = regs->lba_low;
-        lba = (cylinder * m_devinfo.heads + head) * m_devinfo.sectors_per_track + (sector - 1);
-    }
-
-
-
-    dbgmsg("Command write data lba: ", (int) lba, " sector count: ", (int) sector_count, " mode: ", lba_mode ? "LBA" : "CHS");
-
-    // \todo temp_bytes_per_sector replace with a setting
-    const uint32_t temp_bytes_per_sector = 512;
-
-     if (m_image && m_image->writable())
-     {
-        status = m_image->write((uint64_t)lba * temp_bytes_per_sector,
-                                temp_bytes_per_sector, sector_count,
-                                this);
-     }
-
-    if (status)
-    {
-        ide_phy_get_regs(regs);
-        uint32_t new_lba = lba + sector_count - 1;
-        if (lba_mode)
-        {
-            regs->device |= (0x0F) & (new_lba >> 24);
-            regs->lba_high = new_lba >> 16;
-            regs->lba_mid = new_lba >> 8;
-            regs->lba_low = new_lba;
-        }
-        else
-        {
-            sector = (new_lba % m_devinfo.sectors_per_track) + 1;
-            cylinder = (new_lba / m_devinfo.sectors_per_track) / m_devinfo.heads;
-            head = (new_lba / m_devinfo.sectors_per_track) % m_devinfo.heads;
-            regs->device |= (0x0F) & head;
-            regs->lba_high = cylinder >> 8;
-            regs->lba_mid = cylinder;
-            regs->lba_low = sector;
-
-        }
-        regs->status = IDE_STATUS_DEVRDY;
-        ide_phy_set_regs(regs);
-        ide_phy_assert_irq(IDE_STATUS_DEVRDY);
-    }
-    else
-    {
-        // \todo do something if the read fails
-    }
-    return status;
-}
-
-bool IDERigidDevice::cmd_read_dma(ide_registers_t *regs)
-{
-    bool lba_mode = false;
-    uint32_t lba = 0;
-    uint16_t sector_count = regs->sector_count == 0 ? 256 : regs->sector_count;
-    uint8_t head = 0;
-    uint16_t cylinder = 0;
-    uint8_t sector = 0;
-    m_ata_state.data_state = ATA_DATA_IDLE;
-    m_ata_state.dma_requested = true;
-    m_ata_state.crc_errors = 0;
-
-
-    lba_mode = !!(regs->device & 0x40);
-    if (lba_mode)
-    {
-        lba |= 0xF & (regs->device) << 24;
-        lba |= regs->lba_high << 16;
-        lba |= regs->lba_mid << 8;
-        lba |= regs->lba_low;
-    }
-    else
-    {
-        head = 0xF & (regs->device);
-        cylinder = regs->lba_high << 8;
-        cylinder |= regs->lba_mid;
-        sector = regs->lba_low;
-        lba = (cylinder * m_devinfo.heads + head) * m_devinfo.sectors_per_track + (sector - 1);
-    }
-    dbgmsg("Command read data lba: ", (int) lba, " sector count: ", (int) sector_count, " mode: ", lba_mode ? "LBA" : "CHS");
-
-    // \todo temp_bytes_per_sector replace with a setting
-    const uint32_t temp_bytes_per_sector = 512;
-    bool status = m_image->read((uint64_t)lba * temp_bytes_per_sector, temp_bytes_per_sector, sector_count, this);
-    if (status)
-    {
-        uint32_t new_lba = lba + sector_count - 1;
         if (lba_mode)
         {
             regs->device &= 0xF0;
@@ -374,10 +227,82 @@ bool IDERigidDevice::cmd_read_dma(ide_registers_t *regs)
             regs->lba_mid = cylinder;
             regs->lba_low = sector;
         }
-
+        m_ata_state.data_state = ATA_DATA_IDLE;
         regs->status = IDE_STATUS_DEVRDY;
         ide_phy_set_regs(regs);
         ide_phy_assert_irq(IDE_STATUS_DEVRDY);
+    }
+    return status;
+}
+
+bool IDERigidDevice::cmd_write(ide_registers_t *regs, bool dma_transfer)
+{
+    if (dma_transfer && m_phy_caps.max_udma_mode < 0)
+        return false;
+    bool lba_mode = false;
+    uint32_t lba = 0;
+    uint16_t sector_count = regs->sector_count == 0 ? 256 : regs->sector_count;
+    uint8_t head = 0;
+    uint16_t cylinder = 0;
+    uint8_t sector = 0;
+    bool status = false;
+    m_ata_state.data_state = ATA_DATA_IDLE;
+    m_ata_state.dma_requested = dma_transfer;
+    m_ata_state.crc_errors = 0;
+
+    lba_mode = !!(regs->device & 0x40);
+    if (lba_mode)
+    {
+        lba |= 0xF & (regs->device) << 24;
+        lba |= regs->lba_high << 16;
+        lba |= regs->lba_mid << 8;
+        lba |= regs->lba_low;
+    }
+    else
+    {
+        head = 0xF & (regs->device);
+        cylinder = regs->lba_high << 8;
+        cylinder |= regs->lba_mid;
+        sector = regs->lba_low;
+        lba = (cylinder * m_devinfo.heads + head) * m_devinfo.sectors_per_track + (sector - 1);
+    }
+
+    if (m_image && m_image->writable())
+    {
+    status = m_image->write((uint64_t)lba * m_devinfo.bytes_per_sector,
+                            m_devinfo.bytes_per_sector, sector_count,
+                            this);
+    }
+
+    if (status)
+    {
+        ide_phy_get_regs(regs);
+        uint32_t new_lba = lba + sector_count - 1;
+        if (lba_mode)
+        {
+            regs->device |= (0x0F) & (new_lba >> 24);
+            regs->lba_high = new_lba >> 16;
+            regs->lba_mid = new_lba >> 8;
+            regs->lba_low = new_lba;
+        }
+        else
+        {
+            sector = (new_lba % m_devinfo.sectors_per_track) + 1;
+            cylinder = (new_lba / m_devinfo.sectors_per_track) / m_devinfo.heads;
+            head = (new_lba / m_devinfo.sectors_per_track) % m_devinfo.heads;
+            regs->device |= (0x0F) & head;
+            regs->lba_high = cylinder >> 8;
+            regs->lba_mid = cylinder;
+            regs->lba_low = sector;
+
+        }
+        regs->status = IDE_STATUS_DEVRDY;
+        ide_phy_set_regs(regs);
+        ide_phy_assert_irq(IDE_STATUS_DEVRDY);
+    }
+    else
+    {
+        // \todo do something if the read fails
     }
     return status;
 }
@@ -595,10 +520,10 @@ void IDERigidDevice::lba2chs(const uint32_t lba, uint16_t &cylinder, uint8_t &he
     head = (lba / m_devinfo.sectors_per_track) % m_devinfo.heads;
 }
 
-bool IDERigidDevice::atapi_send_data(const uint8_t *data, size_t blocksize, size_t num_blocks)
+bool IDERigidDevice::ata_send_chunked_data(const uint8_t *data, size_t blocksize, size_t num_blocks)
 {
     // Report data for command responses
-    dbgmsg("---- ATAPI send ", (int)num_blocks, "x", (int)blocksize, " bytes: ",
+    dbgmsg("---- ATA send ", (int)num_blocks, "x", (int)blocksize, " bytes: ",
         bytearray((const uint8_t*)data, blocksize * num_blocks));
 
     size_t max_blocksize = m_phy_caps.max_blocksize;
@@ -655,9 +580,9 @@ ssize_t IDERigidDevice::ata_send_data(const uint8_t *data, size_t blocksize, siz
     if (blocksize > max_blocksize)
     {
         dbgmsg("-- atapi_send_data_async(): Block size ", (int)blocksize, " exceeds limit ", (int)max_blocksize,
-               ", using atapi_send_data() instead");
+               ", using ata_send_chunked_data() instead");
 
-        if (atapi_send_data(data, blocksize, num_blocks))
+        if (ata_send_chunked_data(data, blocksize, num_blocks))
         {
             return num_blocks;
         }
@@ -694,9 +619,6 @@ bool IDERigidDevice::ata_send_data_block(const uint8_t *data, uint16_t blocksize
         ide_registers_t regs = {};
         ide_phy_get_regs(&regs);
         regs.status = IDE_STATUS_BSY;
-        regs.sector_count = ATAPI_SCOUNT_TO_HOST; // Data transfer to host
-        regs.lba_mid = (uint8_t)blocksize;
-        regs.lba_high = (uint8_t)(blocksize >> 8);
         ide_phy_set_regs(&regs);
 
         // Start data transfer
@@ -763,23 +685,24 @@ bool IDERigidDevice::ata_recv_data(uint8_t *data, size_t blocksize, size_t num_b
         blocksize /= split;
         num_blocks *= split;
     }
-    else
-    {
-        // Combine blocks for better performance
-        while (blocksize * 2 < max_blocksize && (num_blocks & 1) == 0)
-        {
-            blocksize *= 2;
-            num_blocks >>= 1;
-        }
-    }
+    // Causing timeouts 
+    // else
+    // {
+    //     // Combine blocks for better performance
+    //     while (blocksize * 2 < max_blocksize && (num_blocks & 1) == 0)
+    //     {
+    //         blocksize *= 2;
+    //         num_blocks >>= 1;
+    //     }
+    // }
 
     // Set number bytes to transfer to registers
     ide_registers_t regs = {};
     ide_phy_get_regs(&regs);
     regs.status = IDE_STATUS_BSY;
-    regs.sector_count = 0; // Data transfer to device
-    regs.lba_mid = (uint8_t)blocksize;
-    regs.lba_high = (uint8_t)(blocksize >> 8);
+    // regs.sector_count = 0; // Data transfer to device
+    // regs.lba_mid = (uint8_t)blocksize;
+    // regs.lba_high = (uint8_t)(blocksize >> 8);
     ide_phy_set_regs(&regs);
 
     // Start data transfer for first block
@@ -859,7 +782,6 @@ ssize_t IDERigidDevice::read_callback(const uint8_t *data, size_t blocksize, siz
 {
     platform_poll();
     return ata_send_data(data, blocksize, num_blocks);
-    // return atapi_send_data_async(data, blocksize, num_blocks);
 }
 
 // Called by IDEImage to request reception of more data from IDE bus
