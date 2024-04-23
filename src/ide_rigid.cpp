@@ -561,6 +561,7 @@ ssize_t IDERigidDevice::ata_send_data(const uint8_t *data, size_t blocksize, siz
         while (blocks_sent < num_blocks && ide_phy_can_write_block())
         {
             ide_phy_write_block(data, blocksize);
+            data += blocksize;
             blocks_sent++;
         }
 

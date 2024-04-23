@@ -392,6 +392,7 @@ ssize_t IDEATAPIDevice::atapi_send_data_async(const uint8_t *data, size_t blocks
         while (blocks_sent < num_blocks && ide_phy_can_write_block())
         {
             ide_phy_write_block(data, blocksize);
+            data += blocksize;
             blocks_sent++;
         }
 
