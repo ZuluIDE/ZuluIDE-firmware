@@ -30,7 +30,7 @@ SystemStatus::SystemStatus()
 }
 
 SystemStatus::SystemStatus(const SystemStatus& src)
-  : firmwareVersion(src.firmwareVersion)
+  : firmwareVersion(src.firmwareVersion), isCardPresent(src.isCardPresent)
 {
   if (src.primary) {
     primary = std::move(src.primary->Clone());
@@ -45,13 +45,15 @@ SystemStatus::SystemStatus(SystemStatus&& src)
 {
   firmwareVersion = std::move(src.firmwareVersion);
   primary = std::move(src.primary);
-  loadedImage = std::move(src.loadedImage);  
+  loadedImage = std::move(src.loadedImage);
+  isCardPresent = src.isCardPresent;
 }
 
 SystemStatus& SystemStatus::operator= (SystemStatus&& src) {
   firmwareVersion = std::move(src.firmwareVersion);
   primary = std::move(src.primary);
   loadedImage = std::move(src.loadedImage);
+  isCardPresent = src.isCardPresent;
   return *this;
 }
 
@@ -65,6 +67,8 @@ SystemStatus& SystemStatus::operator= (const SystemStatus& src) {
   if (src.loadedImage) {
     loadedImage = std::make_unique<zuluide::images::Image>(*src.loadedImage);
   }
+
+  isCardPresent = src.isCardPresent;
 
   return *this;
 }
@@ -115,4 +119,12 @@ drive_type_t SystemStatus::GetDeviceType() const {
 
 const std::string& SystemStatus::GetFirmwareVersion() const {
   return firmwareVersion;
+}
+
+bool SystemStatus::IsCardPresent() const {
+  return isCardPresent;
+}
+
+void SystemStatus::SetIsCardPresent(bool value) {
+  isCardPresent = value;
 }

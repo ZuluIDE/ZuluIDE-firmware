@@ -377,6 +377,7 @@ static void zuluide_setup_sd_card()
     g_sdcard_present = mountSDCard();
     if(!g_sdcard_present)
     {
+        g_StatusController.SetIsCardPresent(false);
         logmsg("SD card init failed, sdErrorCode: ", (int)SD.sdErrorCode(),
                     " sdErrorData: ", (int)SD.sdErrorData());
         logmsg("No SD card detected, defaulting to CD-ROM");
@@ -384,6 +385,7 @@ static void zuluide_setup_sd_card()
     }
     else
     {
+        g_StatusController.SetIsCardPresent(true);
         if (SD.clusterCount() == 0)
         {
             logmsg("SD card without filesystem!");
@@ -472,6 +474,7 @@ void zuluide_main_loop(void)
                 if (!SD.card()->readOCR(&ocr))
                 {
                     g_sdcard_present = false;
+                    g_StatusController.SetIsCardPresent(false);
                     logmsg("SD card removed, trying to reinit");
 
                     g_ide_device->set_image(NULL);
@@ -493,7 +496,7 @@ void zuluide_main_loop(void)
 
             init_logfile();
 
-            g_DisplayController.SetMode(zuluide::control::Mode::Select);
+            g_StatusController.SetIsCardPresent(true);            
             loadFirstImage();
         }
         else

@@ -54,6 +54,7 @@ namespace zuluide::status {
     virtual void LoadImageSafe(zuluide::images::Image i);
     virtual void EjectImageSafe();
     void ProcessUpdates();
+    void SetIsCardPresent(bool value);
   private:
     bool isUpdating;
     void notifyObservers();

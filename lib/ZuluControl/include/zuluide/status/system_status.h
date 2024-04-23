@@ -49,10 +49,14 @@ namespace zuluide::status {
     bool LoadedImagesAreEqual(const SystemStatus& src) const;
     bool HasCurrentImage() const;
     const std::string& GetFirmwareVersion() const;
+
+    bool IsCardPresent() const;
+    void SetIsCardPresent(bool value);
   private:
     std::unique_ptr<IDeviceStatus> primary;
     std::string firmwareVersion;
     std::unique_ptr<zuluide::images::Image> loadedImage;
     bool isPrimary;
+    bool isCardPresent;
   };
 }
