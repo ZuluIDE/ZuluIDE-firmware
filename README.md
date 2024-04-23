@@ -15,6 +15,7 @@ There are three ways to specify drive type
     - cdrm - for a CD-ROM drive
     - zipd - for a Zip Drive 100
     - remv - for a generic removable file
+    - hddr - for a hard drive images
 3) If no prefix or `Device = [type]` used the drive will default to CD-ROM
 
 Image files

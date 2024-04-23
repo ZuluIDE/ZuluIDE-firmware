@@ -294,7 +294,7 @@ bool IDEImageFile::find_next_prefix_image(const char *directory, const char *pre
                 }
                 else more_than_one_prefix = true;
             }
-            else if (strcasecmp(prefix, "hrdd") == 0)
+            else if (strcasecmp(prefix, "hddr") == 0)
             {
                 if (get_prefix()[0] == '\0')
                 {
