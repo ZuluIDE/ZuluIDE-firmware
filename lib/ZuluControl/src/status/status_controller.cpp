@@ -109,3 +109,12 @@ void StatusController::ProcessUpdates() {
 void StatusController::AddObserver(queue_t* dest) {
   observerQueues.push_back(dest);
 }
+
+void StatusController::SetIsCardPresent(bool value) {
+  status.SetIsCardPresent(value);
+  if (!value) {
+    status.SetLoadedImage(nullptr);
+  }
+  
+  notifyObservers();
+}

@@ -134,6 +134,9 @@ void DisplaySSD1306::displayStatus() {
       graph.setCursor(32, centerBase + lineHeight);
       graph.print(toShow);
     }
+  } else if (!currentSysStatus->IsCardPresent()) {
+    graph.drawBitmap(0, 8, cdrom_empty, 32, 16, WHITE);
+    graph.print("[NO SD CARD]");
   } else {
     graph.drawBitmap(0, 8, cdrom_empty, 32, 16, WHITE);
     graph.print("[NO IMAGE]");
