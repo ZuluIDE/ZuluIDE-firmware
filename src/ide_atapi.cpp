@@ -117,21 +117,21 @@ bool IDEATAPIDevice::cmd_set_features(ide_registers_t *regs)
         if (mode_major == 0)
         {
             m_atapi_state.udma_mode = -1;
-            dbgmsg("-- Set PIO default transfer mode");
+            logmsg("-- Set PIO default transfer mode");
         }
         else if (mode_major == 1 && mode_minor <= m_phy_caps.max_pio_mode)
         {
             m_atapi_state.udma_mode = -1;
-            dbgmsg("-- Set PIO transfer mode ", (int)mode_minor);
+            logmsg("-- Set PIO transfer mode ", (int)mode_minor);
         }
         else if (mode_major == 8 && mode_minor <= m_phy_caps.max_udma_mode)
         {
             m_atapi_state.udma_mode = mode_minor;
-            dbgmsg("-- Set UDMA transfer mode ", (int)mode_minor);
+            logmsg("-- Set UDMA transfer mode ", (int)mode_minor);
         }
         else
         {
-            dbgmsg("-- Unsupported mode ", mode, " (major ", (int)mode_major, " minor ", (int)mode_minor, ")");
+            logmsg("-- Unsupported mode ", mode, " (major ", (int)mode_major, " minor ", (int)mode_minor, ")");
             regs->error = IDE_ERROR_ABORT;
         }
     }
@@ -392,6 +392,7 @@ ssize_t IDEATAPIDevice::atapi_send_data_async(const uint8_t *data, size_t blocks
         while (blocks_sent < num_blocks && ide_phy_can_write_block())
         {
             ide_phy_write_block(data, blocksize);
+            data += blocksize;
             blocks_sent++;
         }
 
