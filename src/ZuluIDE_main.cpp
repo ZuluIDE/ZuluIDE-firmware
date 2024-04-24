@@ -6,10 +6,15 @@
 extern "C" int bootloader_main(void);
 
 #ifdef USE_ARDUINO
-extern "C" void setup(void)
+extern "C" void initVariant(void)
 {
     bootloader_main();
 }
+
+extern "C" void setup(void)
+{
+}
+
 extern "C" void loop(void)
 {
 }
@@ -21,19 +26,27 @@ int main(void)
 #endif
 
 #else
-
+void zuluide_init(void);
 void zuluide_setup(void);
 void zuluide_main_loop(void);
 
-#ifdef USE_ARDUINO
-extern "C" void setup(void)
-{
-    zuluide_setup();
-}
 
-extern "C" void loop(void)
+#ifdef USE_ARDUINO
+extern "C" 
 {
-    zuluide_main_loop();
+    void initVariant(void)
+    {
+        zuluide_init();
+    }
+    void setup(void)
+    {
+        zuluide_setup();
+    }
+
+    void loop(void)
+    {
+        zuluide_main_loop();
+    }
 }
 #else
 int main(void)
