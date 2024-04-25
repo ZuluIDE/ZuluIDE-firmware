@@ -52,6 +52,9 @@ public:
 
     virtual uint64_t capacity_lba() { return capacity() / m_devinfo.bytes_per_sector; }
 
+    virtual bool set_device_signature(uint8_t error, bool was_reset) override;
+
+    virtual void fill_device_signature(ide_registers_t *regs) override;
 protected:
     IDEImage *m_image;
 
@@ -107,8 +110,8 @@ protected:
     virtual bool cmd_write(ide_registers_t *regs, bool dma_transfer);
     virtual bool cmd_init_dev_params(ide_registers_t *regs);
     virtual bool cmd_identify_device(ide_registers_t *regs);
-    virtual void fill_device_signature(ide_registers_t *regs) override;
-    virtual bool set_packet_device_signature(uint8_t error, bool was_reset);
+
+
 
     // Helper methods
     // convert lba to cylinder, head, sector values

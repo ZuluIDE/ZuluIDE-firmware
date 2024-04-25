@@ -67,7 +67,7 @@ bool IDEATAPIDevice::handle_command(ide_registers_t *regs)
         case IDE_CMD_DEVICE_RESET:
         case IDE_CMD_READ_SECTORS:
         case IDE_CMD_READ_SECTORS_EXT:
-            return set_packet_device_signature(IDE_ERROR_ABORT, false);
+            return set_device_signature(IDE_ERROR_ABORT, false);
 
         // Supported IDE commands
         case IDE_CMD_NOP: return cmd_nop(regs);
@@ -89,7 +89,7 @@ void IDEATAPIDevice::handle_event(ide_event_t evt)
 
         m_atapi_state.unit_attention = true;
         m_atapi_state.sense_asc = ATAPI_ASC_RESET_OCCURRED;
-        set_packet_device_signature(0, true);
+        set_device_signature(0, true);
     }
 }
 
@@ -319,7 +319,7 @@ bool IDEATAPIDevice::cmd_packet(ide_registers_t *regs)
 
 // Set the packet device signature values to PHY registers
 // See T13/1410D revision 3a section 9.12 Signature and persistence
-bool IDEATAPIDevice::set_packet_device_signature(uint8_t error, bool was_reset)
+bool IDEATAPIDevice::set_device_signature(uint8_t error, bool was_reset)
 {
     ide_registers_t regs = {};
     ide_phy_get_regs(&regs);

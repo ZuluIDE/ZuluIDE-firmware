@@ -71,6 +71,7 @@ bool IDERigidDevice::handle_command(ide_registers_t *regs)
     {
         // Command need the device signature
         case IDE_CMD_DEVICE_RESET:
+            return set_device_signature(IDE_ERROR_ABORT, false);
 
         // Supported IDE commands
         case IDE_CMD_NOP: return cmd_nop(regs);
@@ -472,13 +473,13 @@ void IDERigidDevice::handle_event(ide_event_t evt)
             m_ata_state.udma_mode = -1;
         }
 
-        set_packet_device_signature(0, true);
+        set_device_signature(0, true);
     }
 }
 
 // Set the packet device signature values to PHY registers
 // See T13/1410D revision 3a section 9.12 Signature and persistence
-bool IDERigidDevice::set_packet_device_signature(uint8_t error, bool was_reset)
+bool IDERigidDevice::set_device_signature(uint8_t error, bool was_reset)
 {
     ide_registers_t regs = {};
     ide_phy_get_regs(&regs);
@@ -488,7 +489,7 @@ bool IDERigidDevice::set_packet_device_signature(uint8_t error, bool was_reset)
 
     if (was_reset)
     {
-//        regs.error = 1; // Diagnostics ok
+        regs.error = 1; // Diagnostics ok
         regs.status = 0;
     }
     else
@@ -497,11 +498,7 @@ bool IDERigidDevice::set_packet_device_signature(uint8_t error, bool was_reset)
     }
     ide_phy_set_regs(&regs);
 
-    // if (!was_reset)
-    // {
-        // Command complete
-        ide_phy_assert_irq(IDE_STATUS_DEVRDY | regs.status);
-    // }
+    ide_phy_assert_irq(IDE_STATUS_DEVRDY);
 
     return true;
 }
