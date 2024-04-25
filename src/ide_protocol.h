@@ -53,6 +53,9 @@ public:
     // Returns true if this device implements the ATAPI packet command set 
     virtual bool is_packet_device() { return false; }
 
+    // Set signature values for ide register
+    virtual void fill_device_signature(ide_registers_t *regs) = 0;
+
 protected:
     struct {
         int dev_index;

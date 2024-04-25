@@ -31,10 +31,14 @@
 #define IDE_STATUS_DEVFAULT 0x20
 #define IDE_STATUS_SERVICE  0x10
 #define IDE_STATUS_DATAREQ  0x08
+#define IDE_STATUS_CORR     0x04
+#define IDE_STATUS_IDX      0x02
 #define IDE_STATUS_ERR      0x01
 
 // Error register bits
 // Note that these vary by command type
+#define IDE_ERROR_EXEC_DEV_DIAG_DEV1_FAIL 0x80
+#define IDE_ERROR_EXEC_DEV_DIAG_DEV0_PASS 0x01
 #define IDE_ERROR_WRITEPROTECT    0x40
 #define IDE_ERROR_MEDIACHANGE     0x20
 #define IDE_ERROR_MEDIACHANGEREQ  0x08
@@ -45,6 +49,9 @@
 #define IDE_DEVCTRL_nIEN    0x02
 #define IDE_DEVCTRL_SRST    0x04
 #define IDE_DEVCTRL_HOB     0x80
+
+// Device bits register bits
+#define IDE_DEVICE_DEV  0x10;
 
 // IDE command set defined as X-macro
 // These will be available as enum values named IDE_CMD_xxx

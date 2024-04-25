@@ -40,6 +40,17 @@ static const char *get_ide_command_name(uint8_t cmd)
     }
 }
 
+// ATA/ATAPI 6 Device 0 state machine section 9.10 - T13 1410D
+enum exec_dev_diag_state_t
+{
+    EXEC_DEV_DIAG_STATE_IDLE = 0,
+    EXEC_DEV_DIAG_STATE_WAIT,
+    EXEC_DEV_DIAG_STATE_SAMPLE,
+    EXEC_DEV_DIAG_STATE_SET_STATUS
+
+};
+
+static exec_dev_diag_state_t g_exec_dev_diag_state;
 static ide_phy_config_t g_ide_config;
 static IDEDevice *g_ide_devices[2];
 static ide_event_t g_last_reset_event;
@@ -143,6 +154,31 @@ void ide_protocol_poll()
             ide_phy_get_regs(&regs);
 
             uint8_t cmd = regs.command;
+            if (cmd == IDE_CMD_EXECUTE_DEVICE_DIAGNOSTIC)
+            {
+                ide_phy_set_signals(0);
+                regs.device &= ~IDE_DEVICE_DEV;
+                ide_phy_set_regs(&regs);
+                g_last_event_time = millis();
+                g_last_event = IDE_EVENT_CMD_EXE_DEV_DIAG;
+                // Drive 0 is the current drive and drive 1 is detected
+                if (g_ide_config.enable_dev0 && (g_ide_config.enable_dev1 || g_drive1_detected))
+                        g_exec_dev_diag_state = EXEC_DEV_DIAG_STATE_WAIT;
+                // Drive 0 the is current drive and no drive 1 is detected
+                else if (g_ide_config.enable_dev0 && !(g_ide_config.enable_dev1 || g_drive1_detected))
+                        g_exec_dev_diag_state = EXEC_DEV_DIAG_STATE_SET_STATUS;
+
+                dbgmsg("IDE Command: ", cmd, " ", get_ide_command_name(cmd),
+                    " (device ", regs.device,
+                    ", dev_ctrl ", regs.device_control,
+                    ", feature ", regs.feature,
+                    ", sector_count ", regs.sector_count,
+                    ", lba ", regs.lba_high, " ", regs.lba_mid, " ", regs.lba_low, ")"
+                    );
+
+                return;
+            }
+
             int selected_device = (regs.device >> 4) & 1;
             dbgmsg("IDE Command for DEV", selected_device, ": ", cmd, " ", get_ide_command_name(cmd),
                 " (device ", regs.device,
@@ -203,6 +239,9 @@ void ide_protocol_poll()
 
             if (evt == IDE_EVENT_HWRST || evt == IDE_EVENT_SWRST)
             {
+                // \todo move to a reset or init function
+                g_exec_dev_diag_state = EXEC_DEV_DIAG_STATE_IDLE;
+
                 g_ide_signals = 0;
                 ide_phy_set_signals(0); // Release DASP and PDIAG
                 g_last_reset_time = millis();
@@ -305,6 +344,65 @@ void ide_protocol_poll()
                 do_phy_reset();
                 g_last_reset_event = IDE_EVENT_NONE;
             }
+        }
+    }
+
+    if (g_last_event == IDE_EVENT_CMD_EXE_DEV_DIAG)
+    {
+        static bool sample_state_happened = false;
+        ide_registers_t regs = {0};
+        uint32_t time_passed = millis() - g_last_event_time;
+
+        if (EXEC_DEV_DIAG_STATE_WAIT == g_exec_dev_diag_state && time_passed > 1)
+            g_exec_dev_diag_state = EXEC_DEV_DIAG_STATE_SAMPLE;
+        else if (EXEC_DEV_DIAG_STATE_SAMPLE == g_exec_dev_diag_state)
+        {
+            sample_state_happened = true;
+            bool pdiag = !!(ide_phy_get_signals() & IDE_SIGNAL_PDIAG);
+            if (pdiag)
+            {
+                ide_phy_get_regs(&regs);
+                regs.error = 0;
+                regs.error &= ~IDE_ERROR_EXEC_DEV_DIAG_DEV1_FAIL; // unset bit, DEV 1 passed
+                g_exec_dev_diag_state = EXEC_DEV_DIAG_STATE_SET_STATUS;
+            }
+            // dev1 self test failed after 6 seconds
+            else if (time_passed > 6000)
+            {
+                ide_phy_get_regs(&regs);
+                regs.error = 0;
+                regs.error |= IDE_ERROR_EXEC_DEV_DIAG_DEV1_FAIL; // set bit, DEV 1 failed
+                g_exec_dev_diag_state = EXEC_DEV_DIAG_STATE_SET_STATUS;
+            }
+        }
+        // no need to poll again if the state changed to EXEC_DEV_DIAG_STATE_SAMPLE
+        if (EXEC_DEV_DIAG_STATE_SET_STATUS == g_exec_dev_diag_state)
+        {
+            if (sample_state_happened)
+            {
+                sample_state_happened = false;
+            }
+            else
+            {
+                ide_phy_get_regs(&regs);
+                regs.error = 0;
+            }
+
+            // device 0 passed
+            regs.error |= IDE_ERROR_EXEC_DEV_DIAG_DEV0_PASS;
+            regs.device &= ~IDE_DEVICE_DEV;
+            g_ide_devices[0]->fill_device_signature(&regs);
+            regs.status &= ~(IDE_STATUS_ERR | IDE_STATUS_CORR | IDE_STATUS_DATAREQ);
+            if (g_ide_devices[0]->is_packet_device())
+                regs.status &= ~(IDE_STATUS_SERVICE | IDE_STATUS_DEVFAULT | IDE_STATUS_DEVRDY);
+            g_exec_dev_diag_state = EXEC_DEV_DIAG_STATE_IDLE;
+            g_last_event = IDE_EVENT_NONE;
+
+            ide_phy_set_regs(&regs);
+
+            regs.status &= ~IDE_STATUS_BSY;
+            ide_phy_set_regs(&regs);
+            ide_phy_assert_irq(IDE_STATUS_DEVRDY | regs.status);
         }
     }
 }

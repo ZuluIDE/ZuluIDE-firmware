@@ -69,11 +69,8 @@ bool IDERigidDevice::handle_command(ide_registers_t *regs)
 
     switch (regs->command)
     {
-        // Commands superseded by the ATAPI packet interface
-        case IDE_CMD_EXECUTE_DEVICE_DIAGNOSTIC:
+        // Command need the device signature
         case IDE_CMD_DEVICE_RESET:
-        case IDE_CMD_READ_SECTORS_EXT:
-            return set_packet_device_signature(IDE_ERROR_ABORT, false);
 
         // Supported IDE commands
         case IDE_CMD_NOP: return cmd_nop(regs);
@@ -394,10 +391,9 @@ bool IDERigidDevice::cmd_identify_device(ide_registers_t *regs)
     // idf[IDE_IDENTIFY_OFFSET_CURRENT_CYLINDERS] = 0x03A1;
     // idf[IDE_IDENTIFY_OFFSET_CURRENT_HEADS] = 0x0010;
     // idf[IDE_IDENTIFY_OFFSET_CURRENT_SECTORS_PER_TRACK] = 0x0030;
-    // idf[IDE_IDENTIFY_OFFSET_CURRENT_CAPACITY_IN_SECTORS_LOW] = 0xE300;
-    // idf[IDE_IDENTIFY_OFFSET_CURRENT_CAPACITY_IN_SECTORS_HI] = 0x000A;
-    // \todo set on older drives
     uint64_t sectors = capacity_lba();
+    // idf[IDE_IDENTIFY_OFFSET_CURRENT_CAPACITY_IN_SECTORS_LOW] = sectors & 0xFFFF;;
+    // idf[IDE_IDENTIFY_OFFSET_CURRENT_CAPACITY_IN_SECTORS_HI] = (sectors >> 16) & 0xFFFF;
     idf[IDE_IDENTIFY_OFFSET_TOTAL_SECTORS]     = sectors & 0xFFFF;
     idf[IDE_IDENTIFY_OFFSET_TOTAL_SECTORS + 1] = (sectors >> 16) & 0xFFFF;
     idf[IDE_IDENTIFY_OFFSET_MODEINFO_SINGLEWORD] = 0;// 0x0007; // disabling single word dma
@@ -488,14 +484,11 @@ bool IDERigidDevice::set_packet_device_signature(uint8_t error, bool was_reset)
     ide_phy_get_regs(&regs);
 
     regs.error = error;
-    regs.lba_low = 0x01;
-    regs.lba_mid = 0x14;
-    regs.lba_high = 0xEB;
-    regs.sector_count = 0x01;
+    fill_device_signature(&regs);
 
     if (was_reset)
     {
-        regs.error = 1; // Diagnostics ok
+//        regs.error = 1; // Diagnostics ok
         regs.status = 0;
     }
     else
@@ -504,13 +497,24 @@ bool IDERigidDevice::set_packet_device_signature(uint8_t error, bool was_reset)
     }
     ide_phy_set_regs(&regs);
 
-    if (!was_reset)
-    {
+    // if (!was_reset)
+    // {
         // Command complete
-        ide_phy_assert_irq(IDE_STATUS_DEVRDY);
-    }
+        ide_phy_assert_irq(IDE_STATUS_DEVRDY | regs.status);
+    // }
 
     return true;
+}
+
+// Set the packet device signature values to PHY registers
+// See T13/1410D revision 3a section 9.12 Signature and persistence
+void IDERigidDevice::fill_device_signature(ide_registers_t *regs)
+{
+    regs->lba_low = 0x01;
+    regs->lba_mid = 0x00;
+    regs->lba_high = 0x00;
+    regs->sector_count = 0x01;
+    regs->device = 0x00;
 }
 
 void IDERigidDevice::lba2chs(const uint32_t lba, uint16_t &cylinder, uint8_t &head, uint8_t &sector)

@@ -325,10 +325,7 @@ bool IDEATAPIDevice::set_packet_device_signature(uint8_t error, bool was_reset)
     ide_phy_get_regs(&regs);
 
     regs.error = error;
-    regs.lba_low = 0x01;
-    regs.lba_mid = 0x14;
-    regs.lba_high = 0xEB;
-    regs.sector_count = 0x01;
+    fill_device_signature(&regs);
     
     if (was_reset)
     {
@@ -348,6 +345,16 @@ bool IDEATAPIDevice::set_packet_device_signature(uint8_t error, bool was_reset)
     }
 
     return true;
+}
+
+// Set the packet device signature values to PHY registers
+// See T13/1410D revision 3a section 9.12 Signature and persistence
+void IDEATAPIDevice::fill_device_signature(ide_registers_t *regs)
+{
+    regs->lba_low = 0x01;
+    regs->lba_mid = 0x14;
+    regs->lba_high = 0xEB;
+    regs->sector_count = 0x01;
 }
 
 bool IDEATAPIDevice::atapi_send_data(const uint8_t *data, size_t blocksize, size_t num_blocks)

@@ -44,7 +44,7 @@ public:
 
     virtual void handle_event(ide_event_t event);
 
-    virtual bool is_packet_device() { return true; }
+    virtual bool is_packet_device() { return false; }
 
     virtual bool is_medium_present() { return m_image != nullptr; }
 
@@ -107,6 +107,7 @@ protected:
     virtual bool cmd_write(ide_registers_t *regs, bool dma_transfer);
     virtual bool cmd_init_dev_params(ide_registers_t *regs);
     virtual bool cmd_identify_device(ide_registers_t *regs);
+    virtual void fill_device_signature(ide_registers_t *regs) override;
     virtual bool set_packet_device_signature(uint8_t error, bool was_reset);
 
     // Helper methods
