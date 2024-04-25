@@ -38,8 +38,11 @@
 #include <strings.h>
 #include <SerialUSB.h>
 #include <class/cdc/cdc_device.h>
-
-
+#include <Wire.h>
+#include <Adafruit_SSD1306.h>
+#include "ZuluIDE_platform_gpio.h"
+#include "display_ssd1306.h"
+#include "rotary_control.h"
 
 const char *g_platform_name = PLATFORM_NAME;
 static uint32_t g_flash_chip_size = 0;
@@ -48,6 +51,12 @@ static bool g_led_disabled = false;
 static bool g_led_blinking = false;
 static bool g_dip_drive_id, g_dip_cable_sel;
 static uint64_t g_flash_unique_id;
+static zuluide::control::RotaryControl g_rotary_input;
+static TwoWire g_wire(i2c1, GPIO_I2C_SDA, GPIO_I2C_SCL);
+static zuluide::DisplaySSD1306 display;
+static queue_t g_status_update_queue;
+
+//void mbed_error_hook(const mbed_error_ctx * error_context);
 
 /***************/
 /* GPIO init   */
@@ -123,8 +132,9 @@ void platform_init()
     // I2C pins
     //        pin             function       pup   pdown  out    state fast
     gpio_conf(GPIO_I2C_SCL,   GPIO_FUNC_I2C, true,false, false,  true, true);
-    // gpio_conf(GPIO_I2C_SDA,   GPIO_FUNC_I2C, true,false, false,  true, true);
-    gpio_conf(GPIO_I2C_SDA,   GPIO_FUNC_SIO, true,false, true,  true, true); // FIXME: DEBUG
+    gpio_conf(GPIO_I2C_SDA,   GPIO_FUNC_I2C, true,false, false,  true, true);
+    //gpio_conf(GPIO_I2C_SDA,   GPIO_FUNC_SIO, true,false, true,  true, true); // FIXME: DEBUG
+    //gpio_conf(GPIO_EXT_INTERRUPT,   GPIO_FUNC_SIO, true,false, false,  false, false);
 
     // FPGA bus
     // Signals will be switched between SPI/PIO by rp2040_fpga.cpp, but pull-ups are configured here.
@@ -160,6 +170,33 @@ void platform_late_init()
     {
         logmsg("ERROR: FPGA initialization failed");
     }
+}
+
+bool platform_check_for_controller()
+{
+  g_rotary_input.SetI2c(&g_wire);
+  return g_rotary_input.CheckForDevice();
+}
+
+void platform_set_status_controller(zuluide::ObservableSafe<zuluide::status::SystemStatus>& statusController) {
+  logmsg("Initialized platform controller with the status controller.");
+  display.init(&g_wire);
+  queue_init(&g_status_update_queue, sizeof(zuluide::status::SystemStatus*), 5);
+  statusController.AddObserver(&g_status_update_queue);
+}
+
+void platform_set_display_controller(zuluide::Observable<zuluide::control::DisplayState>& displayController) {
+  logmsg("Initialized platform controller with the display controller.");
+  displayController.AddObserver([&] (auto current) -> void {display.HandleUpdate(current);});  
+}
+
+void platform_set_input_interface(zuluide::control::InputReceiver* inputReceiver) {
+  g_rotary_input.SetReciever(inputReceiver);
+  g_rotary_input.StartSendingEvents();
+}
+
+void platform_poll_input() {
+  g_rotary_input.Poll();
 }
 
 void platform_write_led(bool state)
@@ -461,7 +498,6 @@ void platform_reset_watchdog()
 {
     g_watchdog_timeout = WATCHDOG_CRASH_TIMEOUT;
     g_watchdog_did_bus_reset = false;
-
     if (!g_watchdog_initialized)
     {
         int alarm_num = -1;
@@ -763,3 +799,49 @@ __attribute__((section(".btldr_vectors")))
 const void * btldr_vectors[2] = {&__StackTop, (void*)&btldr_reset_handler};
 
 #endif
+
+
+/********************************/
+/* 2nd core code                */
+/********************************/
+void zuluide_setup(void)
+{
+  if (!g_rotary_input.GetDeviceExists())
+  {
+    rp2040.idleOtherCore();
+    multicore_reset_core1();
+    dbgmsg("No Zulu Control board found, disabling 2nd core");
+  }
+  else
+     logmsg("Zulu Control board found");
+}
+
+void zuluide_setup1(void)
+{
+
+}
+
+void zuluide_main_loop1(void)
+{
+    platform_poll_input();
+
+    // Look for device status updates.
+    zuluide::status::SystemStatus *currentStatus;
+    if (queue_try_remove(&g_status_update_queue, &currentStatus)) {
+      display.HandleUpdate(*currentStatus);
+      delete(currentStatus);
+    }
+}
+
+
+extern "C"
+{
+    void setup1(void)
+    {
+        zuluide_setup1();
+    }
+    void loop1(void)
+    {
+        zuluide_main_loop1();
+    }
+}

@@ -42,6 +42,10 @@ IDEImageFile::IDEImageFile(uint8_t *buffer, size_t buffer_size):
 }
 
 
+bool IDEImageFile::open_file(const char *filename, bool read_only)
+{
+  return open_file(SD.vol(), filename, read_only);
+}
 
 bool IDEImageFile::open_file(FsVolume *volume, const char *filename, bool read_only)
 {
@@ -359,7 +363,7 @@ drive_type_t IDEImageFile::get_drive_type()
     return m_drive_type;
 }
 
-void IDEImageFile::set_prefix(char *prefix)
+void IDEImageFile::set_prefix(const char *prefix)
 {
     strcpy(m_prefix, prefix);
 }
