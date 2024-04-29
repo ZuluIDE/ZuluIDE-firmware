@@ -30,7 +30,7 @@ SystemStatus::SystemStatus()
 }
 
 SystemStatus::SystemStatus(const SystemStatus& src)
-  : firmwareVersion(src.firmwareVersion), isCardPresent(src.isCardPresent)
+  : firmwareVersion(src.firmwareVersion), isCardPresent(src.isCardPresent), isPrimary(src.isPrimary)
 {
   if (src.primary) {
     primary = std::move(src.primary->Clone());
@@ -47,6 +47,7 @@ SystemStatus::SystemStatus(SystemStatus&& src)
   primary = std::move(src.primary);
   loadedImage = std::move(src.loadedImage);
   isCardPresent = src.isCardPresent;
+  isPrimary = src.isPrimary;
 }
 
 SystemStatus& SystemStatus::operator= (SystemStatus&& src) {
@@ -54,6 +55,7 @@ SystemStatus& SystemStatus::operator= (SystemStatus&& src) {
   primary = std::move(src.primary);
   loadedImage = std::move(src.loadedImage);
   isCardPresent = src.isCardPresent;
+  isPrimary = src.isPrimary;
   return *this;
 }
 
@@ -69,6 +71,7 @@ SystemStatus& SystemStatus::operator= (const SystemStatus& src) {
   }
 
   isCardPresent = src.isCardPresent;
+  isPrimary = src.isPrimary;
 
   return *this;
 }
