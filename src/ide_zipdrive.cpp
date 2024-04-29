@@ -95,6 +95,87 @@ void IDEZipDrive::set_image(IDEImage *image)
         m_devinfo.medium_type = ATAPI_MEDIUM_UNKNOWN;
     }
 }
+// "ATAPI devices shall swap bytes for ASCII fields to maintain compatibility with ATA."
+static void copy_id_string(uint16_t *dst, size_t maxwords, const char *src)
+{
+    for (size_t i = 0; i < maxwords; i++)
+    {
+        uint8_t b0 = (*src != 0) ? (*src++) : ' ';
+        uint8_t b1 = (*src != 0) ? (*src++) : ' ';
+
+        dst[i] = ((uint16_t)b0 << 8) | b1;
+    }
+}
+#include "rp2040_fpga.h"
+extern 
+// Responds with 512 bytes of identification data
+bool IDEZipDrive::cmd_identify_packet_device(ide_registers_t *regs)
+{
+    uint16_t idf[256] = {0};
+
+    idf[IDE_IDENTIFY_OFFSET_GENERAL_CONFIGURATION] = 0x80A0;
+    copy_id_string(&idf[IDE_IDENTIFY_OFFSET_SERIAL_NUMBER], 10, "80DB40BF14061510");
+    copy_id_string(&idf[IDE_IDENTIFY_OFFSET_FIRMWARE_REV], 4, "41.S");
+    copy_id_string(&idf[IDE_IDENTIFY_OFFSET_MODEL_NUMBER], 20, "IOMEGA  ZIP 250       ATAPI");
+    idf[IDE_IDENTIFY_OFFSET_CAPABILITIES_1] = 0x0F00;
+    idf[IDE_IDENTIFY_OFFSET_CAPABILITIES_2] = 0x4002;
+    idf[IDE_IDENTIFY_OFFSET_PIO_MODE_ATA1] = 0x0200;
+    idf[IDE_IDENTIFY_OFFSET_MODE_INFO_VALID] = 0x0006;
+    idf[IDE_IDENTIFY_OFFSET_MODEINFO_MULTIWORD] = 0x0203; //  0; // force unsupported 
+
+    idf[IDE_IDENTIFY_OFFSET_MODEINFO_PIO] = 0x0001;
+    idf[IDE_IDENTIFY_OFFSET_MULTIWORD_CYCLETIME_MIN] = 0x0096;
+    idf[IDE_IDENTIFY_OFFSET_MULTIWORD_CYCLETIME_REC] = 0x0096;
+    idf[IDE_IDENTIFY_OFFSET_PIO_CYCLETIME_MIN] =  0x00B4;
+    idf[IDE_IDENTIFY_OFFSET_PIO_CYCLETIME_IORDY] =  0x00B4;
+    idf[IDE_IDENTIFY_OFFSET_STANDARD_VERSION_MAJOR] = 0x0030; // Version ATAPI-5 and 4
+    idf[IDE_IDENTIFY_OFFSET_STANDARD_VERSION_MINOR] = 0x0015; // Minor version
+    idf[IDE_IDENTIFY_OFFSET_MODEINFO_ULTRADMA] = 0x0007; // Zip250 // 0x0001; // UDMA 0 mode max // 
+    idf[IDE_IDENTIFY_OFFSET_REMOVABLE_MEDIA_SUPPORT] = 0x0001; // PACKET, Removable device command sets supported
+    // vendor specific - Copyright notice
+    idf[129] = 0x2863;
+    idf[130] = 0x2920;
+    idf[131] = 0x436F;
+    idf[132] = 0x7079;
+    idf[133] = 0x7269;
+    idf[134] = 0x6768;
+    idf[135] = 0x7420;
+    idf[136] = 0x494F;
+    idf[137] = 0x4D45;
+    idf[138] = 0x4741;
+    idf[139] = 0x2032;
+    idf[140] = 0x3030;
+    idf[141] = 0x3020;
+    idf[142] = 0x0000;
+    idf[143] = 0x3830;
+    idf[144] = 0x312F;
+    idf[145] = 0x2F34;
+    idf[146] = 0x3030;
+    idf[255] = 0x1EE7;
+
+    
+    ide_phy_start_write(sizeof(idf));
+    ide_phy_write_block((uint8_t*)idf, sizeof(idf));
+    
+    uint32_t start = millis();
+    uint32_t loop_cnt = 0;
+    while (!ide_phy_is_write_finished())
+    {
+        loop_cnt++;
+        if ((uint32_t)(millis() - start) > 10000)
+        {
+            logmsg("IDEATAPIDevice::cmd_identify_packet_device() response write timeout");
+            ide_phy_stop_transfers();
+            return false;
+        }
+    }
+    
+    ide_phy_assert_irq(IDE_STATUS_DEVRDY);
+    ide_protocol_poll();
+    platform_set_int_pin(true);
+
+    return true;
+}
 
 bool IDEZipDrive::handle_atapi_command(const uint8_t *cmd)
 {
@@ -124,22 +205,118 @@ bool IDEZipDrive::atapi_read_format_capacities(const uint8_t *cmd)
     uint32_t allocationLength = parse_be16(&cmd[7]);
 
     uint8_t *buf = m_buffer.bytes;
-    uint32_t len = 4 + 8 + 8;
+    uint32_t len = 12;
     memset(buf, 0, len);
-
-    buf[3] = 16; // Capacity list length (current + one formattable descriptor)
-    write_be32(&buf[4 + 0], capacity_lba());
-    write_be24(&buf[4 + 5], m_devinfo.bytes_per_sector);
-    write_be32(&buf[4 + 8 + 4], ZIP100_SECTORCOUNT);
-    write_be24(&buf[4 + 8 + 5], ZIP100_SECTORSIZE);
+    buf[3] = 0x08; // Capacity list length (current + one formattable descriptor)
+    write_be32(&buf[4], 0x00030000);
+    buf[8] = 0x02;
+    write_be24(&buf[9], 0x000200);
 
     atapi_send_data(buf, std::min<uint32_t>(allocationLength, len));
+    return atapi_cmd_ok();
+}
+
+bool IDEZipDrive::atapi_read_capacity(const uint8_t *cmd)
+{
+    uint32_t last_lba = 0x0002FFFF;
+    uint8_t *buf = m_buffer.bytes;
+    write_be32(&buf[0], last_lba);
+    write_be32(&buf[4], 512);
+    atapi_send_data(buf, 8);
+    platform_set_int_pin(true);
     return atapi_cmd_ok();
 }
 
 bool IDEZipDrive::atapi_verify(const uint8_t *cmd)
 {
     dbgmsg("---- ATAPI VERIFY dummy implementation");
+    return atapi_cmd_ok();
+}
+
+bool IDEZipDrive::atapi_inquiry(const uint8_t *cmd)
+{
+    uint8_t req_bytes = cmd[4];
+     
+    uint8_t inquiry[122] = {0};
+    uint8_t count = sizeof(inquiry);
+
+// Copied direcetly from an Apple branded IDE Zip 250 drive
+    inquiry[1]   = 0x80;
+    inquiry[3]   = 0x01;
+    inquiry[4]   = 0x75;
+    inquiry[8]   = 0x49;
+    inquiry[9]   = 0x4F;
+    inquiry[10]  = 0x4D;
+    inquiry[11]  = 0x45;
+    inquiry[12]  = 0x47;
+    inquiry[13]  = 0x41;
+    inquiry[14]  = 0x20;
+    inquiry[15]  = 0x20;
+    inquiry[16]  = 0x5A;
+    inquiry[17]  = 0x49;
+    inquiry[18]  = 0x50;
+    inquiry[19]  = 0x20;
+    inquiry[20]  = 0x32;
+    inquiry[21]  = 0x35;
+    inquiry[22]  = 0x30;
+    inquiry[23]  = 0x20;
+    inquiry[24]  = 0x20;
+    inquiry[25]  = 0x20;
+    inquiry[26]  = 0x20;
+    inquiry[27]  = 0x20;
+    inquiry[28]  = 0x20;
+    inquiry[29]  = 0x20;
+    inquiry[30]  = 0x20;
+    inquiry[31]  = 0x20;
+    inquiry[32]  = 0x34;
+    inquiry[33]  = 0x31;
+    inquiry[34]  = 0x2E;
+    inquiry[35]  = 0x53;
+    inquiry[36]  = 0x30;
+    inquiry[37]  = 0x38;
+    inquiry[38]  = 0x2F;
+    inquiry[39]  = 0x31;
+    inquiry[40]  = 0x34;
+    inquiry[41]  = 0x2F;
+    inquiry[42]  = 0x30;
+    inquiry[43]  = 0x30;
+    inquiry[96]  = 0x28;
+    inquiry[97]  = 0x63;
+    inquiry[98]  = 0x29;
+    inquiry[99]  = 0x20;
+    inquiry[100] = 0x43;
+    inquiry[101] = 0x6F;
+    inquiry[102] = 0x70;
+    inquiry[103] = 0x79;
+    inquiry[104] = 0x72;
+    inquiry[105] = 0x69;
+    inquiry[106] = 0x67;
+    inquiry[107] = 0x68;
+    inquiry[108] = 0x74;
+    inquiry[109] = 0x20;
+    inquiry[110] = 0x49;
+    inquiry[111] = 0x4F;
+    inquiry[112] = 0x4D;
+    inquiry[113] = 0x45;
+    inquiry[114] = 0x47;
+    inquiry[115] = 0x41;
+    inquiry[116] = 0x20;
+    inquiry[117] = 0x32;
+    inquiry[118] = 0x30;
+    inquiry[119] = 0x30;
+    inquiry[120] = 0x30;
+    inquiry[121] = 0x20;
+
+
+    if (req_bytes < count) count = req_bytes;
+        atapi_send_data(inquiry, count);
+
+
+    if (m_removable.reinsert_media_on_inquiry)
+    {
+        insert_media();
+    }
+
     return atapi_cmd_ok();
 }
 

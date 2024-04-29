@@ -85,6 +85,9 @@ void platform_reset_watchdog();
 // few milliseconds shouldn't disturb SCSI communication.
 void platform_poll();
 
+// \todo remove me, debug pin
+void platform_set_int_pin(bool raise);
+
 // Set callback that will be called during data transfer to/from SD card.
 // This can be used to implement simultaneous transfer to SCSI bus.
 typedef void (*sd_callback_t)(uint32_t bytes_complete);

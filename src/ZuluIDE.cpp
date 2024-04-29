@@ -442,6 +442,7 @@ void zuluide_init(void)
 
 void zuluide_main_loop(void)
 {
+    platform_set_int_pin(false);
     static uint32_t sd_card_check_time;
     static bool first_loop = true;
 

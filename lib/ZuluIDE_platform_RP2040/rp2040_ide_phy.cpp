@@ -26,8 +26,8 @@
 #include <ZuluIDE_log.h>
 #include <hardware/gpio.h>
 #include "ZuluIDE_platform.h"
-
-static struct {
+// \todo make static again
+/* static */ struct {
     ide_phy_config_t config;
     bool transfer_running;
     int udma_mode;
