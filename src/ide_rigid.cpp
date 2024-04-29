@@ -363,7 +363,7 @@ bool IDERigidDevice::cmd_identify_device(ide_registers_t *regs)
     // idf[129] = 0x000B;
 
      // Generic IDE hard drive
-    idf[IDE_IDENTIFY_OFFSET_GENERAL_CONFIGURATION] =  (m_devinfo.removable ? 0x80 : 0); // Device type
+    idf[IDE_IDENTIFY_OFFSET_GENERAL_CONFIGURATION] = (m_devinfo.removable ? 0x80 : 0x40); // Device type
     // \todo Calc these from LBA or maybe visa versa
     // idf[IDE_IDENTIFY_OFFSET_NUM_CYLINDERS] = 0x03A1;
     // idf[IDE_IDENTIFY_OFFSET_NUM_HEADS] = 0x0010;
