@@ -106,8 +106,7 @@ static void copy_id_string(uint16_t *dst, size_t maxwords, const char *src)
         dst[i] = ((uint16_t)b0 << 8) | b1;
     }
 }
-#include "rp2040_fpga.h"
-extern 
+
 // Responds with 512 bytes of identification data
 bool IDEZipDrive::cmd_identify_packet_device(ide_registers_t *regs)
 {
@@ -151,17 +150,16 @@ bool IDEZipDrive::cmd_identify_packet_device(ide_registers_t *regs)
     idf[144] = 0x312F;
     idf[145] = 0x2F34;
     idf[146] = 0x3030;
-    idf[255] = 0x1EE7;
+    idf[255] = 0x1EE7; // \todo delete me, this is just to mark the last 16 bit word
 
-    
+    regs->error = 0;
+    ide_phy_set_regs(regs);
     ide_phy_start_write(sizeof(idf));
     ide_phy_write_block((uint8_t*)idf, sizeof(idf));
-    
+    platform_set_int_pin(true); 
     uint32_t start = millis();
-    uint32_t loop_cnt = 0;
     while (!ide_phy_is_write_finished())
     {
-        loop_cnt++;
         if ((uint32_t)(millis() - start) > 10000)
         {
             logmsg("IDEATAPIDevice::cmd_identify_packet_device() response write timeout");
@@ -171,8 +169,6 @@ bool IDEZipDrive::cmd_identify_packet_device(ide_registers_t *regs)
     }
     
     ide_phy_assert_irq(IDE_STATUS_DEVRDY);
-    ide_protocol_poll();
-    platform_set_int_pin(true);
 
     return true;
 }

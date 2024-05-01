@@ -52,6 +52,7 @@ struct ide_phy_config_t {
     bool enable_dev1_zeros; // Answer to register reads for device 1 with zeros
     bool atapi_dev0; // Automatically read command for ATAPI PACKET on device 0
     bool atapi_dev1; // Automatically read command for ATAPI PACKET on device 1
+    bool disable_iordy; // Disable IORDY in PIO mode 
 };
 
 // Reset the IDE phy
