@@ -180,7 +180,8 @@ bool IDEZipDrive::handle_atapi_command(const uint8_t *cmd)
         case ATAPI_CMD_FORMAT_UNIT: return atapi_format_unit(cmd);
         case ATAPI_CMD_READ_FORMAT_CAPACITIES: return atapi_read_format_capacities(cmd);
         case ATAPI_CMD_VERIFY10: return atapi_verify(cmd);
-
+        case ATAPI_CMD_VENDOR_0x06: return atapi_zip_disk_serial(cmd);
+        case ATAPI_CMD_VENDOR_0x0D: return atapi_zip_disk_0x0D(cmd);
         default:
             return IDEATAPIDevice::handle_atapi_command(cmd);
     }
@@ -233,8 +234,9 @@ bool IDEZipDrive::atapi_inquiry(const uint8_t *cmd)
 {
     uint8_t req_bytes = cmd[4];
      
-    uint8_t inquiry[122] = {0};
-    uint8_t count = sizeof(inquiry);
+    uint8_t *inquiry= m_buffer.bytes;
+    uint8_t count = 122;
+    memset(inquiry, 0x00, count);
 
 // Copied direcetly from an Apple branded IDE Zip 250 drive
     inquiry[1]   = 0x80;
@@ -305,14 +307,104 @@ bool IDEZipDrive::atapi_inquiry(const uint8_t *cmd)
 
 
     if (req_bytes < count) count = req_bytes;
-        atapi_send_data(inquiry, count);
 
+    atapi_send_data(inquiry, count);
 
     if (m_removable.reinsert_media_on_inquiry)
     {
         insert_media();
     }
 
+    return atapi_cmd_ok();
+}
+
+bool IDEZipDrive::atapi_zip_disk_serial(const uint8_t *cmd)
+{
+    const uint8_t count = 64;
+    uint8_t *buf = m_buffer.bytes;
+    memset(buf, 0x00, count);
+    if (!is_medium_present())
+    {
+        // no disk
+        buf[0] = 0x02;
+        buf[1] = 0x3E;
+        buf[2] = 0x04;
+        buf[11] = 0x02;
+        buf[62] = 0x10;
+        buf[63] = 0x10;
+    }
+    else
+    {
+        // 100MB disk
+        buf[0] = 0x02;
+        buf[1] = 0x3E;
+        buf[2] = 0x00;
+        buf[3] = 0x02;
+        buf[6] = 0x02;
+        buf[7] = 0xFF;
+        buf[8] = 0xFF;
+        buf[0x09] = 0x00;
+        buf[0x0A] = 0x00;
+        buf[0x0B] = 0x02;
+        buf[0x0C] = 0x00;
+        buf[0x0D] = 0x00;
+        buf[0x0E] = 0x7D;
+        buf[0x0F] = 0x00;
+        buf[0x10] = 0x01;
+        buf[0x11] = 0x00;
+        buf[0x12] = 0x78;
+        buf[0x13] = 0x00;
+        buf[0x14] = 0x06;
+        buf[0x15] = 0x00;
+        buf[0x16] = 0x35;
+        buf[0x17] = 0x32;
+        buf[0x18] = 0x33;
+        buf[0x19] = 0x34;
+        buf[0x1A] = 0x30;
+        buf[0x1B] = 0x32;
+        buf[0x1C] = 0x30;
+        buf[0x1D] = 0x32;
+        buf[0x1E] = 0x31;
+        buf[0x1F] = 0x34;
+        buf[0x20] = 0x37;
+        buf[0x21] = 0x39;
+        buf[0x22] = 0x37;
+        buf[0x23] = 0x33;
+        buf[0x24] = 0x31;
+        buf[0x25] = 0x34;
+        buf[0x26] = 0x30;
+        buf[0x27] = 0x32;
+        buf[0x28] = 0x5A;
+        buf[0x29] = 0x49;
+        buf[0x2A] = 0x50;
+        buf[0x2B] = 0x31;
+        buf[0x2C] = 0x20;
+        buf[0x2D] = 0x20;
+        buf[0x2E] = 0x20;
+        buf[0x2F] = 0x4B;
+        buf[0x30] = 0x41;
+        buf[0x31] = 0x4D;
+        buf[0x32] = 0x39;
+        buf[0x33] = 0x35;
+        buf[0x34] = 0x30;
+        buf[0x35] = 0x30;
+        buf[0x36] = 0x45;
+        buf[0x37] = 0x33;
+        buf[0x38] = 0x31;
+        buf[0x39] = 0x31;
+        buf[0x3A] = 0x20;
+        buf[0x3B] = 0x20;
+        buf[0x3C] = 0x20;
+        buf[0x3D] = 0x20;
+        buf[0x3E] = 0x10;
+        buf[0x3F] = 0x10;
+    }
+    atapi_send_data(buf, count);
+    return atapi_cmd_ok();
+}
+
+bool IDEZipDrive::atapi_zip_disk_0x0D(const uint8_t *cmd)
+{
     return atapi_cmd_ok();
 }
 
@@ -394,7 +486,7 @@ size_t IDEZipDrive::atapi_get_mode_page(uint8_t page_ctrl, uint8_t page_idx, uin
         buffer[1] = 0x04;
         buffer[2] = 0x5c;
         buffer[3] = 0x0f;
-        buffer[4] = 0xff;
+        buffer[4] = 0x3c;
         buffer[5] = 0x0f;
         return 6;
     }
