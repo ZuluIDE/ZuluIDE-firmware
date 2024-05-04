@@ -32,6 +32,8 @@
 #include <zuluide/control/input_interface.h>
 #include <zuluide/control/display_state.h>
 #include <zuluide/status/system_status.h>
+#include <zuluide/status/device_control_safe.h>
+
 #include <pico/util/queue.h>
 
 /* These are used in debug output and default SCSI strings */
@@ -99,16 +101,41 @@ void platform_poll();
 typedef void (*sd_callback_t)(uint32_t bytes_complete);
 void platform_set_sd_callback(sd_callback_t func, const uint8_t *buffer);
 
+/**
+   Attempts to determine whether the hardware UI or the web service is attached to the device.
+ */
 bool platform_check_for_controller();
 
+/**
+   Sets the status controller, the component tracking the state of the system.
+ */
 void platform_set_status_controller(zuluide::ObservableSafe<zuluide::status::SystemStatus>& statusController);
 
+/**
+   Sets the display controller, the component tracking the state of the user interface.
+ */
 void platform_set_display_controller(zuluide::Observable<zuluide::control::DisplayState>& displayController);
 
-/***
-    Sets the input receiver.
+/**
+   Sets the controller that is used by the UI to change the system state.
+ */
+void platform_set_device_control(zuluide::status::DeviceControlSafe* deviceControl);
+
+/**
+   This mutex is used to prevent saving the log file to the SD card while reading the file system.
+   A more robust file access method is needed, but this is fixing the problem for now, even though
+   it is rather ham-handed.
+ */
+mutex_t* platform_get_log_mutex();
+
+/**
+   Sets the input receiver, which handles receiving input from the hardware UI and performs updates to the UI as appropriate.
  */
 void platform_set_input_interface(zuluide::control::InputReceiver* inputReceiver);
+
+/**
+   Used to poll the input hardware.
+ */
 void platform_poll_input();
 
 // FPGA bitstream is protected by a license key stored in RP2040 flash,

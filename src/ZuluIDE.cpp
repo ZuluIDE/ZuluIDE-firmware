@@ -180,6 +180,11 @@ void print_sd_info()
 
 void save_logfile(bool always = false)
 {
+    if(!mutex_try_enter(platform_get_log_mutex(), 0)) {
+      return;
+    }
+
+  
     static uint32_t prev_log_pos = 0;
     static uint32_t prev_log_len = 0;
     static uint32_t prev_log_save = 0;
@@ -197,6 +202,8 @@ void save_logfile(bool always = false)
             prev_log_save = millis();
         }
     }
+
+    mutex_exit(platform_get_log_mutex());
 }
 
 void init_logfile()
@@ -243,6 +250,8 @@ drive_type_t searchForDriveType() {
     }
 
   }
+
+  imgIter.Cleanup();
 
   // If nothing is found, default to a CDROM.
   return drive_type_t::DRIVE_TYPE_CDROM;
@@ -320,14 +329,13 @@ void setupStatusController()
     break;
   }
 
-
   if (device) {
     g_StatusController.SetIsPrimary(isPrimary);
     g_StatusController.UpdateDeviceStatus(std::move(device));
   }
 
   g_StatusController.AddObserver(status_observer);
-
+  platform_set_device_control(&g_StatusController);
 
   if (platform_check_for_controller())
   {
@@ -349,8 +357,6 @@ void setupStatusController()
     g_StatusController.EndUpdate();
   }
 
-
-
   loadFirstImage();
 }
 
@@ -364,6 +370,8 @@ void loadFirstImage() {
     logmsg("No image files found");
     blinkStatus(BLINK_ERROR_NO_IMAGES);
   }
+
+  imgIterator.Cleanup();
 }
 
 

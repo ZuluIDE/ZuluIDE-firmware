@@ -52,6 +52,8 @@ namespace zuluide::status {
 
     bool IsCardPresent() const;
     void SetIsCardPresent(bool value);
+
+    std::string ToJson() const;
   private:
     std::unique_ptr<IDeviceStatus> primary;
     std::string firmwareVersion;

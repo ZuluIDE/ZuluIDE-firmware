@@ -1,0 +1,23 @@
+8 - msgtype
+
+
+ZuluIDE->Client
+0xA - system_status_json
+LPS - system_status_json
+
+0xB - images_json
+LPS
+
+0xC - get_request
+
+CLient->ZuluIDE
+0xA - subscribe_status_json
+
+0XB - load_image
+LPS - filename
+
+0xC - eject_image
+
+0xD - fetch_images_json
+
+

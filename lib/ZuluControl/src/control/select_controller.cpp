@@ -64,13 +64,16 @@ void SelectController::SelectImage() {
   }
   
   controller->SetMode(Mode::Status);
+  imgIterator.Cleanup();
 }
 
 void SelectController::ChangeToMenu() {
   controller->SetMode(Mode::Menu);
+  imgIterator.Cleanup();
 }
 
 void SelectController::GetNextImageEntry() {
+  logmsg("GetNextImageEntry Core ", (int)get_core_num());
   if (imgIterator.IsLast() && !state.IsShowingBack()) {
     // We are currently on the last item, show the back.
     state.SetIsShowingBack(true);

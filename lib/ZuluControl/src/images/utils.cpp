@@ -19,43 +19,26 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
 **/
 
-#pragma once
-
-#include "image.h"
-#include <memory>
-#include <SdFat.h>
-
-#define MAX_FILE_PATH 255
+#include <zuluide/images/utils.h>
 
 namespace zuluide::images {
 
-  class ImageIterator
-  {
-  public:
-    ImageIterator(bool rotate = false);
-    Image Get();
-    bool MoveNext();
-    bool MovePrevious();
-    bool IsEmpty();
-    int GetFileCount();
-    void Reset();
-    bool IsFirst();
-    bool IsLast();
-    void Cleanup();
-  private:
-    FsFile currentFile;
-    FsFile root;
-    char candidate[MAX_FILE_PATH + 1];
-    uint64_t candidateSizeInBytes;
-    bool isOnImageFile;
-    int fileCount;
-    bool rotateIterator;
-    bool isEmpty;
-    uint32_t curIdx;
-    uint32_t firstIdx;
-    uint32_t lastIdx;
-    bool currentIsFirst;
-    bool currentIsLast;
-  };
-  
+  bool LoadImageByFileName(const char* toLoad, Image* dest, ImageIterator& iterator) {
+    while (iterator.MoveNext()) {
+      auto current = iterator.Get();
+      if (current.GetFilename() == toLoad) {
+        *dest = current;
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  bool LoadImageByFileName(const char* toLoad, Image* dest) {
+    ImageIterator iterator;
+    iterator.Reset();
+    return LoadImageByFileName(toLoad, dest, iterator);
+  }
+
 }
