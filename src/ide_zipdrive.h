@@ -25,6 +25,8 @@
 
 #include "ide_atapi.h"
 
+enum class zip_drive_type_t {Zip100, Zip250, Zip750};  
+
 class IDEZipDrive: public IDEATAPIDevice
 {
 public:
@@ -34,9 +36,15 @@ public:
 
     virtual uint64_t capacity() override;
 
-protected:
-    virtual bool cmd_identify_packet_device(ide_registers_t *regs) override;
+    virtual bool handle_command(ide_registers_t *regs) override;
 
+    virtual bool disables_iordy() override { return true; }
+
+protected:
+    
+    virtual bool cmd_identify_packet_device(ide_registers_t *regs) override;
+    virtual bool cmd_get_media_status(ide_registers_t *regs); 
+    virtual bool cmd_set_features(ide_registers_t *regs) override;
     virtual bool handle_atapi_command(const uint8_t *cmd) override;
 
     virtual bool atapi_format_unit(const uint8_t *cmd);
@@ -49,4 +57,5 @@ protected:
     
 
     virtual size_t atapi_get_mode_page(uint8_t page_ctrl, uint8_t page_idx, uint8_t *buffer, size_t max_bytes) override;
+    bool m_media_status_notification;
 };

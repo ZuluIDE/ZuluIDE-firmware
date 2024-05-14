@@ -53,6 +53,8 @@ void IDEZipDrive::initialize(int devidx)
 
     m_removable.reinsert_media_after_eject = ini_getbool("IDE", "reinsert_media_after_eject", true, CONFIGFILE);
     m_removable.reinsert_media_on_inquiry =  ini_getbool("IDE", "reinsert_media_on_inquiry", true, CONFIGFILE);
+
+    m_media_status_notification = false;
 }
 
 // We always have the same capacity, no matter image size
@@ -61,6 +63,45 @@ uint64_t IDEZipDrive::capacity()
     return (m_image ? ZIP100_SECTORCOUNT * ZIP100_SECTORSIZE : 0);
 }
 
+
+bool IDEZipDrive::handle_command(ide_registers_t *regs)
+{
+    switch (regs->command)
+    {
+        // Supported IDE commands
+        case IDE_CMD_SET_FEATURES: return cmd_set_features(regs);
+        case IDE_CMD_GET_MEDIA_STATUS: return cmd_get_media_status(regs);
+        default: return IDEATAPIDevice::handle_command(regs);
+    }
+}
+
+bool IDEZipDrive::cmd_set_features(ide_registers_t *regs)
+{
+    uint8_t feature = regs->feature;
+    regs->error = 0;
+    bool has_feature = false;
+    if (feature == IDE_SET_FEATURE_DISABLE_STATUS_NOTIFICATION)
+    {
+        dbgmsg("-- Disable status notification");
+        m_media_status_notification = false;
+        has_feature = true;
+    }
+
+    if (has_feature)
+    {
+        if (regs->error == 0)
+        {
+            ide_phy_assert_irq(IDE_STATUS_DEVRDY);
+        }
+        else
+        {
+            ide_phy_assert_irq(IDE_STATUS_DEVRDY | IDE_STATUS_ERR);
+        }
+        return true;
+    }
+
+    return IDEATAPIDevice::cmd_set_features(regs);
+}
 void IDEZipDrive::set_image(IDEImage *image)
 {
     if (image)
@@ -113,24 +154,53 @@ bool IDEZipDrive::cmd_identify_packet_device(ide_registers_t *regs)
     uint16_t idf[256] = {0};
 
     idf[IDE_IDENTIFY_OFFSET_GENERAL_CONFIGURATION] = 0x80A0;
-    copy_id_string(&idf[IDE_IDENTIFY_OFFSET_SERIAL_NUMBER], 10, "80DB40BF14061510");
-    copy_id_string(&idf[IDE_IDENTIFY_OFFSET_FIRMWARE_REV], 4, "41.S");
-    copy_id_string(&idf[IDE_IDENTIFY_OFFSET_MODEL_NUMBER], 20, "IOMEGA  ZIP 250       ATAPI");
-    idf[IDE_IDENTIFY_OFFSET_CAPABILITIES_1] = 0x0F00;
-    idf[IDE_IDENTIFY_OFFSET_CAPABILITIES_2] = 0x4002;
-    idf[IDE_IDENTIFY_OFFSET_PIO_MODE_ATA1] = 0x0200;
-    idf[IDE_IDENTIFY_OFFSET_MODE_INFO_VALID] = 0x0006;
-    idf[IDE_IDENTIFY_OFFSET_MODEINFO_MULTIWORD] = 0x0203; //  0; // force unsupported 
 
-    idf[IDE_IDENTIFY_OFFSET_MODEINFO_PIO] = 0x0001;
-    idf[IDE_IDENTIFY_OFFSET_MULTIWORD_CYCLETIME_MIN] = 0x0096;
-    idf[IDE_IDENTIFY_OFFSET_MULTIWORD_CYCLETIME_REC] = 0x0096;
-    idf[IDE_IDENTIFY_OFFSET_PIO_CYCLETIME_MIN] =  0x00B4;
-    idf[IDE_IDENTIFY_OFFSET_PIO_CYCLETIME_IORDY] =  0x00B4;
-    idf[IDE_IDENTIFY_OFFSET_STANDARD_VERSION_MAJOR] = 0x0030; // Version ATAPI-5 and 4
-    idf[IDE_IDENTIFY_OFFSET_STANDARD_VERSION_MINOR] = 0x0015; // Minor version
-    idf[IDE_IDENTIFY_OFFSET_MODEINFO_ULTRADMA] = 0x0007; // Zip250 // 0x0001; // UDMA 0 mode max // 
-    idf[IDE_IDENTIFY_OFFSET_REMOVABLE_MEDIA_SUPPORT] = 0x0001; // PACKET, Removable device command sets supported
+    if (m_image == nullptr ||  m_image->get_drive_type() == drive_type_t::DRIVE_TYPE_ZIP100)
+    {
+        copy_id_string(&idf[IDE_IDENTIFY_OFFSET_SERIAL_NUMBER], 10, "");
+        copy_id_string(&idf[IDE_IDENTIFY_OFFSET_FIRMWARE_REV], 4, "14.A");
+        copy_id_string(&idf[IDE_IDENTIFY_OFFSET_MODEL_NUMBER], 20, "IOMEGA  ZIP 100       ATAPI");
+        idf[IDE_IDENTIFY_OFFSET_CAPABILITIES_1] = 0x0E00;
+        idf[IDE_IDENTIFY_OFFSET_PIO_MODE_ATA1] = 0;
+        idf[IDE_IDENTIFY_OFFSET_MODE_INFO_VALID] = 0x0002;
+        idf[IDE_IDENTIFY_OFFSET_MODEINFO_MULTIWORD] = 0x0000;
+        idf[IDE_IDENTIFY_OFFSET_MODEINFO_PIO] = 0;
+        idf[IDE_IDENTIFY_OFFSET_MULTIWORD_CYCLETIME_MIN] = 0;
+        idf[IDE_IDENTIFY_OFFSET_MULTIWORD_CYCLETIME_REC] = 0;
+        idf[IDE_IDENTIFY_OFFSET_PIO_CYCLETIME_MIN] =    0x01f4;
+        idf[IDE_IDENTIFY_OFFSET_PIO_CYCLETIME_IORDY] =  0x01f4;
+        idf[IDE_IDENTIFY_OFFSET_STANDARD_VERSION_MAJOR] = 0;
+        idf[IDE_IDENTIFY_OFFSET_STANDARD_VERSION_MINOR] = 0;
+        idf[IDE_IDENTIFY_OFFSET_MODEINFO_ULTRADMA] = 0; 
+        idf[IDE_IDENTIFY_OFFSET_REMOVABLE_MEDIA_SUPPORT] = 0x0101; // PACKET, Removable device command sets supported
+    }
+    else if (m_image && m_image->get_drive_type() == drive_type_t::DRIVE_TYPE_ZIP250)
+    {
+        copy_id_string(&idf[IDE_IDENTIFY_OFFSET_SERIAL_NUMBER], 10, "80DB40BF14061510");
+        copy_id_string(&idf[IDE_IDENTIFY_OFFSET_FIRMWARE_REV], 4, "41.S");
+        copy_id_string(&idf[IDE_IDENTIFY_OFFSET_MODEL_NUMBER], 20, "IOMEGA  ZIP 250       ATAPI");
+        idf[IDE_IDENTIFY_OFFSET_CAPABILITIES_1] = 0x0F00;
+        idf[IDE_IDENTIFY_OFFSET_PIO_MODE_ATA1] = 0x0200;
+        idf[IDE_IDENTIFY_OFFSET_MODE_INFO_VALID] = 0x0006;
+        idf[IDE_IDENTIFY_OFFSET_MODEINFO_MULTIWORD] = 0x0203;  
+        idf[IDE_IDENTIFY_OFFSET_MODEINFO_PIO] = 0x0001;
+        idf[IDE_IDENTIFY_OFFSET_MULTIWORD_CYCLETIME_MIN] = 0x0096;
+        idf[IDE_IDENTIFY_OFFSET_MULTIWORD_CYCLETIME_REC] = 0x0096;
+        idf[IDE_IDENTIFY_OFFSET_PIO_CYCLETIME_MIN] =  0x00B4;
+        idf[IDE_IDENTIFY_OFFSET_PIO_CYCLETIME_IORDY] =  0x00B4;
+        idf[IDE_IDENTIFY_OFFSET_STANDARD_VERSION_MAJOR] = 0x0030; // Version ATAPI-5 and 4
+        idf[IDE_IDENTIFY_OFFSET_STANDARD_VERSION_MINOR] = 0x0015; // Minor version
+        idf[IDE_IDENTIFY_OFFSET_MODEINFO_ULTRADMA] =  0x0001; // UDMA 0 mode max // 0x0007; // Zip250
+        idf[IDE_IDENTIFY_OFFSET_REMOVABLE_MEDIA_SUPPORT] = 0x0001; // PACKET, Removable device command sets supported
+    }
+    else
+    {
+        // Zip 750 settings
+        logmsg("Unsupported Zip Drive type");
+        return false;
+    }
+    
+    idf[IDE_IDENTIFY_OFFSET_CAPABILITIES_2] = 0x4002;
     // vendor specific - Copyright notice
     idf[129] = 0x2863;
     idf[130] = 0x2920;
@@ -150,19 +220,18 @@ bool IDEZipDrive::cmd_identify_packet_device(ide_registers_t *regs)
     idf[144] = 0x312F;
     idf[145] = 0x2F34;
     idf[146] = 0x3030;
-    idf[255] = 0x1EE7; // \todo delete me, this is just to mark the last 16 bit word
 
     regs->error = 0;
     ide_phy_set_regs(regs);
     ide_phy_start_write(sizeof(idf));
     ide_phy_write_block((uint8_t*)idf, sizeof(idf));
-    platform_set_int_pin(true); 
+
     uint32_t start = millis();
     while (!ide_phy_is_write_finished())
     {
         if ((uint32_t)(millis() - start) > 10000)
         {
-            logmsg("IDEATAPIDevice::cmd_identify_packet_device() response write timeout");
+            logmsg("IDEZipDriveDevice::cmd_identify_packet_device() response write timeout");
             ide_phy_stop_transfers();
             return false;
         }
@@ -172,6 +241,36 @@ bool IDEZipDrive::cmd_identify_packet_device(ide_registers_t *regs)
 
     return true;
 }
+
+bool IDEZipDrive::cmd_get_media_status(ide_registers_t *regs)
+{
+    if (!m_media_status_notification)
+    {
+        // media status notification disabled
+        ide_phy_assert_irq(IDE_STATUS_DEVRDY);
+        return true;
+    }
+    else
+    {
+        // Error register bits
+        // 6: Write protect
+        // 5: Media change
+        // 3: Media change request
+        // 2: Abort
+        // 1: No Media
+        regs->error = 0;
+    }
+    if (regs->error == 0)
+    {
+        ide_phy_assert_irq(IDE_STATUS_DEVRDY);
+    }
+    else
+    {
+        ide_phy_assert_irq(IDE_STATUS_DEVRDY | IDE_STATUS_ERR);
+    }
+    return true;
+} 
+
 
 bool IDEZipDrive::handle_atapi_command(const uint8_t *cmd)
 {
@@ -205,7 +304,7 @@ bool IDEZipDrive::atapi_read_format_capacities(const uint8_t *cmd)
     uint32_t len = 12;
     memset(buf, 0, len);
     buf[3] = 0x08; // Capacity list length (current + one formattable descriptor)
-    write_be32(&buf[4], 0x00030000);
+    write_be32(&buf[4], capacity_lba());
     buf[8] = 0x02;
     write_be24(&buf[9], 0x000200);
 
@@ -215,12 +314,12 @@ bool IDEZipDrive::atapi_read_format_capacities(const uint8_t *cmd)
 
 bool IDEZipDrive::atapi_read_capacity(const uint8_t *cmd)
 {
-    uint32_t last_lba = 0x0002FFFF;
+    uint32_t last_lba = capacity_lba() - 1;
     uint8_t *buf = m_buffer.bytes;
     write_be32(&buf[0], last_lba);
     write_be32(&buf[4], 512);
     atapi_send_data(buf, 8);
-    platform_set_int_pin(true);
+
     return atapi_cmd_ok();
 }
 
@@ -234,78 +333,164 @@ bool IDEZipDrive::atapi_inquiry(const uint8_t *cmd)
 {
     uint8_t req_bytes = cmd[4];
      
-    uint8_t *inquiry= m_buffer.bytes;
-    uint8_t count = 122;
-    memset(inquiry, 0x00, count);
-
-// Copied direcetly from an Apple branded IDE Zip 250 drive
-    inquiry[1]   = 0x80;
-    inquiry[3]   = 0x01;
-    inquiry[4]   = 0x75;
-    inquiry[8]   = 0x49;
-    inquiry[9]   = 0x4F;
-    inquiry[10]  = 0x4D;
-    inquiry[11]  = 0x45;
-    inquiry[12]  = 0x47;
-    inquiry[13]  = 0x41;
-    inquiry[14]  = 0x20;
-    inquiry[15]  = 0x20;
-    inquiry[16]  = 0x5A;
-    inquiry[17]  = 0x49;
-    inquiry[18]  = 0x50;
-    inquiry[19]  = 0x20;
-    inquiry[20]  = 0x32;
-    inquiry[21]  = 0x35;
-    inquiry[22]  = 0x30;
-    inquiry[23]  = 0x20;
-    inquiry[24]  = 0x20;
-    inquiry[25]  = 0x20;
-    inquiry[26]  = 0x20;
-    inquiry[27]  = 0x20;
-    inquiry[28]  = 0x20;
-    inquiry[29]  = 0x20;
-    inquiry[30]  = 0x20;
-    inquiry[31]  = 0x20;
-    inquiry[32]  = 0x34;
-    inquiry[33]  = 0x31;
-    inquiry[34]  = 0x2E;
-    inquiry[35]  = 0x53;
-    inquiry[36]  = 0x30;
-    inquiry[37]  = 0x38;
-    inquiry[38]  = 0x2F;
-    inquiry[39]  = 0x31;
-    inquiry[40]  = 0x34;
-    inquiry[41]  = 0x2F;
-    inquiry[42]  = 0x30;
-    inquiry[43]  = 0x30;
-    inquiry[96]  = 0x28;
-    inquiry[97]  = 0x63;
-    inquiry[98]  = 0x29;
-    inquiry[99]  = 0x20;
-    inquiry[100] = 0x43;
-    inquiry[101] = 0x6F;
-    inquiry[102] = 0x70;
-    inquiry[103] = 0x79;
-    inquiry[104] = 0x72;
-    inquiry[105] = 0x69;
-    inquiry[106] = 0x67;
-    inquiry[107] = 0x68;
-    inquiry[108] = 0x74;
-    inquiry[109] = 0x20;
-    inquiry[110] = 0x49;
-    inquiry[111] = 0x4F;
-    inquiry[112] = 0x4D;
-    inquiry[113] = 0x45;
-    inquiry[114] = 0x47;
-    inquiry[115] = 0x41;
-    inquiry[116] = 0x20;
-    inquiry[117] = 0x32;
-    inquiry[118] = 0x30;
-    inquiry[119] = 0x30;
-    inquiry[120] = 0x30;
-    inquiry[121] = 0x20;
+    uint8_t *inquiry = m_buffer.bytes;
+    uint8_t count = 0;
 
 
+    if (m_image == nullptr ||  m_image->get_drive_type() == drive_type_t::DRIVE_TYPE_ZIP100)
+    {
+        // Taken from a IDE Zip Drive 100
+        count = 122;
+        memset(inquiry, 0x00, count);
+        inquiry[0] = 0x00;
+        inquiry[1] = 0x80;
+        inquiry[2] = 0x00;
+        inquiry[3] = 0x01;
+        inquiry[4] = 0x75;
+        inquiry[5] = 0x00;
+        inquiry[6] = 0x00;
+        inquiry[7] = 0x00;
+        // Vendor ID
+        inquiry[8] = 0x49;
+        inquiry[9] = 0x4F;
+        inquiry[10] = 0x4D;
+        inquiry[11] = 0x45;
+        inquiry[12] = 0x47;
+        inquiry[13] = 0x41;
+        inquiry[14] = 0x20;
+        // Product ID
+        inquiry[15] = 0x20;
+        inquiry[16] = 0x5A;
+        inquiry[17] = 0x49;
+        inquiry[18] = 0x50;
+        inquiry[19] = 0x20;
+        inquiry[20] = 0x31;
+        inquiry[21] = 0x30;
+        inquiry[22] = 0x30;
+        inquiry[23] = 0x20;
+        inquiry[24] = 0x20;
+        inquiry[25] = 0x20;
+        inquiry[26] = 0x20;
+        inquiry[27] = 0x20;
+        inquiry[28] = 0x20;
+        inquiry[29] = 0x20;
+        inquiry[30] = 0x20;
+        inquiry[31] = 0x20;
+        // Product Revision
+        inquiry[32] = 0x31;
+        inquiry[33] = 0x34;
+        inquiry[34] = 0x2E;
+        inquiry[35] = 0x41;
+        // vendor specific data
+        inquiry[36] = 0x30;
+        inquiry[37] = 0x39;
+        inquiry[38] = 0x2F;
+        inquiry[39] = 0x30;
+        inquiry[40] = 0x34;
+        inquiry[41] = 0x2F;
+        inquiry[42] = 0x39;
+        inquiry[43] = 0x38;
+
+        // vendor specific copyright
+        inquiry[96] = 0x28;
+        inquiry[97] = 0x63;
+        inquiry[98] = 0x29;
+        inquiry[99] = 0x20;
+        inquiry[100] = 0x43;
+        inquiry[101] = 0x6F;
+        inquiry[102] = 0x70;
+        inquiry[103] = 0x79;
+        inquiry[104] = 0x72;
+        inquiry[105] = 0x69;
+        inquiry[106] = 0x67;
+        inquiry[107] = 0x68;
+        inquiry[108] = 0x74;
+        inquiry[109] = 0x20;
+        inquiry[110] = 0x49;
+        inquiry[111] = 0x4F;
+        inquiry[112] = 0x4D;
+        inquiry[113] = 0x45;
+        inquiry[114] = 0x47;
+        inquiry[115] = 0x41;
+        inquiry[116] = 0x20;
+        inquiry[117] = 0x31;
+        inquiry[118] = 0x39;
+        inquiry[119] = 0x39;
+        inquiry[120] = 0x37;
+        inquiry[121] = 0x20;
+
+    }
+    else if (m_image && m_image->get_drive_type() == drive_type_t::DRIVE_TYPE_ZIP250)
+    {
+        count = 122;
+        memset(inquiry, 0x00, count);
+    // Copied direcetly from an IDE Zip drive 250
+        inquiry[1]   = 0x80;
+        inquiry[3]   = 0x01;
+        inquiry[4]   = 0x75;
+        inquiry[8]   = 0x49;
+        inquiry[9]   = 0x4F;
+        inquiry[10]  = 0x4D;
+        inquiry[11]  = 0x45;
+        inquiry[12]  = 0x47;
+        inquiry[13]  = 0x41;
+        inquiry[14]  = 0x20;
+        inquiry[15]  = 0x20;
+        inquiry[16]  = 0x5A;
+        inquiry[17]  = 0x49;
+        inquiry[18]  = 0x50;
+        inquiry[19]  = 0x20;
+        inquiry[20]  = 0x32;
+        inquiry[21]  = 0x35;
+        inquiry[22]  = 0x30;
+        inquiry[23]  = 0x20;
+        inquiry[24]  = 0x20;
+        inquiry[25]  = 0x20;
+        inquiry[26]  = 0x20;
+        inquiry[27]  = 0x20;
+        inquiry[28]  = 0x20;
+        inquiry[29]  = 0x20;
+        inquiry[30]  = 0x20;
+        inquiry[31]  = 0x20;
+        inquiry[32]  = 0x34;
+        inquiry[33]  = 0x31;
+        inquiry[34]  = 0x2E;
+        inquiry[35]  = 0x53;
+        inquiry[36]  = 0x30;
+        inquiry[37]  = 0x38;
+        inquiry[38]  = 0x2F;
+        inquiry[39]  = 0x31;
+        inquiry[40]  = 0x34;
+        inquiry[41]  = 0x2F;
+        inquiry[42]  = 0x30;
+        inquiry[43]  = 0x30;
+        inquiry[96]  = 0x28;
+        inquiry[97]  = 0x63;
+        inquiry[98]  = 0x29;
+        inquiry[99]  = 0x20;
+        inquiry[100] = 0x43;
+        inquiry[101] = 0x6F;
+        inquiry[102] = 0x70;
+        inquiry[103] = 0x79;
+        inquiry[104] = 0x72;
+        inquiry[105] = 0x69;
+        inquiry[106] = 0x67;
+        inquiry[107] = 0x68;
+        inquiry[108] = 0x74;
+        inquiry[109] = 0x20;
+        inquiry[110] = 0x49;
+        inquiry[111] = 0x4F;
+        inquiry[112] = 0x4D;
+        inquiry[113] = 0x45;
+        inquiry[114] = 0x47;
+        inquiry[115] = 0x41;
+        inquiry[116] = 0x20;
+        inquiry[117] = 0x32;
+        inquiry[118] = 0x30;
+        inquiry[119] = 0x30;
+        inquiry[120] = 0x30;
+        inquiry[121] = 0x20;
+    }
     if (req_bytes < count) count = req_bytes;
 
     atapi_send_data(inquiry, count);
@@ -320,10 +505,11 @@ bool IDEZipDrive::atapi_inquiry(const uint8_t *cmd)
 
 bool IDEZipDrive::atapi_zip_disk_serial(const uint8_t *cmd)
 {
+    // Currently zip disks of size 100MB info is returned 
     const uint8_t count = 64;
     uint8_t *buf = m_buffer.bytes;
     memset(buf, 0x00, count);
-    if (!is_medium_present())
+    if (!is_medium_present() || m_image == nullptr)
     {
         // no disk
         buf[0] = 0x02;
@@ -332,72 +518,153 @@ bool IDEZipDrive::atapi_zip_disk_serial(const uint8_t *cmd)
         buf[11] = 0x02;
         buf[62] = 0x10;
         buf[63] = 0x10;
+        if (m_image &&  m_image->get_drive_type() == drive_type_t::DRIVE_TYPE_ZIP100)
+        {
+            buf[0x3E] = 0x00;
+            buf[0x3F] = 0x12;
+        }
+        else if(m_image && m_image->get_drive_type() == drive_type_t::DRIVE_TYPE_ZIP250)
+        {
+            buf[62] = 0x10;
+            buf[63] = 0x10;
+        }
     }
     else
     {
-        // 100MB disk
-        buf[0] = 0x02;
-        buf[1] = 0x3E;
-        buf[2] = 0x00;
-        buf[3] = 0x02;
-        buf[6] = 0x02;
-        buf[7] = 0xFF;
-        buf[8] = 0xFF;
-        buf[0x09] = 0x00;
-        buf[0x0A] = 0x00;
-        buf[0x0B] = 0x02;
-        buf[0x0C] = 0x00;
-        buf[0x0D] = 0x00;
-        buf[0x0E] = 0x7D;
-        buf[0x0F] = 0x00;
-        buf[0x10] = 0x01;
-        buf[0x11] = 0x00;
-        buf[0x12] = 0x78;
-        buf[0x13] = 0x00;
-        buf[0x14] = 0x06;
-        buf[0x15] = 0x00;
-        buf[0x16] = 0x35;
-        buf[0x17] = 0x32;
-        buf[0x18] = 0x33;
-        buf[0x19] = 0x34;
-        buf[0x1A] = 0x30;
-        buf[0x1B] = 0x32;
-        buf[0x1C] = 0x30;
-        buf[0x1D] = 0x32;
-        buf[0x1E] = 0x31;
-        buf[0x1F] = 0x34;
-        buf[0x20] = 0x37;
-        buf[0x21] = 0x39;
-        buf[0x22] = 0x37;
-        buf[0x23] = 0x33;
-        buf[0x24] = 0x31;
-        buf[0x25] = 0x34;
-        buf[0x26] = 0x30;
-        buf[0x27] = 0x32;
-        buf[0x28] = 0x5A;
-        buf[0x29] = 0x49;
-        buf[0x2A] = 0x50;
-        buf[0x2B] = 0x31;
-        buf[0x2C] = 0x20;
-        buf[0x2D] = 0x20;
-        buf[0x2E] = 0x20;
-        buf[0x2F] = 0x4B;
-        buf[0x30] = 0x41;
-        buf[0x31] = 0x4D;
-        buf[0x32] = 0x39;
-        buf[0x33] = 0x35;
-        buf[0x34] = 0x30;
-        buf[0x35] = 0x30;
-        buf[0x36] = 0x45;
-        buf[0x37] = 0x33;
-        buf[0x38] = 0x31;
-        buf[0x39] = 0x31;
-        buf[0x3A] = 0x20;
-        buf[0x3B] = 0x20;
-        buf[0x3C] = 0x20;
-        buf[0x3D] = 0x20;
-        buf[0x3E] = 0x10;
-        buf[0x3F] = 0x10;
+        if (m_image && m_image->get_drive_type() == drive_type_t::DRIVE_TYPE_ZIP100)
+        {
+            // 100MB disk
+            buf[0x00] = 0x02;
+            buf[0x01] = 0x3E;
+            buf[0x02] = 0x00;
+            buf[0x03] = 0x02;
+            buf[0x04] = 0x00;
+            buf[0x05] = 0x00;
+            buf[0x06] = 0x02;
+            buf[0x07] = 0xFF;
+            buf[0x08] = 0xFF;
+            buf[0x09] = 0x00;
+            buf[0x0A] = 0x00;
+            buf[0x0B] = 0x02;
+            buf[0x0C] = 0x00;
+            buf[0x0D] = 0x00;
+            buf[0x0E] = 0x7E;
+            buf[0x0F] = 0x00;
+            buf[0x10] = 0x00;
+            buf[0x11] = 0x00;
+            buf[0x12] = 0x7E;
+            buf[0x13] = 0x00;
+            buf[0x14] = 0x00;
+            buf[0x15] = 0x00;
+            buf[0x16] = 0x30;
+            buf[0x17] = 0x36;
+            buf[0x18] = 0x33;
+            buf[0x19] = 0x31;
+            buf[0x1A] = 0x32;
+            buf[0x1B] = 0x33;
+            buf[0x1C] = 0x39;
+            buf[0x1D] = 0x30;
+            buf[0x1E] = 0x31;
+            buf[0x1F] = 0x30;
+            buf[0x20] = 0x39;
+            buf[0x21] = 0x30;
+            buf[0x22] = 0x32;
+            buf[0x23] = 0x32;
+            buf[0x24] = 0x30;
+            buf[0x25] = 0x31;
+            buf[0x26] = 0x30;
+            buf[0x27] = 0x33;
+            buf[0x28] = 0x5A;
+            buf[0x29] = 0x49;
+            buf[0x2A] = 0x50;
+            buf[0x2B] = 0x31;
+            buf[0x2C] = 0x20;
+            buf[0x2D] = 0x20;
+            buf[0x2E] = 0x20;
+            buf[0x2F] = 0x41;
+            buf[0x30] = 0x34;
+            buf[0x31] = 0x32;
+            buf[0x32] = 0x5A;
+            buf[0x33] = 0x50;
+            buf[0x34] = 0x31;
+            buf[0x35] = 0x38;
+            buf[0x36] = 0x45;
+            buf[0x37] = 0x31;
+            buf[0x38] = 0x31;
+            buf[0x39] = 0x32;
+            buf[0x3A] = 0x20;
+            buf[0x3B] = 0x20;
+            buf[0x3C] = 0x20;
+            buf[0x3D] = 0x20;
+            buf[0x3E] = 0x00;
+            buf[0x3F] = 0x12;
+        }
+        else if (m_image && m_image->get_drive_type() == drive_type_t::DRIVE_TYPE_ZIP250)
+        {
+            // 100MB disk
+            buf[0] = 0x02;
+            buf[1] = 0x3E;
+            buf[2] = 0x00;
+            buf[3] = 0x02;
+            buf[6] = 0x02;
+            buf[7] = 0xFF;
+            buf[8] = 0xFF;
+            buf[0x09] = 0x00;
+            buf[0x0A] = 0x00;
+            buf[0x0B] = 0x02;
+            buf[0x0C] = 0x00;
+            buf[0x0D] = 0x00;
+            buf[0x0E] = 0x7D;
+            buf[0x0F] = 0x00;
+            buf[0x10] = 0x01;
+            buf[0x11] = 0x00;
+            buf[0x12] = 0x78;
+            buf[0x13] = 0x00;
+            buf[0x14] = 0x06;
+            buf[0x15] = 0x00;
+            buf[0x16] = 0x35;
+            buf[0x17] = 0x32;
+            buf[0x18] = 0x33;
+            buf[0x19] = 0x34;
+            buf[0x1A] = 0x30;
+            buf[0x1B] = 0x32;
+            buf[0x1C] = 0x30;
+            buf[0x1D] = 0x32;
+            buf[0x1E] = 0x31;
+            buf[0x1F] = 0x34;
+            buf[0x20] = 0x37;
+            buf[0x21] = 0x39;
+            buf[0x22] = 0x37;
+            buf[0x23] = 0x33;
+            buf[0x24] = 0x31;
+            buf[0x25] = 0x34;
+            buf[0x26] = 0x30;
+            buf[0x27] = 0x32;
+            buf[0x28] = 0x5A;
+            buf[0x29] = 0x49;
+            buf[0x2A] = 0x50;
+            buf[0x2B] = 0x31;
+            buf[0x2C] = 0x20;
+            buf[0x2D] = 0x20;
+            buf[0x2E] = 0x20;
+            buf[0x2F] = 0x4B;
+            buf[0x30] = 0x41;
+            buf[0x31] = 0x4D;
+            buf[0x32] = 0x39;
+            buf[0x33] = 0x35;
+            buf[0x34] = 0x30;
+            buf[0x35] = 0x30;
+            buf[0x36] = 0x45;
+            buf[0x37] = 0x33;
+            buf[0x38] = 0x31;
+            buf[0x39] = 0x31;
+            buf[0x3A] = 0x20;
+            buf[0x3B] = 0x20;
+            buf[0x3C] = 0x20;
+            buf[0x3D] = 0x20;
+            buf[0x3E] = 0x10;
+            buf[0x3F] = 0x10;
+        }
     }
     atapi_send_data(buf, count);
     return atapi_cmd_ok();

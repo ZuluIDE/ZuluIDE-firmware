@@ -158,11 +158,6 @@ void platform_init()
     gpio_conf(STATUS_LED,     GPIO_FUNC_SIO, false,false, true,  false, false);
 }
 
-void platform_set_int_pin(bool raise)
-{
-    gpio_put(GPIO_EXT_INTERRUPT, raise);
-}
-
 // late_init() only runs in main application
 void platform_late_init()
 {

@@ -85,9 +85,6 @@ void platform_reset_watchdog();
 // few milliseconds shouldn't disturb SCSI communication.
 void platform_poll();
 
-// \todo remove me, debug pin
-void platform_set_int_pin(bool raise);
-
 // Set callback that will be called during data transfer to/from SD card.
 // This can be used to implement simultaneous transfer to SCSI bus.
 typedef void (*sd_callback_t)(uint32_t bytes_complete);
@@ -113,11 +110,11 @@ void platform_poll_input();
 // Reprogram firmware in main program area.
 #ifndef RP2040_DISABLE_BOOTLOADER
 #define PLATFORM_BOOTLOADER_SIZE (128 * 1024)
-#define PLATFORM_FLASH_TOTAL_SIZE (1020 * 1024)
-#define PLATFORM_FLASH_PAGE_SIZE 4096
 bool platform_rewrite_flash_page(uint32_t offset, uint8_t buffer[PLATFORM_FLASH_PAGE_SIZE]);
 void platform_boot_to_main_firmware();
 #endif
+#define PLATFORM_FLASH_TOTAL_SIZE (1020 * 1024)
+#define PLATFORM_FLASH_PAGE_SIZE 4096
 
 // SD card driver for SdFat
 class SdioConfig;

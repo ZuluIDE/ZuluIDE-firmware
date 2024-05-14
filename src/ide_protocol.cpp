@@ -81,8 +81,10 @@ static void do_phy_reset()
                                     && !g_drive1_detected;
     g_ide_config.atapi_dev0 = (g_ide_devices[0] != NULL) && (g_ide_devices[0]->is_packet_device());
     g_ide_config.atapi_dev1 = (g_ide_devices[1] != NULL) && (g_ide_devices[1]->is_packet_device());
-    // \todo - make this setable for zip drives, not used on other devices 
-    g_ide_config.disable_iordy = true;
+    // \todo if the code base support two devices, make `disable_iordy` a per device setting
+    g_ide_config.disable_iordy = (g_ide_devices[0] != NULL) && (g_ide_devices[0]->disables_iordy())
+                                 || (g_ide_devices[1] != NULL) && (g_ide_devices[1]->disables_iordy());
+
     if (g_ide_config.enable_dev0 && !g_ide_config.enable_dev1)
     {
         if (g_drive1_detected)

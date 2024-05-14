@@ -53,6 +53,9 @@ public:
     // Returns true if this device implements the ATAPI packet command set 
     virtual bool is_packet_device() { return false; }
 
+    // Returns true if this device does not use the IORdy signal
+    virtual bool disables_iordy() {return false; }
+
 protected:
     struct {
         int dev_index;

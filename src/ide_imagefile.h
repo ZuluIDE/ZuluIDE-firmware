@@ -82,6 +82,11 @@ public:
     // returns false if it failed to load
     virtual bool load_next_image() = 0;
 
+    // \todo This should really be moved to IDEDevice somehow
+    virtual void set_drive_type(drive_type_t type) = 0;
+    virtual drive_type_t get_drive_type() = 0;
+
+
 };
 
 // Implementation for SD-card based image files

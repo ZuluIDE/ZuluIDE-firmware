@@ -83,7 +83,7 @@ protected:
         // Medium type reported by MODE SENSE
         uint8_t medium_type;
     } m_devinfo;
-    
+
     enum atapi_data_state_t {
         ATAPI_DATA_IDLE,
         ATAPI_DATA_WRITE,

@@ -35,7 +35,7 @@
 #include "status/status_controller.h"
 #include <zuluide/status/cdrom_status.h>
 #include <zuluide/status/removable_status.h>
-#include <zuluide/status/zip100_status.h>
+#include <zuluide/status/zip_status.h>
 #include <zuluide/status/device_status.h>
 #include <zuluide/status/system_status.h>
 #include <zuluide/images/image_iterator.h>
@@ -226,7 +226,9 @@ void setupStatusController()
   if (strncasecmp(device_name, "cdrom", sizeof("cdrom")) == 0) {
     device = std::move(std::make_unique<zuluide::status::CDROMStatus>(zuluide::status::CDROMStatus::Status::NoImage, zuluide::status::CDROMStatus::DriveSpeed::Single));
   } else if (strncasecmp(device_name, "zip100", sizeof("zip100")) == 0) {
-    device = std::move(std::make_unique<zuluide::status::Zip100Status>(zuluide::status::Zip100Status::Status::NoImage));
+    device = std::move(std::make_unique<zuluide::status::ZipStatus>(zuluide::status::ZipStatus::Status::NoImage, zuluide::status::ZipStatus::ZipDriveType::Zip100));
+  } else if (strncasecmp(device_name, "zip250", sizeof("zip250")) == 0) {
+    device = std::move(std::make_unique<zuluide::status::ZipStatus>(zuluide::status::ZipStatus::Status::NoImage, zuluide::status::ZipStatus::ZipDriveType::Zip250));
   } else if (strncasecmp(device_name, "removable", sizeof("removable")) == 0) {
     device = std::move(std::make_unique<zuluide::status::RemovableStatus>(zuluide::status::RemovableStatus::Status::NoImage));
   } else if (device_name[0]) {
@@ -293,6 +295,12 @@ drive_type_t searchForDriveType() {
     } else if (strncasecmp(image, "zipd", sizeof("zipd")) == 0) {
       g_ide_imagefile.set_prefix(image);
       return DRIVE_TYPE_ZIP100;
+    } else if (strncasecmp(image, "z100", sizeof("z100")) == 0) {
+      g_ide_imagefile.set_prefix(image);
+      return DRIVE_TYPE_ZIP100;
+    } else if (strncasecmp(image, "z250", sizeof("z250")) == 0) {
+      g_ide_imagefile.set_prefix(image);
+      return DRIVE_TYPE_ZIP250;
     } else if (strncasecmp(image, "remv", sizeof("remv")) == 0) {
       g_ide_imagefile.set_prefix(image);
       return DRIVE_TYPE_REMOVABLE;
@@ -351,6 +359,10 @@ void load_image(const zuluide::images::Image& toLoad)
   case DRIVE_TYPE_ZIP100:
       g_ide_device = &g_ide_zipdrive;
       logmsg("Device is a Iomega Zip Drive 100");
+      break;
+    case DRIVE_TYPE_ZIP250:
+      g_ide_device = &g_ide_zipdrive;
+      logmsg("Device is a Iomega Zip Drive 250");
       break;
   case DRIVE_TYPE_REMOVABLE:
       g_ide_device = &g_ide_removable;
@@ -442,7 +454,6 @@ void zuluide_init(void)
 
 void zuluide_main_loop(void)
 {
-    platform_set_int_pin(false);
     static uint32_t sd_card_check_time;
     static bool first_loop = true;
 
