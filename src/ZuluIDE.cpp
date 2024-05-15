@@ -31,6 +31,7 @@
 #include "ide_cdrom.h"
 #include "ide_zipdrive.h"
 #include "ide_removable.h"
+#include "ide_rigid.h"
 #include "ide_imagefile.h"
 #include "status/status_controller.h"
 #include <zuluide/status/cdrom_status.h>
@@ -51,6 +52,7 @@ static uint32_t g_ide_buffer[IDE_BUFFER_SIZE / 4];
 static IDECDROMDevice g_ide_cdrom;
 static IDEZipDrive g_ide_zipdrive;
 static IDERemovable g_ide_removable;
+static IDERigidDevice g_ide_rigid;
 static IDEImageFile g_ide_imagefile;
 static IDEDevice *g_ide_device;
 
@@ -133,6 +135,7 @@ static bool mountSDCard()
     g_ide_cdrom.set_image(nullptr);
     g_ide_zipdrive.set_image(nullptr);
     g_ide_removable.set_image(nullptr);
+    g_ide_rigid.set_image(nullptr);
 
     // Check for the common case, FAT filesystem as first partition
     if (SD.begin(SD_CONFIG))
@@ -305,6 +308,12 @@ drive_type_t searchForDriveType() {
       g_ide_imagefile.set_prefix(image);
       return DRIVE_TYPE_REMOVABLE;
     }
+    else if (strncasecmp(image, "hddr", sizeof("hddr")) == 0)
+    {
+      g_ide_imagefile.set_prefix(image);
+      return  DRIVE_TYPE_RIGID;
+    }
+    
   }
 
   // If nothing is found, default to a CDROM.
@@ -318,6 +327,7 @@ void clear_image() {
   g_ide_cdrom.set_image(nullptr);
   g_ide_zipdrive.set_image(nullptr);
   g_ide_removable.set_image(nullptr);
+  g_ide_rigid.set_image(nullptr);
   g_ide_imagefile = IDEImageFile((uint8_t*)g_ide_buffer, sizeof(g_ide_buffer));
 
   // Set the drive type for the image from the system state.
@@ -350,30 +360,34 @@ void load_image(const zuluide::images::Image& toLoad)
     g_ide_imagefile.set_drive_type(newDriveType);
   }
 
-  switch (g_ide_imagefile.get_drive_type())
-  {
-  case DRIVE_TYPE_CDROM:
-      g_ide_device = &g_ide_cdrom;
-      logmsg("Device is a CDROM drive");
-      break;
-  case DRIVE_TYPE_ZIP100:
-      g_ide_device = &g_ide_zipdrive;
-      logmsg("Device is a Iomega Zip Drive 100");
-      break;
-    case DRIVE_TYPE_ZIP250:
+    switch (g_ide_imagefile.get_drive_type())
+    {
+    case DRIVE_TYPE_CDROM:
+        g_ide_device = &g_ide_cdrom;
+        logmsg("Device is a CDROM drive");
+        break;
+    case DRIVE_TYPE_ZIP100:
+        g_ide_device = &g_ide_zipdrive;
+        logmsg("Device is a Iomega Zip Drive 100");
+        break;
+      case DRIVE_TYPE_ZIP250:
       g_ide_device = &g_ide_zipdrive;
       logmsg("Device is a Iomega Zip Drive 250");
       break;
   case DRIVE_TYPE_REMOVABLE:
-      g_ide_device = &g_ide_removable;
-      logmsg("Device is a generic removable drive");
-      break;
-  default:
-      g_ide_device = &g_ide_cdrom;
-      g_ide_imagefile.set_drive_type(DRIVE_TYPE_CDROM);
-      logmsg("Device defaulting to a CDROM drive");
-      break;
-  }
+        g_ide_device = &g_ide_removable;
+        logmsg("Device is a generic removable drive");
+        break;
+    case DRIVE_TYPE_RIGID:
+        g_ide_device = &g_ide_rigid;
+        logmsg("Device is a hard drive");
+        break;
+    default:
+        g_ide_device = &g_ide_cdrom;
+        g_ide_imagefile.set_drive_type(DRIVE_TYPE_CDROM);
+        logmsg("Device defaulting to a CDROM drive");
+        break;
+    }
 
   logmsg("Loading image ", toLoad.GetFilename().c_str());
   g_ide_imagefile.open_file(toLoad.GetFilename().c_str(), false);

@@ -54,7 +54,13 @@ public:
     virtual bool is_packet_device() { return false; }
 
     // Returns true if this device does not use the IORdy signal
-    virtual bool disables_iordy() {return false; }
+    virtual bool disables_iordy() { return false; }
+
+    virtual bool set_device_signature(uint8_t error, bool was_reset) = 0;
+
+    // Set signature values for ide register
+    virtual void fill_device_signature(ide_registers_t *regs) = 0;
+
 
 protected:
     struct {

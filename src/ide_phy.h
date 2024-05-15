@@ -30,7 +30,8 @@ enum ide_event_t {
     IDE_EVENT_HWRST,
     IDE_EVENT_SWRST,
     IDE_EVENT_CMD,
-    IDE_EVENT_DATA_TRANSFER_DONE
+    IDE_EVENT_DATA_TRANSFER_DONE,
+    IDE_EVENT_CMD_EXE_DEV_DIAG
 };
 
 struct ide_registers_t {

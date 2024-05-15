@@ -55,6 +55,10 @@ public:
 
     virtual void insert_media();
 
+    virtual bool set_device_signature(uint8_t error, bool was_reset) override;
+
+    virtual void fill_device_signature(ide_registers_t *regs) override;
+
 protected:
     IDEImage *m_image;
 
@@ -123,8 +127,7 @@ protected:
     virtual bool cmd_set_features(ide_registers_t *regs);
     virtual bool cmd_identify_packet_device(ide_registers_t *regs);
     virtual bool cmd_packet(ide_registers_t *regs);
-    virtual bool set_packet_device_signature(uint8_t error, bool was_reset);
-    
+
     // Methods used by ATAPI command implementations
 
     // Send one or multiple data blocks synchronously and wait for transfer to finish

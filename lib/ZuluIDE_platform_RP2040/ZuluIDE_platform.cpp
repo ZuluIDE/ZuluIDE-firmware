@@ -31,6 +31,7 @@
 #include <hardware/uart.h>
 #include <hardware/spi.h>
 #include <hardware/structs/xip_ctrl.h>
+#include <hardware/structs/usb.h>
 #include <hardware/structs/iobank0.h>
 #include <hardware/flash.h>
 #include <pico/multicore.h>
@@ -720,6 +721,7 @@ extern uint32_t __real_vectors_start;
 extern uint32_t __StackTop;
 static volatile void *g_bootloader_exit_req;
 
+__attribute__((section(".time_critical.platform_rewrite_flash_page")))
 bool platform_rewrite_flash_page(uint32_t offset, uint8_t buffer[PLATFORM_FLASH_PAGE_SIZE])
 {
     if (offset == PLATFORM_BOOTLOADER_SIZE)
@@ -729,6 +731,13 @@ bool platform_rewrite_flash_page(uint32_t offset, uint8_t buffer[PLATFORM_FLASH_
             logmsg("Invalid firmware file, starts with: ", bytearray(buffer, 16));
             return false;
         }
+    }
+
+    if (NVIC_GetEnableIRQ(USBCTRL_IRQ_IRQn))
+    {
+        logmsg("Disabling USB during firmware flashing");
+        NVIC_DisableIRQ(USBCTRL_IRQ_IRQn);
+        usb_hw->main_ctrl = 0;
     }
 
     dbgmsg("Writing flash at offset ", offset, " data ", bytearray(buffer, 4));
