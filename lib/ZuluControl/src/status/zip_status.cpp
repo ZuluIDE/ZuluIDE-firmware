@@ -19,41 +19,30 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
 **/
 
-#pragma once
+#include <zuluide/status/zip_status.h>
 
-#include "device_status.h"
-#include <memory>
+using namespace zuluide::status;
 
-namespace zuluide::status {
+ZipStatus::ZipStatus(Status stat, ZipDriveType zip_type)
+  : status(stat), zip_drive_type(zip_type)
+{
+}
 
-  class Zip100Status : public IDeviceStatus
+ZipStatus::Status ZipStatus::GetStatus()
+{
+  return this->status;
+}
+
+std::unique_ptr<IDeviceStatus> ZipStatus::Clone()
+{
+  return std::make_unique<ZipStatus>(status, zip_drive_type);
+}
+
+drive_type_t ZipStatus::GetDriveType() {
+  switch (zip_drive_type)
   {
-  public:
-    enum class Status {
-      /***
-       * An image is attached and valid. 
-       */ 
-      ImagePresent, 
-      /***
-       * An image is attached, but is invalid.
-       */
-      InvalidImage,
-      /***
-       * No image is attached.
-       */
-      NoImage,
-      /***
-       * An image is attached, writable, and valid.
-       */
-      WriteableImage
-    };
-            
-    Zip100Status(Status stat);
-    Status GetStatus();
-    std::unique_ptr<IDeviceStatus> Clone();
-    drive_type_t GetDriveType();
-  private:
-    Status status;
-  };
-    
+    case ZipDriveType::Zip100 : return drive_type_t::DRIVE_TYPE_ZIP100;
+    case ZipDriveType::Zip250 : return drive_type_t::DRIVE_TYPE_ZIP250;
+    default: return drive_type_t::DRIVE_TYPE_ZIP100;
+  }
 }

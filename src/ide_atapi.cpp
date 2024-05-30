@@ -1154,7 +1154,7 @@ bool IDEATAPIDevice::atapi_write(const uint8_t *cmd)
     if (lba + transfer_len > capacity_lba())
     {
         logmsg("-- Host attempted write at LBA ", (int)lba, "+", (int)transfer_len,
-            ", beyond capacity ", capacity_lba());
+            ", beyond capacity ", (int)capacity_lba());
         return atapi_cmd_error(ATAPI_SENSE_ILLEGAL_REQ, ATAPI_ASC_LBA_OUT_OF_RANGE);
     }
 

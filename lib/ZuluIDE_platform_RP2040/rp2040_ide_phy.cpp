@@ -87,6 +87,7 @@ void ide_phy_reset(const ide_phy_config_t* config)
     if (config->enable_dev1_zeros) cfg |= 0x04;
     if (config->atapi_dev0)        cfg |= 0x08;
     if (config->atapi_dev1)        cfg |= 0x10;
+    if (config->disable_iordy)     cfg |= 0x20;
     fpga_wrcmd(FPGA_CMD_SET_IDE_PHY_CFG, &cfg, 1);
 }
 

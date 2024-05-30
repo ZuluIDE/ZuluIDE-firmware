@@ -110,11 +110,11 @@ void platform_poll_input();
 // Reprogram firmware in main program area.
 #ifndef RP2040_DISABLE_BOOTLOADER
 #define PLATFORM_BOOTLOADER_SIZE (128 * 1024)
-#define PLATFORM_FLASH_TOTAL_SIZE (1020 * 1024)
-#define PLATFORM_FLASH_PAGE_SIZE 4096
 bool platform_rewrite_flash_page(uint32_t offset, uint8_t buffer[PLATFORM_FLASH_PAGE_SIZE]);
 void platform_boot_to_main_firmware();
 #endif
+#define PLATFORM_FLASH_TOTAL_SIZE (1020 * 1024)
+#define PLATFORM_FLASH_PAGE_SIZE 4096
 
 // SD card driver for SdFat
 class SdioConfig;
