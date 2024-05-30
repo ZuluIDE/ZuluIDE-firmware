@@ -60,6 +60,7 @@ X(IDE_CMD_NOP                                       , 0x00) \
 X(IDE_CMD_CFA_REQUEST_EXTENDED_ERROR                , 0x03) \
 X(IDE_CMD_DEVICE_RESET                              , 0x08) \
 X(IDE_CMD_READ_SECTORS                              , 0x20) \
+X(IDE_CMD_READ_SECTORS_NO_RETRY                     , 0x21) \
 X(IDE_CMD_READ_SECTORS_EXT                          , 0x24) \
 X(IDE_CMD_READ_DMA_EXT                              , 0x25) \
 X(IDE_CMD_READ_DMA_QUEUED_EXT                       , 0x26) \

@@ -66,6 +66,7 @@ bool IDEATAPIDevice::handle_command(ide_registers_t *regs)
         case IDE_CMD_EXECUTE_DEVICE_DIAGNOSTIC:
         case IDE_CMD_DEVICE_RESET:
         case IDE_CMD_READ_SECTORS:
+        case IDE_CMD_READ_SECTORS_NO_RETRY:
         case IDE_CMD_READ_SECTORS_EXT:
             return set_device_signature(IDE_ERROR_ABORT, false);
 
@@ -74,6 +75,7 @@ bool IDEATAPIDevice::handle_command(ide_registers_t *regs)
         case IDE_CMD_SET_FEATURES: return cmd_set_features(regs);
         case IDE_CMD_IDENTIFY_PACKET_DEVICE: return cmd_identify_packet_device(regs);
         case IDE_CMD_PACKET: return cmd_packet(regs);
+        case IDE_CMD_IDLE_IMMEDIATE: return cmd_idle_immediate(regs);
         default: return false;
     }
 }
@@ -315,6 +317,13 @@ bool IDEATAPIDevice::cmd_packet(ide_registers_t *regs)
 
     dbgmsg("-- ATAPI command: ", get_atapi_command_name(cmdbuf[0]), " ", bytearray(cmdbuf, 12));
     return handle_atapi_command(cmdbuf);
+}
+
+// Required by SPARC bios
+bool IDEATAPIDevice::cmd_idle_immediate(ide_registers_t *regs)
+{
+    ide_phy_assert_irq(IDE_STATUS_DEVRDY);
+    return true;
 }
 
 // Set the packet device signature values to PHY registers
