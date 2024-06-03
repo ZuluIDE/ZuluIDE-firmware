@@ -57,10 +57,10 @@ void IDEZipDrive::initialize(int devidx)
     m_media_status_notification = false;
 }
 
-// We always have the same capacity, no matter image size
+// Capacity is based on image size
 uint64_t IDEZipDrive::capacity()
 {
-    return (m_image ? ZIP100_SECTORCOUNT * ZIP100_SECTORSIZE : 0);
+    return (m_image ? m_image->capacity() : 0);
 }
 
 
@@ -112,12 +112,9 @@ void IDEZipDrive::set_image(IDEImage *image)
         uint64_t expected_size = ZIP100_SECTORSIZE * ZIP100_SECTORCOUNT;
         if (actual_size < expected_size)
         {
-            logmsg("-- WARNING: Image file ", filename, " is only ", (int)actual_size, " bytes, expecting ", (int)expected_size, " bytes");
+            logmsg("-- WARNING: Image file ", filename, " is only ", (int)actual_size, " bytes, expecting more than or equal to", (int)expected_size, " bytes");
         }
-        else if (actual_size > expected_size)
-        {
-            logmsg("-- Image file ", filename, " is ", (int)actual_size, " bytes, ignoring anything past ", (int)expected_size);
-        }
+   
     }
 
     IDEATAPIDevice::set_image(image);
@@ -127,15 +124,14 @@ void IDEZipDrive::set_image(IDEImage *image)
 
     if (!image)
     {
-        m_devinfo.media_status_events = ATAPI_MEDIA_EVENT_EJECTREQ;
-        m_devinfo.medium_type = ATAPI_MEDIUM_NONE;
+        m_atapi_state.sense_asc = ATAPI_ASC_NO_MEDIUM;
     }
     else
     {
-        m_devinfo.media_status_events = ATAPI_MEDIA_EVENT_NEW;
-        m_devinfo.medium_type = ATAPI_MEDIUM_UNKNOWN;
+       m_atapi_state.sense_asc = ATAPI_ASC_MEDIUM_CHANGE;
     }
 }
+
 // "ATAPI devices shall swap bytes for ASCII fields to maintain compatibility with ATA."
 static void copy_id_string(uint16_t *dst, size_t maxwords, const char *src)
 {
