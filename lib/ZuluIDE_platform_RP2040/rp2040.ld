@@ -20,7 +20,7 @@ SECTIONS
         "ERROR: Pico second stage bootloader must be 256 bytes in size")
 
     /* If ZuluIDE SD card bootloader is included, it goes in first 128 kB */
-    .text.bootloader : ALIGN(16) SUBALIGN(16)
+   .text.bootloader : ALIGN(16) SUBALIGN(16)
     {
         KEEP(*(.text.btldr*))
         . = ALIGN(131072);

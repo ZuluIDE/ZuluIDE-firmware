@@ -131,11 +131,11 @@ void platform_init()
     gpio_conf(SDIO_D3,        GPIO_FUNC_SIO, true, false, false, true, true);
 
     // I2C pins
-    //        pin             function       pup   pdown  out    state fast
-    gpio_conf(GPIO_I2C_SCL,   GPIO_FUNC_I2C, true,false, false,  true, true);
-    gpio_conf(GPIO_I2C_SDA,   GPIO_FUNC_I2C, true,false, false,  true, true);
+    //        pin                 function       pup   pdown  out    state fast
+    gpio_conf(GPIO_I2C_SCL,       GPIO_FUNC_I2C, true, false, false,  true, true);
+    gpio_conf(GPIO_I2C_SDA,       GPIO_FUNC_I2C, true, false, false,  true, true);
     //gpio_conf(GPIO_I2C_SDA,   GPIO_FUNC_SIO, true,false, true,  true, true); // FIXME: DEBUG
-    //gpio_conf(GPIO_EXT_INTERRUPT,   GPIO_FUNC_SIO, true,false, false,  false, false);
+    gpio_conf(GPIO_EXT_INTERRUPT, GPIO_FUNC_SIO, false, false, true,  false, false);
 
     // FPGA bus
     // Signals will be switched between SPI/PIO by rp2040_fpga.cpp, but pull-ups are configured here.

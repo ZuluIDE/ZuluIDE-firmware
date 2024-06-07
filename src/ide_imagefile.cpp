@@ -280,12 +280,24 @@ bool IDEImageFile::find_next_prefix_image(const char *directory, const char *pre
                 }
                 else more_than_one_prefix = true;
             }
-            else if (strcasecmp(prefix, "zipd") == 0)
+            else if (strcasecmp(prefix, "zipd") == 0
+                    || strcasecmp(prefix, "z100") == 0
+            )
+            {
+                if (get_prefix()[0] == '\0')
+                {
+                    set_prefix("z100");
+                    set_drive_type(DRIVE_TYPE_ZIP100);
+                }
+                else more_than_one_prefix = true;
+            }
+            
+            else if (strcasecmp(prefix, "z250") == 0)
             {
                 if (get_prefix()[0] == '\0')
                 {
                     set_prefix(prefix);
-                    set_drive_type(DRIVE_TYPE_ZIP100);
+                    set_drive_type(DRIVE_TYPE_ZIP250);
                 }
                 else more_than_one_prefix = true;
             }
