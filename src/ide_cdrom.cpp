@@ -341,10 +341,13 @@ void IDECDROMDevice::set_image(IDEImage *image)
     else
     {
         m_devinfo.medium_type = ATAPI_MEDIUM_NONE;
+        // Notify host of media change
+        m_atapi_state.unit_attention = true;
+        m_atapi_state.sense_key = ATAPI_SENSE_NOT_READY;
+        m_atapi_state.sense_asc = ATAPI_ASC_NO_MEDIUM;
+
     }
 
-    // Notify host of media change
-    m_atapi_state.unit_attention = true;
 
     if (!image)
     {
@@ -385,6 +388,7 @@ bool IDECDROMDevice::atapi_set_cd_speed(const uint8_t *cmd)
 bool IDECDROMDevice::atapi_read_disc_information(const uint8_t *cmd)
 {
     if (!m_image) return atapi_cmd_error(ATAPI_SENSE_NOT_READY, ATAPI_ASC_NO_MEDIUM);
+    if (m_atapi_state.not_ready) return atapi_cmd_error(ATAPI_SENSE_NOT_READY, ATAPI_ASC_UNIT_BECOMING_READY);
 
     uint16_t allocationLength = parse_be16(&cmd[7]);
 
@@ -412,6 +416,7 @@ bool IDECDROMDevice::atapi_read_disc_information(const uint8_t *cmd)
 bool IDECDROMDevice::atapi_read_track_information(const uint8_t *cmd)
 {
     if (!m_image) return atapi_cmd_error(ATAPI_SENSE_NOT_READY, ATAPI_ASC_NO_MEDIUM);
+    if (m_atapi_state.not_ready) return atapi_cmd_error(ATAPI_SENSE_NOT_READY, ATAPI_ASC_UNIT_BECOMING_READY);
 
     bool track = (cmd[1] & 0x01);
     uint32_t lba = parse_be32(&cmd[2]);
@@ -486,6 +491,7 @@ bool IDECDROMDevice::atapi_read_track_information(const uint8_t *cmd)
 bool IDECDROMDevice::atapi_read_sub_channel(const uint8_t * cmd)
 {
     if (!m_image) return atapi_cmd_error(ATAPI_SENSE_NOT_READY, ATAPI_ASC_NO_MEDIUM);
+    if (m_atapi_state.not_ready) return atapi_cmd_error(ATAPI_SENSE_NOT_READY, ATAPI_ASC_UNIT_BECOMING_READY);
 
     bool time = (cmd[1] & 0x02);
     bool subq = (cmd[2] & 0x40);
@@ -499,6 +505,7 @@ bool IDECDROMDevice::atapi_read_sub_channel(const uint8_t * cmd)
 bool IDECDROMDevice::atapi_read_toc(const uint8_t *cmd)
 {
     if (!m_image) return atapi_cmd_error(ATAPI_SENSE_NOT_READY, ATAPI_ASC_NO_MEDIUM);
+    if (m_atapi_state.not_ready) return atapi_cmd_error(ATAPI_SENSE_NOT_READY, ATAPI_ASC_UNIT_BECOMING_READY);
 
     bool MSF = (cmd[1] & 0x02);
     uint8_t track = cmd[6];
@@ -544,6 +551,7 @@ bool IDECDROMDevice::atapi_read_toc(const uint8_t *cmd)
 bool IDECDROMDevice::atapi_read_header(const uint8_t *cmd)
 {
     if (!m_image) return atapi_cmd_error(ATAPI_SENSE_NOT_READY, ATAPI_ASC_NO_MEDIUM);
+    if (m_atapi_state.not_ready) return atapi_cmd_error(ATAPI_SENSE_NOT_READY, ATAPI_ASC_UNIT_BECOMING_READY);
 
     bool MSF = (cmd[1] & 0x02);
     uint32_t lba = 0; // IGNORED for now
@@ -578,6 +586,7 @@ bool IDECDROMDevice::atapi_read_header(const uint8_t *cmd)
 bool IDECDROMDevice::atapi_read_cd(const uint8_t *cmd)
 {
     if (!m_image) return atapi_cmd_error(ATAPI_SENSE_NOT_READY, ATAPI_ASC_NO_MEDIUM);
+    if (m_atapi_state.not_ready) return atapi_cmd_error(ATAPI_SENSE_NOT_READY, ATAPI_ASC_UNIT_BECOMING_READY);
 
     uint8_t sector_type = (cmd[1] >> 2) & 7;
     uint32_t lba = parse_be32(&cmd[2]);
@@ -591,6 +600,7 @@ bool IDECDROMDevice::atapi_read_cd(const uint8_t *cmd)
 bool IDECDROMDevice::atapi_read_cd_msf(const uint8_t *cmd)
 {
     if (!m_image) return atapi_cmd_error(ATAPI_SENSE_NOT_READY, ATAPI_ASC_NO_MEDIUM);
+    if (m_atapi_state.not_ready) return atapi_cmd_error(ATAPI_SENSE_NOT_READY, ATAPI_ASC_UNIT_BECOMING_READY);
 
     uint8_t sector_type = (cmd[1] >> 2) & 7;
     uint32_t start = MSF2LBA(cmd[3], cmd[4], cmd[5], false);
