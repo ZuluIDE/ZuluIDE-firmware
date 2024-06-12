@@ -147,7 +147,7 @@ bool IDEZipDrive::cmd_identify_packet_device(ide_registers_t *regs)
 
     idf[IDE_IDENTIFY_OFFSET_GENERAL_CONFIGURATION] = 0x80A0;
 
-    if (m_image == nullptr ||  m_image->get_drive_type() == drive_type_t::DRIVE_TYPE_ZIP100)
+   if (m_image == nullptr ||  m_image->get_drive_type() == drive_type_t::DRIVE_TYPE_ZIP100)
     {
         copy_id_string(&idf[IDE_IDENTIFY_OFFSET_SERIAL_NUMBER], 10, "");
         copy_id_string(&idf[IDE_IDENTIFY_OFFSET_FIRMWARE_REV], 4, "14.A");
@@ -159,8 +159,6 @@ bool IDEZipDrive::cmd_identify_packet_device(ide_registers_t *regs)
         idf[IDE_IDENTIFY_OFFSET_MODEINFO_PIO] = 0;
         idf[IDE_IDENTIFY_OFFSET_MULTIWORD_CYCLETIME_MIN] = 0;
         idf[IDE_IDENTIFY_OFFSET_MULTIWORD_CYCLETIME_REC] = 0;
-        idf[IDE_IDENTIFY_OFFSET_PIO_CYCLETIME_MIN] =    0x01f4;
-        idf[IDE_IDENTIFY_OFFSET_PIO_CYCLETIME_IORDY] =  0x01f4;
         idf[IDE_IDENTIFY_OFFSET_STANDARD_VERSION_MAJOR] = 0;
         idf[IDE_IDENTIFY_OFFSET_STANDARD_VERSION_MINOR] = 0;
         idf[IDE_IDENTIFY_OFFSET_MODEINFO_ULTRADMA] = 0; 
@@ -171,19 +169,45 @@ bool IDEZipDrive::cmd_identify_packet_device(ide_registers_t *regs)
         copy_id_string(&idf[IDE_IDENTIFY_OFFSET_SERIAL_NUMBER], 10, "80DB40BF14061510");
         copy_id_string(&idf[IDE_IDENTIFY_OFFSET_FIRMWARE_REV], 4, "41.S");
         copy_id_string(&idf[IDE_IDENTIFY_OFFSET_MODEL_NUMBER], 20, "IOMEGA  ZIP 250       ATAPI");
-        idf[IDE_IDENTIFY_OFFSET_CAPABILITIES_1] = 0x0F00;
+        // idf[IDE_IDENTIFY_OFFSET_CAPABILITIES_1] = 0x0F00;
         idf[IDE_IDENTIFY_OFFSET_PIO_MODE_ATA1] = 0x0200;
-        idf[IDE_IDENTIFY_OFFSET_MODE_INFO_VALID] = 0x0006;
+
+        // Supported PIO modes
+        if (m_phy_caps.supports_iordy) idf[IDE_IDENTIFY_OFFSET_CAPABILITIES_1] |= (1 << 11);
+        idf[IDE_IDENTIFY_OFFSET_PIO_MODE_ATA1] = (m_phy_caps.max_pio_mode << 8);
+        idf[IDE_IDENTIFY_OFFSET_MODE_INFO_VALID] |= 0x02; // PIO support word valid
+        idf[IDE_IDENTIFY_OFFSET_MODEINFO_PIO] = (m_phy_caps.max_pio_mode >= 3) ? 1 : 0; // PIO3 supported?
+        idf[IDE_IDENTIFY_OFFSET_PIO_CYCLETIME_MIN] = m_phy_caps.min_pio_cycletime_no_iordy; // Without IORDY
+        idf[IDE_IDENTIFY_OFFSET_PIO_CYCLETIME_IORDY] = m_phy_caps.min_pio_cycletime_with_iordy; // With IORDY
+
+        // Supported UDMA modes
+        idf[IDE_IDENTIFY_OFFSET_MODE_INFO_VALID] |= 0x04; // UDMA support word valid
+        if (m_phy_caps.max_udma_mode >= 0)
+        {
+            idf[IDE_IDENTIFY_OFFSET_CAPABILITIES_1] |= (1 << 8);
+            idf[IDE_IDENTIFY_OFFSET_MODEINFO_ULTRADMA] = 0x0001;
+            if (m_atapi_state.udma_mode == 0) idf[IDE_IDENTIFY_OFFSET_MODEINFO_ULTRADMA] |= (1 << 8);
+        }
+        // idf[IDE_IDENTIFY_OFFSET_MODE_INFO_VALID] = 0x0006;
         idf[IDE_IDENTIFY_OFFSET_MODEINFO_MULTIWORD] = 0;// 0x0203; // Zip250  
         idf[IDE_IDENTIFY_OFFSET_MODEINFO_PIO] = 0x0001;
-        idf[IDE_IDENTIFY_OFFSET_MULTIWORD_CYCLETIME_MIN] = 0x01f4; // 0x0096; // Zip250
-        idf[IDE_IDENTIFY_OFFSET_MULTIWORD_CYCLETIME_REC] = 0x01f4; // 0x0096; // Zip250
-        idf[IDE_IDENTIFY_OFFSET_PIO_CYCLETIME_MIN]   = 0x01f4;// 0x00B4; // Zip250
-        idf[IDE_IDENTIFY_OFFSET_PIO_CYCLETIME_IORDY] = 0x01f4;// 0x00B4; // Zip250
+        idf[IDE_IDENTIFY_OFFSET_MULTIWORD_CYCLETIME_MIN] = 0; // 0x0096; // Zip250
+        idf[IDE_IDENTIFY_OFFSET_MULTIWORD_CYCLETIME_REC] = 0; // 0x0096; // Zip250
         idf[IDE_IDENTIFY_OFFSET_STANDARD_VERSION_MAJOR] = 0x0030; // Version ATAPI-5 and 4
         idf[IDE_IDENTIFY_OFFSET_STANDARD_VERSION_MINOR] = 0x0015; // Minor version
-        idf[IDE_IDENTIFY_OFFSET_MODEINFO_ULTRADMA] =  0; // disabled UDMA mode (issue with linux) // 0x0001; // UDMA 0 mode max // 0x0007; // Zip250
+        // idf[IDE_IDENTIFY_OFFSET_MODEINFO_ULTRADMA] =  0; // disabled UDMA mode (issue with linux) // 0x0001; // UDMA 0 mode max // 0x0007; // Zip250
         idf[IDE_IDENTIFY_OFFSET_REMOVABLE_MEDIA_SUPPORT] = 0x0001; // PACKET, Removable device command sets supported
+
+        // Calculate checksum
+        // See 8.15.61 Word 255: Integrity word
+        uint8_t checksum = 0xA5;
+        for (int i = 0; i < 255; i++)
+        {
+            checksum += (idf[i] & 0xFF) + (idf[i] >> 8);
+        }
+        checksum = -checksum;
+        idf[IDE_IDENTIFY_OFFSET_INTEGRITY_WORD] = ((uint16_t)checksum << 8) | 0xA5;
+
     }
     else
     {
@@ -213,8 +237,6 @@ bool IDEZipDrive::cmd_identify_packet_device(ide_registers_t *regs)
     idf[145] = 0x2F34;
     idf[146] = 0x3030;
 
-    regs->error = 0;
-    ide_phy_set_regs(regs);
     ide_phy_start_write(sizeof(idf));
     ide_phy_write_block((uint8_t*)idf, sizeof(idf));
 
@@ -228,7 +250,9 @@ bool IDEZipDrive::cmd_identify_packet_device(ide_registers_t *regs)
             return false;
         }
     }
-    
+
+    regs->error = 0;
+    ide_phy_set_regs(regs);
     ide_phy_assert_irq(IDE_STATUS_DEVRDY);
 
     return true;
