@@ -79,16 +79,12 @@ bool IDEZipDrive::cmd_set_features(ide_registers_t *regs)
 {
     uint8_t feature = regs->feature;
     regs->error = 0;
-    bool has_feature = false;
+
     if (feature == IDE_SET_FEATURE_DISABLE_STATUS_NOTIFICATION)
     {
         dbgmsg("-- Disable status notification");
         m_media_status_notification = false;
-        has_feature = true;
-    }
 
-    if (has_feature)
-    {
         if (regs->error == 0)
         {
             ide_phy_assert_irq(IDE_STATUS_DEVRDY);
@@ -178,15 +174,15 @@ bool IDEZipDrive::cmd_identify_packet_device(ide_registers_t *regs)
         idf[IDE_IDENTIFY_OFFSET_CAPABILITIES_1] = 0x0F00;
         idf[IDE_IDENTIFY_OFFSET_PIO_MODE_ATA1] = 0x0200;
         idf[IDE_IDENTIFY_OFFSET_MODE_INFO_VALID] = 0x0006;
-        idf[IDE_IDENTIFY_OFFSET_MODEINFO_MULTIWORD] = 0x0203;  
+        idf[IDE_IDENTIFY_OFFSET_MODEINFO_MULTIWORD] = 0;// 0x0203; // Zip250  
         idf[IDE_IDENTIFY_OFFSET_MODEINFO_PIO] = 0x0001;
-        idf[IDE_IDENTIFY_OFFSET_MULTIWORD_CYCLETIME_MIN] = 0x0096;
-        idf[IDE_IDENTIFY_OFFSET_MULTIWORD_CYCLETIME_REC] = 0x0096;
-        idf[IDE_IDENTIFY_OFFSET_PIO_CYCLETIME_MIN] =  0x00B4;
-        idf[IDE_IDENTIFY_OFFSET_PIO_CYCLETIME_IORDY] =  0x00B4;
+        idf[IDE_IDENTIFY_OFFSET_MULTIWORD_CYCLETIME_MIN] = 0x01f4; // 0x0096; // Zip250
+        idf[IDE_IDENTIFY_OFFSET_MULTIWORD_CYCLETIME_REC] = 0x01f4; // 0x0096; // Zip250
+        idf[IDE_IDENTIFY_OFFSET_PIO_CYCLETIME_MIN]   = 0x01f4;// 0x00B4; // Zip250
+        idf[IDE_IDENTIFY_OFFSET_PIO_CYCLETIME_IORDY] = 0x01f4;// 0x00B4; // Zip250
         idf[IDE_IDENTIFY_OFFSET_STANDARD_VERSION_MAJOR] = 0x0030; // Version ATAPI-5 and 4
         idf[IDE_IDENTIFY_OFFSET_STANDARD_VERSION_MINOR] = 0x0015; // Minor version
-        idf[IDE_IDENTIFY_OFFSET_MODEINFO_ULTRADMA] =  0x0001; // UDMA 0 mode max // 0x0007; // Zip250
+        idf[IDE_IDENTIFY_OFFSET_MODEINFO_ULTRADMA] =  0; // disabled UDMA mode (issue with linux) // 0x0001; // UDMA 0 mode max // 0x0007; // Zip250
         idf[IDE_IDENTIFY_OFFSET_REMOVABLE_MEDIA_SUPPORT] = 0x0001; // PACKET, Removable device command sets supported
     }
     else
@@ -597,7 +593,7 @@ bool IDEZipDrive::atapi_zip_disk_serial(const uint8_t *cmd)
         }
         else if (m_image && m_image->get_drive_type() == drive_type_t::DRIVE_TYPE_ZIP250)
         {
-            // 100MB disk
+            // 250MB disk
             buf[0] = 0x02;
             buf[1] = 0x3E;
             buf[2] = 0x00;

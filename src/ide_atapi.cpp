@@ -117,7 +117,14 @@ bool IDEATAPIDevice::cmd_set_features(ide_registers_t *regs)
         if (mode_major == 0)
         {
             m_atapi_state.udma_mode = -1;
-            logmsg("-- Set PIO default transfer mode");
+            if (mode_minor == 1)
+            {
+                logmsg("-- Set PIO default transfer mode, IORDY disabled (not yet implemented)");
+            }
+            else
+            {
+                logmsg("-- Set PIO default transfer mode");
+            }
         }
         else if (mode_major == 1 && mode_minor <= m_phy_caps.max_pio_mode)
         {
