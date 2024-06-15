@@ -48,8 +48,9 @@ void IDEATAPIDevice::initialize(int devidx)
 void IDEATAPIDevice::set_image(IDEImage *image)
 {
     m_image = image;
-    m_atapi_state.unit_attention = true;
-    m_atapi_state.sense_asc = ATAPI_ASC_MEDIUM_CHANGE;
+    // \todo disabling for now, may add back as zuluide.ini settings
+    // m_atapi_state.unit_attention = true;
+    // m_atapi_state.sense_asc = ATAPI_ASC_MEDIUM_CHANGE;
 }
 
 void IDEATAPIDevice::poll()
@@ -757,6 +758,11 @@ bool IDEATAPIDevice::atapi_test_unit_ready(const uint8_t *cmd)
         }
         return atapi_cmd_error(ATAPI_SENSE_NOT_READY, ATAPI_ASC_NO_MEDIUM);
     }
+    if (m_atapi_state.not_ready)
+    {
+        m_atapi_state.not_ready = false;
+        return atapi_cmd_error(ATAPI_SENSE_NOT_READY, ATAPI_ASC_UNIT_BECOMING_READY);
+    }
     return atapi_cmd_ok();
 }
 
@@ -766,10 +772,8 @@ bool IDEATAPIDevice::atapi_start_stop_unit(const uint8_t *cmd)
     if ((ATAPI_START_STOP_PWR_CON_MASK & cmd_eject) == 0 && 
         (ATAPI_START_STOP_LOEJ & cmd_eject) != 0)
     {
-        m_atapi_state.unit_attention = true;
-        
         // Eject condition
-        if ((ATAPI_START_STOP_START & cmd_eject) == 0 && m_removable.ejected == false)
+        if ((ATAPI_START_STOP_START & cmd_eject) == 0)
         {
             logmsg("Device ejecting media");
             if (m_image)
@@ -1042,6 +1046,8 @@ bool IDEATAPIDevice::atapi_get_event_status_notification(const uint8_t *cmd)
 
 bool IDEATAPIDevice::atapi_read_capacity(const uint8_t *cmd)
 {
+    if (m_atapi_state.not_ready) return atapi_cmd_error(ATAPI_SENSE_NOT_READY, ATAPI_ASC_UNIT_BECOMING_READY);
+
     uint32_t last_lba = this->capacity_lba() - 1;
     uint8_t *buf = m_buffer.bytes;
     write_be32(&buf[0], last_lba);
@@ -1076,10 +1082,8 @@ bool IDEATAPIDevice::atapi_read(const uint8_t *cmd)
         assert(false);
     }
 
-    if (!m_image)
-    {
-        return atapi_cmd_error(ATAPI_SENSE_NOT_READY, ATAPI_ASC_NO_MEDIUM);
-    }
+    if (!m_image) return atapi_cmd_error(ATAPI_SENSE_NOT_READY, ATAPI_ASC_NO_MEDIUM);
+    if (m_atapi_state.not_ready) return atapi_cmd_error(ATAPI_SENSE_NOT_READY, ATAPI_ASC_UNIT_BECOMING_READY);
 
     if (lba + transfer_len > capacity_lba())
     {
@@ -1128,7 +1132,8 @@ bool IDEATAPIDevice::atapi_write(const uint8_t *cmd)
     {
         return atapi_cmd_error(ATAPI_SENSE_NOT_READY, ATAPI_ASC_NO_MEDIUM);
     }
-
+    else if (m_atapi_state.not_ready) return atapi_cmd_error(ATAPI_SENSE_NOT_READY, ATAPI_ASC_UNIT_BECOMING_READY);
+    
     uint32_t lba, transfer_len;
     if (cmd[0] == ATAPI_CMD_WRITE6)
     {
@@ -1245,5 +1250,6 @@ void IDEATAPIDevice::insert_media()
             dbgmsg("-- Device loading media");
             m_devinfo.media_status_events = ATAPI_MEDIA_EVENT_NEW;
             m_removable.ejected = false;
+            m_atapi_state.not_ready = true;
     }
 }
