@@ -45,9 +45,9 @@ public:
 
     virtual bool is_packet_device() { return true; }
 
-    virtual bool is_ready() override;
+    virtual bool is_medium_present() override;
 
-    virtual bool is_medium_present() { return m_image != nullptr; }
+    virtual bool has_image() { return m_image != nullptr; }
 
     virtual uint64_t capacity() { return (m_image ? m_image->capacity() : 0); }
     
@@ -64,6 +64,8 @@ public:
     virtual bool set_device_signature(uint8_t error, bool was_reset) override;
 
     virtual void fill_device_signature(ide_registers_t *regs) override;
+
+    virtual void reset() override;
 
 protected:
     IDEImage *m_image;
@@ -119,6 +121,8 @@ protected:
         bool ejected;
         bool reinsert_media_on_inquiry;
         bool reinsert_media_after_eject;
+        bool prevent_removable;
+        bool prevent_persistent;
     } m_removable;
 
     // Buffer used for responses, ide_phy code benefits from this being aligned to 32 bits

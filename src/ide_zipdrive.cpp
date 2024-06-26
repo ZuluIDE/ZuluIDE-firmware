@@ -505,7 +505,7 @@ bool IDEZipDrive::atapi_zip_disk_serial(const uint8_t *cmd)
     const uint8_t count = 64;
     uint8_t *buf = m_buffer.bytes;
     memset(buf, 0x00, count);
-    if (!is_medium_present() || m_image == nullptr)
+    if (!has_image() || m_image == nullptr)
     {
         // no disk
         buf[0] = 0x02;

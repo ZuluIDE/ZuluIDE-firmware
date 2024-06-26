@@ -40,9 +40,14 @@ static const char *get_atapi_command_name(uint8_t cmd)
 void IDEATAPIDevice::initialize(int devidx)
 {
     memset(&m_devinfo, 0, sizeof(m_devinfo));
-    memset(&m_atapi_state, 0, sizeof(m_atapi_state));
     memset(&m_removable, 0, sizeof(m_removable));
+    memset(&m_atapi_state, 0, sizeof(m_atapi_state));
     IDEDevice::initialize(devidx);
+}
+
+void IDEATAPIDevice::reset()
+{
+    memset(&m_removable, 0, sizeof(m_removable));
 }
 
 void IDEATAPIDevice::set_image(IDEImage *image)
@@ -752,7 +757,7 @@ bool IDEATAPIDevice::atapi_cmd_ok()
 
 bool IDEATAPIDevice::atapi_test_unit_ready(const uint8_t *cmd)
 {
-    if (!is_medium_present())
+    if (!has_image())
     {
         return atapi_cmd_error(ATAPI_SENSE_NOT_READY, ATAPI_ASC_NO_MEDIUM);
     }
@@ -780,9 +785,19 @@ bool IDEATAPIDevice::atapi_start_stop_unit(const uint8_t *cmd)
     if ((ATAPI_START_STOP_PWR_CON_MASK & cmd_eject) == 0 && 
         (ATAPI_START_STOP_LOEJ & cmd_eject) != 0)
     {
+        
         // Eject condition
         if ((ATAPI_START_STOP_START & cmd_eject) == 0)
         {
+            // \todo implement prevent media removal - this version creates a weird state in Linux
+            // if (m_removable.prevent_removable)
+            // {
+            //     if (is_medium_present())
+            //         return atapi_cmd_error(ATAPI_SENSE_ILLEGAL_REQ, ATAPI_ASC_MEDIUM_REMOVAL_PREVENTED);
+            //     else
+            //         return atapi_cmd_error(ATAPI_SENSE_NOT_READY, ATAPI_ASC_MEDIUM_REMOVAL_PREVENTED);
+            // }
+            // else
             eject_media();
         }
         // Load condition
@@ -798,11 +813,11 @@ bool IDEATAPIDevice::atapi_start_stop_unit(const uint8_t *cmd)
 
 bool IDEATAPIDevice::atapi_prevent_allow_removal(const uint8_t *cmd)
 {
-    bool prevent = cmd[4] & 1;
-    bool persistent = cmd[4] & 2;
+    m_removable.prevent_removable = cmd[4] & 1;
+    m_removable.prevent_persistent = cmd[4] & 2;
 
     // We can't actually prevent SD card from being removed
-    dbgmsg("-- Host requested prevent=", (int)prevent, " persistent=", (int)persistent);
+    dbgmsg("-- Host requested prevent=", (int)m_removable.prevent_removable, " persistent=", (int)m_removable.prevent_persistent);
     return atapi_cmd_ok();
 }
 
@@ -993,7 +1008,7 @@ bool IDEATAPIDevice::atapi_get_configuration(const uint8_t *cmd)
     write_be32(resp, resp_bytes - 4);
     resp[4] = 0;
     resp[5] = 0;
-    if (is_ready())
+    if (is_medium_present())
         write_be16(&resp[6], m_devinfo.current_profile);
     else
         write_be16(&resp[6], 0);
@@ -1046,7 +1061,7 @@ bool IDEATAPIDevice::atapi_get_event_status_notification(const uint8_t *cmd)
 
 bool IDEATAPIDevice::atapi_read_capacity(const uint8_t *cmd)
 {
-    if (!is_ready()) 
+    if (!is_medium_present()) 
         return atapi_cmd_not_ready_error();
 
     if (m_atapi_state.not_ready) return atapi_cmd_error(ATAPI_SENSE_NOT_READY, ATAPI_ASC_UNIT_BECOMING_READY);
@@ -1085,7 +1100,7 @@ bool IDEATAPIDevice::atapi_read(const uint8_t *cmd)
         assert(false);
     }
 
-    if (!is_ready()) return atapi_cmd_not_ready_error();
+    if (!is_medium_present()) return atapi_cmd_not_ready_error();
     if (m_atapi_state.not_ready) return atapi_cmd_error(ATAPI_SENSE_NOT_READY, ATAPI_ASC_UNIT_BECOMING_READY);
 
     if (lba + transfer_len > capacity_lba())
@@ -1131,7 +1146,7 @@ bool IDEATAPIDevice::atapi_write(const uint8_t *cmd)
     {
         return atapi_cmd_error(ATAPI_SENSE_ABORTED_CMD, ATAPI_ASC_WRITE_PROTECTED);
     }
-    else if (!is_ready())
+    else if (!is_medium_present())
     {
         return atapi_cmd_not_ready_error();
     }
@@ -1223,7 +1238,7 @@ size_t IDEATAPIDevice::atapi_get_configuration(uint16_t feature, uint8_t *buffer
         for (int i = 0; i < m_devinfo.num_profiles; i++)
         {
             write_be16(&buffer[4 + i * 4], m_devinfo.profiles[i]);
-            buffer[2] = is_ready() ? 1 : 0;
+            buffer[2] = is_medium_present() ? 1 : 0;
             buffer[3] = 0;
         }
 
@@ -1246,19 +1261,9 @@ size_t IDEATAPIDevice::atapi_get_configuration(uint16_t feature, uint8_t *buffer
     return 0;
 }
 
-bool IDEATAPIDevice::is_ready()
+bool IDEATAPIDevice::is_medium_present()
 {
-    if (is_medium_present())
-    {
-        if (m_devinfo.removable)
-        {
-            if (!m_removable.ejected)
-                return true;
-        }
-        else
-            return true;
-    }
-    return false;
+    return has_image() && (!m_devinfo.removable || (m_devinfo.removable && !m_removable.ejected));
 }
 
 void IDEATAPIDevice::eject_button_poll(bool immediate)
@@ -1284,6 +1289,7 @@ void IDEATAPIDevice::eject_button_poll(bool immediate)
         if (ejectors)
         {
             //m_atapi_state.unit_attention = true;
+            dbgmsg("Ejection button pressed");
             if (m_removable.ejected)
                 insert_media();
             else

@@ -36,6 +36,8 @@ class IDERigidDevice: public IDEDevice, public IDEImage::Callback
 public:
     virtual void initialize(int devidx) override;
 
+    virtual void reset() override;
+
     virtual void set_image(IDEImage *image);
 
     virtual bool handle_command(ide_registers_t *regs);
@@ -44,9 +46,9 @@ public:
 
     virtual bool is_packet_device() { return false; }
 
-    virtual bool is_ready() {return is_medium_present();}
+    virtual bool is_medium_present() {return has_image();}
 
-    virtual bool is_medium_present() { return m_image != nullptr; }
+    virtual bool has_image() { return m_image != nullptr; }
 
     virtual uint64_t capacity() { return (m_image ? m_image->capacity() : 0); }
 

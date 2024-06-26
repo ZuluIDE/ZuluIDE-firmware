@@ -32,10 +32,14 @@ class IDECDROMDevice: public IDEATAPIDevice
 public:
     virtual void initialize(int devidx) override;
 
+    virtual void reset() override;
+
     virtual void set_image(IDEImage *image);
 
     virtual uint64_t capacity_lba() override;
     
+    virtual void eject_media() override;
+
     virtual void button_eject_media() override;
 
     virtual void insert_media() override;
@@ -43,7 +47,7 @@ public:
     // esn - event status notification
     enum class esn_event_t 
     {
-        OCNoChange,
+        NoChange,
         MEjectRequest,
         MMediaRemoval,
         MNewMedia
@@ -113,12 +117,15 @@ protected:
     // ATAPI mode pages
     virtual size_t atapi_get_mode_page(uint8_t page_ctrl, uint8_t page_idx, uint8_t *buffer, size_t max_bytes) override;
 
+    
     // Event status notification handling
     struct 
     {
         esn_event_t event;
-        bool changed;
-        bool change_sent;
         esn_class_request_t request;
+        esn_event_t current_event;
     } m_esn;
+
+    // Event Status Notification statemachine
+    void esn_next_event();
 };

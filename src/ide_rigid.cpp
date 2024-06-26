@@ -50,6 +50,11 @@ void IDERigidDevice::initialize(int devidx)
     IDEDevice::initialize(devidx);
 }
 
+void IDERigidDevice::reset()
+{
+    memset(&m_removable, 0, sizeof(m_removable));
+}
+
 void IDERigidDevice::set_image(IDEImage *image)
 {
     m_image = image;

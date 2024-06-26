@@ -284,13 +284,16 @@ void IDECDROMDevice::initialize(int devidx)
     m_devinfo.profiles[0] = ATAPI_PROFILE_CDROM;
     m_devinfo.current_profile = ATAPI_PROFILE_CDROM;
 
-    m_esn.changed = false;
-    m_esn.change_sent = false;
-    m_esn.event = esn_event_t::OCNoChange;
-    m_esn.request = esn_class_request_t::OperationChange;
-
     m_removable.reinsert_media_after_eject = ini_getbool("IDE", "reinsert_media_after_eject", true, CONFIGFILE);
     m_removable.reinsert_media_on_inquiry = ini_getbool("IDE", "reinsert_media_on_inquiry", true, CONFIGFILE);
+
+    set_esn_event(esn_event_t::NoChange);
+}
+
+void IDECDROMDevice::reset() 
+{
+    IDEATAPIDevice::reset();
+    set_esn_event(esn_event_t::NoChange);
 }
 
 void IDECDROMDevice::set_image(IDEImage *image)
@@ -393,7 +396,7 @@ bool IDECDROMDevice::atapi_set_cd_speed(const uint8_t *cmd)
 
 bool IDECDROMDevice::atapi_read_disc_information(const uint8_t *cmd)
 {
-    if (!is_ready()) return atapi_cmd_error(ATAPI_SENSE_NOT_READY, ATAPI_ASC_NO_MEDIUM);
+    if (!is_medium_present()) return atapi_cmd_error(ATAPI_SENSE_NOT_READY, ATAPI_ASC_NO_MEDIUM);
     if (m_atapi_state.not_ready) return atapi_cmd_error(ATAPI_SENSE_NOT_READY, ATAPI_ASC_UNIT_BECOMING_READY);
 
     uint16_t allocationLength = parse_be16(&cmd[7]);
@@ -421,7 +424,7 @@ bool IDECDROMDevice::atapi_read_disc_information(const uint8_t *cmd)
 
 bool IDECDROMDevice::atapi_read_track_information(const uint8_t *cmd)
 {
-    if (!is_ready()) return atapi_cmd_not_ready_error();
+    if (!is_medium_present()) return atapi_cmd_not_ready_error();
     if (m_atapi_state.not_ready) return atapi_cmd_error(ATAPI_SENSE_NOT_READY, ATAPI_ASC_UNIT_BECOMING_READY);
 
     bool track = (cmd[1] & 0x01);
@@ -496,7 +499,7 @@ bool IDECDROMDevice::atapi_read_track_information(const uint8_t *cmd)
 
 bool IDECDROMDevice::atapi_read_sub_channel(const uint8_t * cmd)
 {
-    if (!is_ready()) return atapi_cmd_not_ready_error();
+    if (!is_medium_present()) return atapi_cmd_not_ready_error();
     if (m_atapi_state.not_ready) return atapi_cmd_error(ATAPI_SENSE_NOT_READY, ATAPI_ASC_UNIT_BECOMING_READY);
 
     bool time = (cmd[1] & 0x02);
@@ -510,7 +513,7 @@ bool IDECDROMDevice::atapi_read_sub_channel(const uint8_t * cmd)
 
 bool IDECDROMDevice::atapi_read_toc(const uint8_t *cmd)
 {
-    if (!is_ready()) return atapi_cmd_not_ready_error();
+    if (!is_medium_present()) return atapi_cmd_not_ready_error();
     if (m_atapi_state.not_ready) return atapi_cmd_error(ATAPI_SENSE_NOT_READY, ATAPI_ASC_UNIT_BECOMING_READY);
 
     bool MSF = (cmd[1] & 0x02);
@@ -556,7 +559,7 @@ bool IDECDROMDevice::atapi_read_toc(const uint8_t *cmd)
 // Given 2048-byte block sizes this effectively is 1:1 with the provided LBA.
 bool IDECDROMDevice::atapi_read_header(const uint8_t *cmd)
 {
-    if (!is_ready()) return atapi_cmd_not_ready_error();
+    if (!is_medium_present()) return atapi_cmd_not_ready_error();
     if (m_atapi_state.not_ready) return atapi_cmd_error(ATAPI_SENSE_NOT_READY, ATAPI_ASC_UNIT_BECOMING_READY);
 
     bool MSF = (cmd[1] & 0x02);
@@ -591,7 +594,7 @@ bool IDECDROMDevice::atapi_read_header(const uint8_t *cmd)
 
 bool IDECDROMDevice::atapi_read_cd(const uint8_t *cmd)
 {
-    if (!is_ready()) return atapi_cmd_not_ready_error();
+    if (!is_medium_present()) return atapi_cmd_not_ready_error();
     if (m_atapi_state.not_ready) return atapi_cmd_error(ATAPI_SENSE_NOT_READY, ATAPI_ASC_UNIT_BECOMING_READY);
 
     uint8_t sector_type = (cmd[1] >> 2) & 7;
@@ -605,7 +608,7 @@ bool IDECDROMDevice::atapi_read_cd(const uint8_t *cmd)
 
 bool IDECDROMDevice::atapi_read_cd_msf(const uint8_t *cmd)
 {
-    if (!is_ready()) return atapi_cmd_not_ready_error();
+    if (!is_medium_present()) return atapi_cmd_not_ready_error();
     if (m_atapi_state.not_ready) return atapi_cmd_error(ATAPI_SENSE_NOT_READY, ATAPI_ASC_UNIT_BECOMING_READY);
 
     uint8_t sector_type = (cmd[1] >> 2) & 7;
@@ -625,7 +628,7 @@ bool IDECDROMDevice::atapi_get_event_status_notification(const uint8_t *cmd)
         return atapi_cmd_error(ATAPI_SENSE_ILLEGAL_REQ, ATAPI_ASC_INVALID_FIELD);
     }
     // Operation change class request
-    else if ((cmd[4] & 0x02) && (m_esn.changed && !m_esn.change_sent))
+    else if ((cmd[4] & 0x02) && (m_esn.event != esn_event_t::NoChange && m_esn.current_event == esn_event_t::NoChange))
     {
         buf[0] = 0;
         buf[1] = 6; // EventDataLength
@@ -635,30 +638,55 @@ bool IDECDROMDevice::atapi_get_event_status_notification(const uint8_t *cmd)
         buf[5] = 0x00; // Power status
         buf[6] = 0x00; // Start slot
         buf[7] = 0x01; // End slot 
-        m_esn.change_sent = true;
+        esn_next_event();
     }
     // Media class request
-    else if ((cmd[4] & 0x10) && (m_esn.changed && m_esn.change_sent) || cmd[4] == 0x10)
+    else if (cmd[4] & 0x10)
     {
-        if (m_esn.request == IDECDROMDevice::esn_class_request_t::Media)
+        if (m_esn.request == IDECDROMDevice::esn_class_request_t::Media && 
+            (   
+                m_esn.event == esn_event_t::MNewMedia
+                || m_esn.event == esn_event_t::MEjectRequest
+                || m_esn.event == esn_event_t::MMediaRemoval
+            ))
         {
-            // Report media status events
-            buf[0] = 0;
-            buf[1] = 6; // EventDataLength
-            buf[2] = m_esn.request; // Media status events
-            buf[3] = 0x12; // Supported events
-            if (m_esn.event == esn_event_t::MEjectRequest) 
-                buf[4] = 0x01; // Eject Request
-            else if (m_esn.event == esn_event_t::MNewMedia)
-                buf[4] = 0x02; // New Media
-            else
-                return atapi_cmd_error(ATAPI_SENSE_ILLEGAL_REQ, ATAPI_ASC_INVALID_CMD);
-            buf[5] = 0x02; // Media Present
-            buf[6] = 0; // Start slot
-            buf[7] = 0; // End slot
-            m_esn.changed = false;
-            m_esn.change_sent = false;
-            m_esn.request = esn_class_request_t::OperationChange;
+            // If the Event Status Notification was Operational Change request
+            // was never issued, proceed to the next event
+            if (m_esn.current_event == esn_event_t::NoChange)
+                esn_next_event();
+
+            if (m_esn.current_event == esn_event_t::MNewMedia || m_esn.current_event == esn_event_t::MEjectRequest)
+            {
+                // Report media status events
+                buf[0] = 0;
+                buf[1] = 6; // EventDataLength
+                buf[2] = m_esn.request; // Media status events
+                buf[3] = 0x12; // Supported events
+                if (m_esn.current_event == esn_event_t::MEjectRequest) 
+                    buf[4] = 0x01; // Eject Request
+                else if (m_esn.current_event == esn_event_t::MNewMedia)
+                    buf[4] = 0x02; // New Media
+                else
+                    return atapi_cmd_error(ATAPI_SENSE_ILLEGAL_REQ, ATAPI_ASC_INVALID_CMD);
+                buf[5] = 0x02; // Media Present
+                buf[6] = 0; // Start slot
+                buf[7] = 0; // End slot
+                esn_next_event();
+            }
+            else if (m_esn.current_event == esn_event_t::MMediaRemoval)
+            {
+                // Report media status event Media Removal
+                buf[0] = 0;
+                buf[1] = 6; // EventDataLength
+                buf[2] = m_esn.request; // Media status events
+                buf[3] = 0x12; // Supported events
+                buf[4] = 0x03; // Media Removal
+                buf[5] = 0x02; // Media Present
+                buf[6] = 0; // Start slot
+                buf[7] = 0; // End slot
+                esn_next_event();
+                eject_media();
+            }
         }
         // output media no change
         else 
@@ -675,6 +703,7 @@ bool IDECDROMDevice::atapi_get_event_status_notification(const uint8_t *cmd)
                 buf[5] = 0x02; // Media Present
             buf[6] = 0; // Start slot
             buf[7] = 0; // End slot
+            set_esn_event(esn_event_t::NoChange);
         }
     }
     else
@@ -687,10 +716,10 @@ bool IDECDROMDevice::atapi_get_event_status_notification(const uint8_t *cmd)
         buf[4] = 0x00; // No change to operational state
         buf[5] = 0x00; // Logical unit ready for operation
         buf[6] = 0x00; // Start slot
-        buf[7] = 0x00; // End slot 
+        buf[7] = 0x00; // End slot
+        set_esn_event(esn_event_t::NoChange);
     }
 
-    dbgmsg("CDROM esn out:", bytearray((const uint8_t*)buf, 8));
     if (!atapi_send_data(m_buffer.bytes, 8))
     {
         return atapi_cmd_error(ATAPI_SENSE_ABORTED_CMD, 0);
@@ -1268,9 +1297,19 @@ uint64_t IDECDROMDevice::capacity_lba()
     return (uint64_t)getLeadOutLBA(&last);
 }
 
+
+void IDECDROMDevice::eject_media()
+{
+    logmsg("Device ejecting media");
+    set_esn_event(esn_event_t::NoChange);
+    m_removable.ejected = true;
+}
+
 void IDECDROMDevice::button_eject_media()
 {
-    set_esn_event(esn_event_t::MEjectRequest);
+    // \todo implement prevent removable. Linux stops ejecting and inserting with this version
+    // if (!m_removable.prevent_removable)
+    set_esn_event(esn_event_t::MMediaRemoval);
 }
 
 void IDECDROMDevice::insert_media()
@@ -1290,13 +1329,48 @@ void IDECDROMDevice::insert_media()
 
 void IDECDROMDevice::set_esn_event(esn_event_t event)
 {
-    if (event == esn_event_t::MEjectRequest || event == esn_event_t::MNewMedia)
+    if (event == esn_event_t::MEjectRequest || event == esn_event_t::MNewMedia || event == esn_event_t::MMediaRemoval)
     {
         m_esn.event = event;
         m_esn.request = esn_class_request_t::Media;
-        m_esn.change_sent = false;
-        m_esn.changed = true;
+        m_esn.current_event = esn_event_t::NoChange;
     }
+    else
+    {
+        m_esn.event == esn_event_t::NoChange;
+        m_esn.request = esn_class_request_t::OperationChange;
+        m_esn.current_event = esn_event_t::NoChange;
+    }
+}
+
+void IDECDROMDevice::esn_next_event()
+{
+    switch (m_esn.event)
+    {
+        case esn_event_t::MNewMedia :
+        case esn_event_t::MEjectRequest :
+            if (m_esn.current_event == esn_event_t::NoChange)
+            {
+                m_esn.current_event = m_esn.event;
+                return;
+            }
+            break;
+        case esn_event_t::MMediaRemoval :
+            if (m_esn.current_event == esn_event_t::NoChange)
+            {
+                m_esn.current_event = esn_event_t::MEjectRequest;
+                return;
+            }
+            if (m_esn.current_event == esn_event_t::MEjectRequest)
+            {
+                m_esn.current_event =  m_esn.event;
+                return;
+            }
+            break;
+        default:
+            break;
+    }
+    set_esn_event(esn_event_t::NoChange);
 }
 
 uint32_t IDECDROMDevice::getLeadOutLBA(const CUETrackInfo* lasttrack)
