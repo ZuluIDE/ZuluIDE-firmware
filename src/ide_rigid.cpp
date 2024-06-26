@@ -58,12 +58,6 @@ void IDERigidDevice::set_image(IDEImage *image)
     // m_atapi_state.sense_asc = ATAPI_ASC_MEDIUM_CHANGE;
 }
 
-void IDERigidDevice::poll()
-{
-
-}
-
-
 bool IDERigidDevice::handle_command(ide_registers_t *regs)
 {
 

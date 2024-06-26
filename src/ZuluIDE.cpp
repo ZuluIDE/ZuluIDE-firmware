@@ -427,6 +427,8 @@ static void zuluide_setup_sd_card()
             {
                 platform_disable_led();
             }
+            uint8_t eject_button = ini_getl("IDE", "eject_button", 0, CONFIGFILE);
+            platform_init_eject_button(eject_button);
         }
     }
 }
@@ -478,10 +480,11 @@ void zuluide_main_loop(void)
         sd_card_check_time = millis() + 1000;
         first_loop = false;
     }
-
     platform_reset_watchdog();
     platform_poll();
+    g_ide_device->eject_button_poll(true);
     blink_poll();
+    
     g_StatusController.ProcessUpdates();
 
     save_logfile();

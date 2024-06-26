@@ -26,6 +26,7 @@
 #include "ide_atapi.h"
 #include <CUEParser.h>
 
+// Event Status Notification handling
 class IDECDROMDevice: public IDEATAPIDevice
 {
 public:
@@ -34,6 +35,29 @@ public:
     virtual void set_image(IDEImage *image);
 
     virtual uint64_t capacity_lba() override;
+    
+    virtual void button_eject_media() override;
+
+    virtual void insert_media() override;
+    
+    // esn - event status notification
+    enum class esn_event_t 
+    {
+        OCNoChange,
+        MEjectRequest,
+        MMediaRemoval,
+        MNewMedia
+    };
+
+    enum esn_class_request_t 
+    {
+        OperationChange = 1,
+        PowerManagement,
+        ExternalRequest,
+        Media,
+    };
+
+    virtual void set_esn_event(esn_event_t event);
 
 protected:
     
@@ -46,6 +70,7 @@ protected:
     virtual bool atapi_read_header(const uint8_t *cmd);
     virtual bool atapi_read_cd(const uint8_t *cmd);
     virtual bool atapi_read_cd_msf(const uint8_t *cmd);
+    virtual bool atapi_get_event_status_notification(const uint8_t *cmd) override;
 
     bool doReadTOC(bool MSF, uint8_t track, uint16_t allocationLength);
     bool doReadSessionInfo(bool MSF, uint16_t allocationLength);
@@ -54,7 +79,6 @@ protected:
 
 
     void cdromGetAudioPlaybackStatus(uint8_t *status, uint32_t *current_lba, bool current_only);
-
 
     // Read handling, possible conversion of sector formats
     struct {
@@ -88,4 +112,13 @@ protected:
 
     // ATAPI mode pages
     virtual size_t atapi_get_mode_page(uint8_t page_ctrl, uint8_t page_idx, uint8_t *buffer, size_t max_bytes) override;
+
+    // Event status notification handling
+    struct 
+    {
+        esn_event_t event;
+        bool changed;
+        bool change_sent;
+        esn_class_request_t request;
+    } m_esn;
 };

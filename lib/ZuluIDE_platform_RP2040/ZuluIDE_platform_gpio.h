@@ -81,3 +81,8 @@
 
 // Status LED
 #define STATUS_LED 17
+
+
+// GPIO Eject buttons
+#define GPIO_EJECT_BTN_1_PIN 11
+#define GPIO_EJECT_BTN_2_PIN 14

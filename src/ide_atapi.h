@@ -39,19 +39,25 @@ public:
 
     virtual void set_image(IDEImage *image);
 
-    virtual void poll();
-
     virtual bool handle_command(ide_registers_t *regs);
 
     virtual void handle_event(ide_event_t event);
 
     virtual bool is_packet_device() { return true; }
 
+    virtual bool is_ready() override;
+
     virtual bool is_medium_present() { return m_image != nullptr; }
 
     virtual uint64_t capacity() { return (m_image ? m_image->capacity() : 0); }
     
     virtual uint64_t capacity_lba() { return capacity() / m_devinfo.bytes_per_sector; }
+
+    virtual void eject_button_poll(bool immediate);
+
+    virtual void button_eject_media();
+
+    virtual void eject_media();
 
     virtual void insert_media();
 
@@ -155,6 +161,7 @@ protected:
 
     // Report error or successful completion of ATAPI command
     bool atapi_cmd_error(uint8_t sense_key, uint16_t sense_asc);
+    bool atapi_cmd_not_ready_error();
     bool atapi_cmd_ok();
 
     // ATAPI command handlers

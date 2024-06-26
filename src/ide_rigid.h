@@ -38,13 +38,13 @@ public:
 
     virtual void set_image(IDEImage *image);
 
-    virtual void poll();
-
     virtual bool handle_command(ide_registers_t *regs);
 
     virtual void handle_event(ide_event_t event);
 
     virtual bool is_packet_device() { return false; }
+
+    virtual bool is_ready() {return is_medium_present();}
 
     virtual bool is_medium_present() { return m_image != nullptr; }
 
@@ -55,6 +55,9 @@ public:
     virtual bool set_device_signature(uint8_t error, bool was_reset) override;
 
     virtual void fill_device_signature(ide_registers_t *regs) override;
+
+    virtual void eject_button_poll(bool immediate) {;}
+
 protected:
     IDEImage *m_image;
 

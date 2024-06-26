@@ -53,11 +53,6 @@ void IDEATAPIDevice::set_image(IDEImage *image)
     // m_atapi_state.sense_asc = ATAPI_ASC_MEDIUM_CHANGE;
 }
 
-void IDEATAPIDevice::poll()
-{
-
-}
-
 bool IDEATAPIDevice::handle_command(ide_registers_t *regs)
 {
     switch (regs->command)
@@ -696,6 +691,13 @@ static const char *atapi_sense_to_str(uint8_t sense_key)
     }
 }
 
+bool IDEATAPIDevice::atapi_cmd_not_ready_error()
+{
+    if (m_devinfo.removable && m_removable.ejected)
+        return atapi_cmd_error(ATAPI_SENSE_NOT_READY, ATAPI_ASC_NO_MEDIUM_TRAY_OPEN);
+    return atapi_cmd_error(ATAPI_SENSE_NOT_READY, ATAPI_ASC_NO_MEDIUM);
+}
+
 bool IDEATAPIDevice::atapi_cmd_error(uint8_t sense_key, uint16_t sense_asc)
 {
     if (sense_key == ATAPI_SENSE_UNIT_ATTENTION)
@@ -750,14 +752,20 @@ bool IDEATAPIDevice::atapi_cmd_ok()
 
 bool IDEATAPIDevice::atapi_test_unit_ready(const uint8_t *cmd)
 {
+    if (!is_medium_present())
+    {
+        return atapi_cmd_error(ATAPI_SENSE_NOT_READY, ATAPI_ASC_NO_MEDIUM);
+    }
+
     if (m_devinfo.removable && m_removable.ejected)
     {
         if (m_removable.reinsert_media_after_eject)
         {
             insert_media();
         }
-        return atapi_cmd_error(ATAPI_SENSE_NOT_READY, ATAPI_ASC_NO_MEDIUM);
+        return atapi_cmd_error(ATAPI_SENSE_NOT_READY, ATAPI_ASC_NO_MEDIUM_TRAY_OPEN);
     }
+
     if (m_atapi_state.not_ready)
     {
         m_atapi_state.not_ready = false;
@@ -775,14 +783,7 @@ bool IDEATAPIDevice::atapi_start_stop_unit(const uint8_t *cmd)
         // Eject condition
         if ((ATAPI_START_STOP_START & cmd_eject) == 0)
         {
-            logmsg("Device ejecting media");
-            if (m_image)
-            {
-                m_image->load_next_image();
-                set_image(m_image);
-            }
-            m_devinfo.media_status_events = ATAPI_MEDIA_EVENT_REMOVED;
-            m_removable.ejected = true;
+            eject_media();
         }
         // Load condition
         else
@@ -825,7 +826,6 @@ bool IDEATAPIDevice::atapi_inquiry(const uint8_t *cmd)
     {
         insert_media();
     }
-
 
     return atapi_cmd_ok();
 }
@@ -990,10 +990,10 @@ bool IDEATAPIDevice::atapi_get_configuration(const uint8_t *cmd)
     }
 
     // Fill in feature header
-    write_be32(resp, resp_bytes);
+    write_be32(resp, resp_bytes - 4);
     resp[4] = 0;
     resp[5] = 0;
-    if (is_medium_present())
+    if (is_ready())
         write_be16(&resp[6], m_devinfo.current_profile);
     else
         write_be16(&resp[6], 0);
@@ -1046,6 +1046,9 @@ bool IDEATAPIDevice::atapi_get_event_status_notification(const uint8_t *cmd)
 
 bool IDEATAPIDevice::atapi_read_capacity(const uint8_t *cmd)
 {
+    if (!is_ready()) 
+        return atapi_cmd_not_ready_error();
+
     if (m_atapi_state.not_ready) return atapi_cmd_error(ATAPI_SENSE_NOT_READY, ATAPI_ASC_UNIT_BECOMING_READY);
 
     uint32_t last_lba = this->capacity_lba() - 1;
@@ -1082,7 +1085,7 @@ bool IDEATAPIDevice::atapi_read(const uint8_t *cmd)
         assert(false);
     }
 
-    if (!m_image) return atapi_cmd_error(ATAPI_SENSE_NOT_READY, ATAPI_ASC_NO_MEDIUM);
+    if (!is_ready()) return atapi_cmd_not_ready_error();
     if (m_atapi_state.not_ready) return atapi_cmd_error(ATAPI_SENSE_NOT_READY, ATAPI_ASC_UNIT_BECOMING_READY);
 
     if (lba + transfer_len > capacity_lba())
@@ -1128,9 +1131,9 @@ bool IDEATAPIDevice::atapi_write(const uint8_t *cmd)
     {
         return atapi_cmd_error(ATAPI_SENSE_ABORTED_CMD, ATAPI_ASC_WRITE_PROTECTED);
     }
-    else if (!m_image)
+    else if (!is_ready())
     {
-        return atapi_cmd_error(ATAPI_SENSE_NOT_READY, ATAPI_ASC_NO_MEDIUM);
+        return atapi_cmd_not_ready_error();
     }
     else if (m_atapi_state.not_ready) return atapi_cmd_error(ATAPI_SENSE_NOT_READY, ATAPI_ASC_UNIT_BECOMING_READY);
     
@@ -1220,7 +1223,7 @@ size_t IDEATAPIDevice::atapi_get_configuration(uint16_t feature, uint8_t *buffer
         for (int i = 0; i < m_devinfo.num_profiles; i++)
         {
             write_be16(&buffer[4 + i * 4], m_devinfo.profiles[i]);
-            buffer[2] = (is_medium_present() ? 1 : 0);
+            buffer[2] = is_ready() ? 1 : 0;
             buffer[3] = 0;
         }
 
@@ -1243,12 +1246,79 @@ size_t IDEATAPIDevice::atapi_get_configuration(uint16_t feature, uint8_t *buffer
     return 0;
 }
 
+bool IDEATAPIDevice::is_ready()
+{
+    if (is_medium_present())
+    {
+        if (m_devinfo.removable)
+        {
+            if (!m_removable.ejected)
+                return true;
+        }
+        else
+            return true;
+    }
+    return false;
+}
+
+void IDEATAPIDevice::eject_button_poll(bool immediate)
+{
+    // treat '1' to '0' transitions as eject actions
+    static uint8_t previous = 0x00;
+    uint8_t bitmask = platform_get_buttons();
+    uint8_t ejectors = (previous ^ bitmask) & previous;
+    previous = bitmask;
+
+    // defer ejection until the bus is idle
+    static uint8_t deferred = 0x00;
+    if (!immediate)
+    {
+        deferred |= ejectors;
+        return;
+    }
+    else
+    {
+        ejectors |= deferred;
+        deferred = 0;
+
+        if (ejectors)
+        {
+            //m_atapi_state.unit_attention = true;
+            if (m_removable.ejected)
+                insert_media();
+            else
+            {
+                button_eject_media();
+            }
+        }
+        return;
+    }
+}
+
+void IDEATAPIDevice::button_eject_media()
+{
+    eject_media();
+}
+
+void IDEATAPIDevice::eject_media()
+{
+    logmsg("Device ejecting media");
+
+    //m_devinfo.media_status_events = ATAPI_MEDIA_EVENT_NEW;
+    m_removable.ejected = true;
+}
+
 void IDEATAPIDevice::insert_media()
 {
     if (m_devinfo.removable && m_removable.ejected)
     {
             dbgmsg("-- Device loading media");
-            m_devinfo.media_status_events = ATAPI_MEDIA_EVENT_NEW;
+            if (m_image)
+            {
+                m_image->load_next_image();
+                set_image(m_image);
+            }
+            //m_devinfo.media_status_events = ATAPI_MEDIA_EVENT_NEW;
             m_removable.ejected = false;
             m_atapi_state.not_ready = true;
     }

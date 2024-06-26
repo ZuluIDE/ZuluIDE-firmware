@@ -38,8 +38,13 @@ public:
     // Set image backing file to access
     virtual void set_image(IDEImage *image) = 0;
 
-    // Called periodically by main loop
-    virtual void poll() = 0;
+    // polls eject buttons status
+    virtual void eject_button_poll(bool immediate) = 0;
+
+    // device is ready
+    virtual bool is_ready() = 0;
+
+    virtual bool is_medium_present() = 0;
 
     // Called whenever new command is received from host.
     // The handler should use ide_phy_send_msg() to send response.
@@ -60,7 +65,6 @@ public:
 
     // Set signature values for ide register
     virtual void fill_device_signature(ide_registers_t *regs) = 0;
-
 
 protected:
     struct {
