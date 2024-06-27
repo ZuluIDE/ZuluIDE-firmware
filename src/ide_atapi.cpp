@@ -44,6 +44,7 @@ void IDEATAPIDevice::initialize(int devidx)
     memset(&m_removable, 0, sizeof(m_removable));
     m_removable.reinsert_media_after_eject = ini_getbool("IDE", "reinsert_media_after_eject", true, CONFIGFILE);
     m_removable.reinsert_media_on_inquiry = ini_getbool("IDE", "reinsert_media_on_inquiry", true, CONFIGFILE);
+    m_removable.reinsert_media_after_sd_insert = ini_getbool("IDE", "reinsert_media_on_sd_insert", true, CONFIGFILE);
     m_removable.ignore_prevent_removal = ini_getbool("IDE", "ignore_prevent_removal", false, CONFIGFILE);
     if (m_removable.ignore_prevent_removal)
         logmsg("Ignoring host from preventing removal of media");
@@ -1072,8 +1073,7 @@ bool IDEATAPIDevice::atapi_get_event_status_notification(const uint8_t *cmd)
 
 bool IDEATAPIDevice::atapi_read_capacity(const uint8_t *cmd)
 {
-    if (!is_medium_present())
-        return atapi_cmd_not_ready_error();
+    if (!is_medium_present()) return atapi_cmd_not_ready_error();
 
     if (m_atapi_state.not_ready) return atapi_cmd_error(ATAPI_SENSE_NOT_READY, ATAPI_ASC_UNIT_BECOMING_READY);
 
@@ -1337,5 +1337,15 @@ void IDEATAPIDevice::insert_media()
             //m_devinfo.media_status_events = ATAPI_MEDIA_EVENT_NEW;
             m_removable.ejected = false;
             m_atapi_state.not_ready = true;
+    }
+}
+
+void IDEATAPIDevice::sd_card_inserted()
+{
+    if (m_devinfo.removable
+        && m_removable.reinsert_media_after_sd_insert
+        && m_removable.ejected)
+    {
+        insert_media();
     }
 }

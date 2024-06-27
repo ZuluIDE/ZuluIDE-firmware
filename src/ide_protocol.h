@@ -70,6 +70,8 @@ public:
     // Set signature values for ide register
     virtual void fill_device_signature(ide_registers_t *regs) = 0;
 
+    // Called when an SD card is reinserted
+    virtual void sd_card_inserted() = 0;
 
 
 protected:

@@ -527,6 +527,7 @@ void zuluide_main_loop(void)
 
             g_StatusController.SetIsCardPresent(true);            
             loadFirstImage();
+            g_ide_device->sd_card_inserted();
         }
         else
         {

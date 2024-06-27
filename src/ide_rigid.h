@@ -60,6 +60,8 @@ public:
 
     virtual void eject_button_poll(bool immediate) {;}
 
+    virtual void sd_card_inserted() {;}
+
 protected:
     IDEImage *m_image;
 

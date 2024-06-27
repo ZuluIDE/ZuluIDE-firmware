@@ -37,6 +37,8 @@ class IDEATAPIDevice: public IDEDevice, public IDEImage::Callback
 public:
     virtual void initialize(int devidx) override;
 
+    virtual void reset() override;
+
     virtual void set_image(IDEImage *image);
 
     virtual bool handle_command(ide_registers_t *regs);
@@ -61,11 +63,13 @@ public:
 
     virtual void insert_media();
 
+    virtual void sd_card_inserted() override;
+
     virtual bool set_device_signature(uint8_t error, bool was_reset) override;
 
     virtual void fill_device_signature(ide_registers_t *regs) override;
 
-    virtual void reset() override;
+
 
 protected:
     IDEImage *m_image;
@@ -121,6 +125,7 @@ protected:
         bool ejected;
         bool reinsert_media_on_inquiry;
         bool reinsert_media_after_eject;
+        bool reinsert_media_after_sd_insert;
         bool prevent_removable;
         bool prevent_persistent;
         bool ignore_prevent_removal;

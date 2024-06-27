@@ -141,18 +141,6 @@ void IDEZipDrive::set_image(IDEImage *image)
     }
 
     IDEATAPIDevice::set_image(image);
-
-    // Notify host of media change
-    m_atapi_state.unit_attention = true;
-
-    if (!image)
-    {
-        m_atapi_state.sense_asc = ATAPI_ASC_NO_MEDIUM;
-    }
-    else
-    {
-       m_atapi_state.sense_asc = ATAPI_ASC_MEDIUM_CHANGE;
-    }
 }
 
 // "ATAPI devices shall swap bytes for ASCII fields to maintain compatibility with ATA."
