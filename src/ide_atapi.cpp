@@ -1,19 +1,19 @@
 /**
  * ZuluIDE™ - Copyright (c) 2023 Rabbit Hole Computing™
  *
- * ZuluIDE™ firmware is licensed under the GPL version 3 or any later version. 
+ * ZuluIDE™ firmware is licensed under the GPL version 3 or any later version.
  *
  * https://www.gnu.org/licenses/gpl-3.0.html
  * ----
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version. 
+ * (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details. 
+ * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
@@ -24,6 +24,7 @@
 #include "atapi_constants.h"
 #include "ZuluIDE.h"
 #include "ZuluIDE_config.h"
+#include "minIni.h"
 
 // Map from command index for command name for logging
 static const char *get_atapi_command_name(uint8_t cmd)
@@ -41,13 +42,20 @@ void IDEATAPIDevice::initialize(int devidx)
 {
     memset(&m_devinfo, 0, sizeof(m_devinfo));
     memset(&m_removable, 0, sizeof(m_removable));
+    m_removable.reinsert_media_after_eject = ini_getbool("IDE", "reinsert_media_after_eject", true, CONFIGFILE);
+    m_removable.reinsert_media_on_inquiry = ini_getbool("IDE", "reinsert_media_on_inquiry", true, CONFIGFILE);
+    m_removable.ignore_prevent_removal = ini_getbool("IDE", "ignore_prevent_removal", false, CONFIGFILE);
+    if (m_removable.ignore_prevent_removal)
+        logmsg("Ignoring host from preventing removal of media");
     memset(&m_atapi_state, 0, sizeof(m_atapi_state));
     IDEDevice::initialize(devidx);
 }
 
 void IDEATAPIDevice::reset()
 {
-    memset(&m_removable, 0, sizeof(m_removable));
+    m_removable.ejected = false;
+    m_removable.prevent_persistent = false;
+    m_removable.prevent_removable = false;
 }
 
 void IDEATAPIDevice::set_image(IDEImage *image)
@@ -242,7 +250,7 @@ bool IDEATAPIDevice::cmd_identify_packet_device(ide_registers_t *regs)
 
     ide_phy_start_write(sizeof(idf));
     ide_phy_write_block((uint8_t*)idf, sizeof(idf));
-    
+
     uint32_t start = millis();
     while (!ide_phy_is_write_finished())
     {
@@ -327,7 +335,7 @@ bool IDEATAPIDevice::set_device_signature(uint8_t error, bool was_reset)
 
     regs.error = error;
     fill_device_signature(&regs);
-    
+
     if (was_reset)
     {
         regs.error = 1; // Diagnostics ok
@@ -698,8 +706,6 @@ static const char *atapi_sense_to_str(uint8_t sense_key)
 
 bool IDEATAPIDevice::atapi_cmd_not_ready_error()
 {
-    if (m_devinfo.removable && m_removable.ejected)
-        return atapi_cmd_error(ATAPI_SENSE_NOT_READY, ATAPI_ASC_NO_MEDIUM_TRAY_OPEN);
     return atapi_cmd_error(ATAPI_SENSE_NOT_READY, ATAPI_ASC_NO_MEDIUM);
 }
 
@@ -759,7 +765,7 @@ bool IDEATAPIDevice::atapi_test_unit_ready(const uint8_t *cmd)
 {
     if (!has_image())
     {
-        return atapi_cmd_error(ATAPI_SENSE_NOT_READY, ATAPI_ASC_NO_MEDIUM);
+        return atapi_cmd_not_ready_error();
     }
 
     if (m_devinfo.removable && m_removable.ejected)
@@ -768,7 +774,7 @@ bool IDEATAPIDevice::atapi_test_unit_ready(const uint8_t *cmd)
         {
             insert_media();
         }
-        return atapi_cmd_error(ATAPI_SENSE_NOT_READY, ATAPI_ASC_NO_MEDIUM_TRAY_OPEN);
+        return atapi_cmd_not_ready_error();
     }
 
     if (m_atapi_state.not_ready)
@@ -782,23 +788,21 @@ bool IDEATAPIDevice::atapi_test_unit_ready(const uint8_t *cmd)
 bool IDEATAPIDevice::atapi_start_stop_unit(const uint8_t *cmd)
 {
     uint8_t cmd_eject = *(cmd + ATAPI_START_STOP_EJT_OFFSET);
-    if ((ATAPI_START_STOP_PWR_CON_MASK & cmd_eject) == 0 && 
+    if ((ATAPI_START_STOP_PWR_CON_MASK & cmd_eject) == 0 &&
         (ATAPI_START_STOP_LOEJ & cmd_eject) != 0)
     {
-        
         // Eject condition
         if ((ATAPI_START_STOP_START & cmd_eject) == 0)
         {
-            // \todo implement prevent media removal - this version creates a weird state in Linux
-            // if (m_removable.prevent_removable)
-            // {
-            //     if (is_medium_present())
-            //         return atapi_cmd_error(ATAPI_SENSE_ILLEGAL_REQ, ATAPI_ASC_MEDIUM_REMOVAL_PREVENTED);
-            //     else
-            //         return atapi_cmd_error(ATAPI_SENSE_NOT_READY, ATAPI_ASC_MEDIUM_REMOVAL_PREVENTED);
-            // }
-            // else
-            eject_media();
+            if (m_removable.prevent_removable)
+            {
+                if (is_medium_present())
+                    return atapi_cmd_error(ATAPI_SENSE_ILLEGAL_REQ, ATAPI_ASC_MEDIUM_REMOVAL_PREVENTED);
+                else
+                    return atapi_cmd_error(ATAPI_SENSE_NOT_READY, ATAPI_ASC_MEDIUM_REMOVAL_PREVENTED);
+            }
+            else
+                eject_media();
         }
         // Load condition
         else
@@ -813,11 +817,18 @@ bool IDEATAPIDevice::atapi_start_stop_unit(const uint8_t *cmd)
 
 bool IDEATAPIDevice::atapi_prevent_allow_removal(const uint8_t *cmd)
 {
-    m_removable.prevent_removable = cmd[4] & 1;
-    m_removable.prevent_persistent = cmd[4] & 2;
+    if (m_removable.ignore_prevent_removal)
+    {
+        dbgmsg("-- Ignoring host request to change prevent removable via ini file setting");
+    }
+    else
+    {
+        m_removable.prevent_removable = cmd[4] & 1;
+        m_removable.prevent_persistent = cmd[4] & 2;
 
-    // We can't actually prevent SD card from being removed
-    dbgmsg("-- Host requested prevent=", (int)m_removable.prevent_removable, " persistent=", (int)m_removable.prevent_persistent);
+        // We can't actually prevent SD card from being removed
+        dbgmsg("-- Host requested prevent=", (int)m_removable.prevent_removable, " persistent=", (int)m_removable.prevent_persistent);
+    }
     return atapi_cmd_ok();
 }
 
@@ -893,7 +904,7 @@ bool IDEATAPIDevice::atapi_mode_sense(const uint8_t *cmd)
     memset(hdr, 0, 8);
     write_be16(&hdr[0], resp_bytes - 2);
     hdr[2] = m_devinfo.medium_type;
-    
+
     if (resp_bytes > req_bytes) resp_bytes = req_bytes;
     atapi_send_data(m_buffer.bytes, resp_bytes);
 
@@ -959,7 +970,7 @@ bool IDEATAPIDevice::atapi_request_sense(const uint8_t *cmd)
     resp[2] = m_atapi_state.sense_key;
     resp[7] = sense_length - 7;
     write_be16(&resp[12], m_atapi_state.sense_asc);
-    
+
     if (req_bytes < sense_length) sense_length = req_bytes;
     atapi_send_data(m_buffer.bytes, sense_length);
 
@@ -1061,7 +1072,7 @@ bool IDEATAPIDevice::atapi_get_event_status_notification(const uint8_t *cmd)
 
 bool IDEATAPIDevice::atapi_read_capacity(const uint8_t *cmd)
 {
-    if (!is_medium_present()) 
+    if (!is_medium_present())
         return atapi_cmd_not_ready_error();
 
     if (m_atapi_state.not_ready) return atapi_cmd_error(ATAPI_SENSE_NOT_READY, ATAPI_ASC_UNIT_BECOMING_READY);
@@ -1120,7 +1131,7 @@ bool IDEATAPIDevice::doRead(uint32_t lba, uint32_t transfer_len)
     bool status = m_image->read((uint64_t)lba * m_devinfo.bytes_per_sector,
                                 m_devinfo.bytes_per_sector, transfer_len,
                                 this);
-    
+
     if (status)
     {
         return atapi_send_wait_finish() && atapi_cmd_ok();
@@ -1151,7 +1162,7 @@ bool IDEATAPIDevice::atapi_write(const uint8_t *cmd)
         return atapi_cmd_not_ready_error();
     }
     else if (m_atapi_state.not_ready) return atapi_cmd_error(ATAPI_SENSE_NOT_READY, ATAPI_ASC_UNIT_BECOMING_READY);
-    
+
     uint32_t lba, transfer_len;
     if (cmd[0] == ATAPI_CMD_WRITE6)
     {
@@ -1303,14 +1314,13 @@ void IDEATAPIDevice::eject_button_poll(bool immediate)
 
 void IDEATAPIDevice::button_eject_media()
 {
-    eject_media();
+    if (!m_removable.prevent_removable)
+        eject_media();
 }
 
 void IDEATAPIDevice::eject_media()
 {
     logmsg("Device ejecting media");
-
-    //m_devinfo.media_status_events = ATAPI_MEDIA_EVENT_NEW;
     m_removable.ejected = true;
 }
 

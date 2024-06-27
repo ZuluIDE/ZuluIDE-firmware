@@ -1,19 +1,19 @@
 /**
  * ZuluIDE™ - Copyright (c) 2023 Rabbit Hole Computing™
  *
- * ZuluIDE™ firmware is licensed under the GPL version 3 or any later version. 
+ * ZuluIDE™ firmware is licensed under the GPL version 3 or any later version.
  *
  * https://www.gnu.org/licenses/gpl-3.0.html
  * ----
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version. 
+ * (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details. 
+ * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
@@ -50,7 +50,7 @@ public:
     virtual bool has_image() { return m_image != nullptr; }
 
     virtual uint64_t capacity() { return (m_image ? m_image->capacity() : 0); }
-    
+
     virtual uint64_t capacity_lba() { return capacity() / m_devinfo.bytes_per_sector; }
 
     virtual void eject_button_poll(bool immediate);
@@ -115,14 +115,15 @@ protected:
         bool not_ready;
         int crc_errors; // CRC errors in latest transfer
     } m_atapi_state;
-    
-    struct 
+
+    struct
     {
         bool ejected;
         bool reinsert_media_on_inquiry;
         bool reinsert_media_after_eject;
         bool prevent_removable;
         bool prevent_persistent;
+        bool ignore_prevent_removal;
     } m_removable;
 
     // Buffer used for responses, ide_phy code benefits from this being aligned to 32 bits
@@ -132,7 +133,7 @@ protected:
         uint16_t word[1176];
         uint8_t bytes[2352];
     } m_buffer;
-    
+
     // IDE command handlers
     virtual bool cmd_nop(ide_registers_t *regs);
     virtual bool cmd_set_features(ide_registers_t *regs);
@@ -165,7 +166,7 @@ protected:
 
     // Report error or successful completion of ATAPI command
     bool atapi_cmd_error(uint8_t sense_key, uint16_t sense_asc);
-    bool atapi_cmd_not_ready_error();
+    virtual bool atapi_cmd_not_ready_error();
     bool atapi_cmd_ok();
 
     // ATAPI command handlers
@@ -182,11 +183,11 @@ protected:
     virtual bool atapi_read_capacity(const uint8_t *cmd);
     virtual bool atapi_read(const uint8_t *cmd);
     virtual bool atapi_write(const uint8_t *cmd);
-    
+
     // Read handlers
     virtual bool doRead(uint32_t lba, uint32_t transfer_len);
     virtual ssize_t read_callback(const uint8_t *data, size_t blocksize, size_t num_blocks);
-    
+
     // Write handlers
     virtual bool doWrite(uint32_t lba, uint32_t transfer_len);
     virtual ssize_t write_callback(uint8_t *data, size_t blocksize, size_t num_blocks);
@@ -198,5 +199,3 @@ protected:
     // ATAPI get_configuration responses
     virtual size_t atapi_get_configuration(uint16_t feature, uint8_t *buffer, size_t max_bytes);
 };
-
-

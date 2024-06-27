@@ -284,9 +284,6 @@ void IDECDROMDevice::initialize(int devidx)
     m_devinfo.profiles[0] = ATAPI_PROFILE_CDROM;
     m_devinfo.current_profile = ATAPI_PROFILE_CDROM;
 
-    m_removable.reinsert_media_after_eject = ini_getbool("IDE", "reinsert_media_after_eject", true, CONFIGFILE);
-    m_removable.reinsert_media_on_inquiry = ini_getbool("IDE", "reinsert_media_on_inquiry", true, CONFIGFILE);
-
     set_esn_event(esn_event_t::NoChange);
 }
 
@@ -386,6 +383,13 @@ bool IDECDROMDevice::handle_atapi_command(const uint8_t *cmd)
     }
 }
 
+bool IDECDROMDevice::atapi_cmd_not_ready_error()
+{
+    if (m_removable.ejected)
+        return atapi_cmd_error(ATAPI_SENSE_NOT_READY, ATAPI_ASC_NO_MEDIUM_TRAY_OPEN);
+    return atapi_cmd_error(ATAPI_SENSE_NOT_READY, ATAPI_ASC_NO_MEDIUM);
+}
+
 bool IDECDROMDevice::atapi_set_cd_speed(const uint8_t *cmd)
 {
     uint16_t read_speed = parse_be16(&cmd[2]);
@@ -396,7 +400,7 @@ bool IDECDROMDevice::atapi_set_cd_speed(const uint8_t *cmd)
 
 bool IDECDROMDevice::atapi_read_disc_information(const uint8_t *cmd)
 {
-    if (!is_medium_present()) return atapi_cmd_error(ATAPI_SENSE_NOT_READY, ATAPI_ASC_NO_MEDIUM);
+    if (!is_medium_present()) return atapi_cmd_not_ready_error();
     if (m_atapi_state.not_ready) return atapi_cmd_error(ATAPI_SENSE_NOT_READY, ATAPI_ASC_UNIT_BECOMING_READY);
 
     uint16_t allocationLength = parse_be16(&cmd[7]);
@@ -1307,9 +1311,8 @@ void IDECDROMDevice::eject_media()
 
 void IDECDROMDevice::button_eject_media()
 {
-    // \todo implement prevent removable. Linux stops ejecting and inserting with this version
-    // if (!m_removable.prevent_removable)
-    set_esn_event(esn_event_t::MMediaRemoval);
+    if (!m_removable.prevent_removable)
+        set_esn_event(esn_event_t::MMediaRemoval);
 }
 
 void IDECDROMDevice::insert_media()
@@ -1337,7 +1340,7 @@ void IDECDROMDevice::set_esn_event(esn_event_t event)
     }
     else
     {
-        m_esn.event == esn_event_t::NoChange;
+        m_esn.event = esn_event_t::NoChange;
         m_esn.request = esn_class_request_t::OperationChange;
         m_esn.current_event = esn_event_t::NoChange;
     }

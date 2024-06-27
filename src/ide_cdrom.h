@@ -66,6 +66,7 @@ public:
 protected:
     
     virtual bool handle_atapi_command(const uint8_t *cmd);
+    bool atapi_cmd_not_ready_error() override;
     virtual bool atapi_set_cd_speed(const uint8_t *cmd);
     virtual bool atapi_read_disc_information(const uint8_t *cmd);
     virtual bool atapi_read_track_information(const uint8_t *cmd);
