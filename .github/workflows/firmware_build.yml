@@ -38,7 +38,7 @@ jobs:
       
       - name: Upload to latest release
         with:
-          repository: TheOriginalCER06/WoWs_Stats_Public
+          repository: ZuluIDE/ZuluIDE-firmware
           token: ${{ secrets.SECRET_PAT }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
