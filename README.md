@@ -112,7 +112,7 @@ It is closely related to [ZuluSCSI](https://github.com/ZuluSCSI/ZuluSCSI-firmwar
 
 The firmware code is licensed under the GPL version 3 or any later version.
 
-The RP2040 platform utilizes a separate ICE5LP1K FPGA for IDE bus communication.
+The RP2040 platform utilizes a separate ICE5LP2K FPGA for IDE bus communication.
 Bitstream for the FPGA is provided in binary format and is licensed for free use and distribution on hardware produced by Rabbit Hole Computing™.
 Communication between the FPGA and the CPU uses QSPI interface documented in [rp2040_fpga.h](lib/ZuluIDE_platform_RP2040/rp2040_fpga.h).
 
