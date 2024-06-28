@@ -1,19 +1,19 @@
 /**
  * ZuluIDE™ - Copyright (c) 2023 Rabbit Hole Computing™
  *
- * ZuluIDE™ firmware is licensed under the GPL version 3 or any later version. 
+ * ZuluIDE™ firmware is licensed under the GPL version 3 or any later version.
  *
  * https://www.gnu.org/licenses/gpl-3.0.html
  * ----
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version. 
+ * (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details. 
+ * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
@@ -55,6 +55,7 @@ static IDERemovable g_ide_removable;
 static IDERigidDevice g_ide_rigid;
 static IDEImageFile g_ide_imagefile;
 static IDEDevice *g_ide_device;
+static bool g_is_fallback_device = false;
 
 zuluide::status::StatusController g_StatusController;
 zuluide::control::StdDisplayController g_DisplayController(&g_StatusController);
@@ -80,7 +81,7 @@ static uint32_t blink_end_delay= 0;
 bool blink_poll()
 {
     bool is_blinking = true;
-    
+
     if (blink_count == 0)
     {
         is_blinking = false;
@@ -234,7 +235,7 @@ void setupStatusController()
     device = std::move(std::make_unique<zuluide::status::ZipStatus>(zuluide::status::ZipStatus::Status::NoImage, zuluide::status::ZipStatus::ZipDriveType::Zip250));
   } else if (strncasecmp(device_name, "removable", sizeof("removable")) == 0) {
     device = std::move(std::make_unique<zuluide::status::RemovableStatus>(zuluide::status::RemovableStatus::Status::NoImage));
-  } else if (device_name[0]) {
+  } else if (!device_name[0] && g_sdcard_present) {
     logmsg("Warning device = [name] invalid, defaulting to CDROM");
     device = std::move(std::make_unique<zuluide::status::CDROMStatus>(zuluide::status::CDROMStatus::Status::NoImage, zuluide::status::CDROMStatus::DriveSpeed::Single));
   } else {
@@ -245,9 +246,9 @@ void setupStatusController()
     g_StatusController.SetIsPrimary(isPrimary);
     g_StatusController.UpdateDeviceStatus(std::move(device));
   }
-  
+
   g_StatusController.AddObserver(status_observer);
-  
+
 
   if (platform_check_for_controller())
   {
@@ -268,7 +269,7 @@ void setupStatusController()
   {
     g_StatusController.EndUpdate();
   }
-  loadFirstImage();  
+  loadFirstImage();
 }
 
 void loadFirstImage() {
@@ -313,7 +314,7 @@ drive_type_t searchForDriveType() {
       g_ide_imagefile.set_prefix(image);
       return  DRIVE_TYPE_RIGID;
     }
-    
+
   }
 
   // If nothing is found, default to a CDROM.
@@ -343,6 +344,10 @@ void status_observer(const zuluide::status::SystemStatus& current) {
     if (current.HasLoadedImage()) {
       load_image(current.GetLoadedImage());
     } else {
+      // no device choosen, defaulting to cdrom drive
+      if (g_is_fallback_device)
+        g_ide_device = &g_ide_cdrom;
+        g_ide_imagefile.set_drive_type(drive_type_t::DRIVE_TYPE_CDROM);
       clear_image();
     }
   }
@@ -360,41 +365,43 @@ void load_image(const zuluide::images::Image& toLoad)
     g_ide_imagefile.set_drive_type(newDriveType);
   }
 
+  if (!g_is_fallback_device)
+  {
     switch (g_ide_imagefile.get_drive_type())
     {
     case DRIVE_TYPE_CDROM:
-        g_ide_device = &g_ide_cdrom;
-        logmsg("Device is a CDROM drive");
-        break;
+      g_ide_device = &g_ide_cdrom;
+      logmsg("Device is a CDROM drive");
+      break;
     case DRIVE_TYPE_ZIP100:
-        g_ide_device = &g_ide_zipdrive;
-        logmsg("Device is a Iomega Zip Drive 100");
-        break;
-      case DRIVE_TYPE_ZIP250:
+      g_ide_device = &g_ide_zipdrive;
+      logmsg("Device is a Iomega Zip Drive 100");
+      break;
+    case DRIVE_TYPE_ZIP250:
       g_ide_device = &g_ide_zipdrive;
       logmsg("Device is a Iomega Zip Drive 250");
       break;
-  case DRIVE_TYPE_REMOVABLE:
-        g_ide_device = &g_ide_removable;
-        logmsg("Device is a generic removable drive");
-        break;
+    case DRIVE_TYPE_REMOVABLE:
+      g_ide_device = &g_ide_removable;
+      logmsg("Device is a generic removable drive");
+      break;
     case DRIVE_TYPE_RIGID:
-        g_ide_device = &g_ide_rigid;
-        logmsg("Device is a hard drive");
-        break;
+      g_ide_device = &g_ide_rigid;
+      logmsg("Device is a hard drive");
+      break;
     default:
-        g_ide_device = &g_ide_cdrom;
-        g_ide_imagefile.set_drive_type(DRIVE_TYPE_CDROM);
-        logmsg("Device defaulting to a CDROM drive");
-        break;
+      g_ide_device = &g_ide_cdrom;
+      g_ide_imagefile.set_drive_type(DRIVE_TYPE_CDROM);
+      logmsg("Device defaulting to a CDROM drive");
+      break;
     }
-
+  }
   logmsg("Loading image ", toLoad.GetFilename().c_str());
   g_ide_imagefile.open_file(toLoad.GetFilename().c_str(), false);
   if (g_ide_device) {
     g_ide_device->set_image(&g_ide_imagefile);
   }
-  
+
   blinkStatus(BLINK_STATUS_OK);
 }
 
@@ -407,6 +414,7 @@ static void zuluide_setup_sd_card()
         logmsg("SD card init failed, sdErrorCode: ", (int)SD.sdErrorCode(),
                     " sdErrorData: ", (int)SD.sdErrorData());
         logmsg("No SD card detected, defaulting to CD-ROM");
+        g_is_fallback_device = true;
         blinkStatus(BLINK_ERROR_NO_SD_CARD);
     }
     else
@@ -454,6 +462,7 @@ void zuluide_init(void)
     }
   }
 #endif
+
     // Setup the status controller.
     setupStatusController();
 
@@ -484,7 +493,7 @@ void zuluide_main_loop(void)
     platform_poll();
     g_ide_device->eject_button_poll(true);
     blink_poll();
-    
+
     g_StatusController.ProcessUpdates();
 
     save_logfile();
@@ -525,7 +534,7 @@ void zuluide_main_loop(void)
 
             init_logfile();
 
-            g_StatusController.SetIsCardPresent(true);            
+            g_StatusController.SetIsCardPresent(true);
             loadFirstImage();
             g_ide_device->sd_card_inserted();
         }
