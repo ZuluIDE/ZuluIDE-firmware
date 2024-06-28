@@ -37,6 +37,9 @@ jobs:
           name: ZuluIDE binaries
       
       - name: Upload to latest release
+        with:
+          repository: TheOriginalCER06/WoWs_Stats_Public
+          token: ${{ secrets.SECRET_PAT }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         if: github.ref == 'refs/heads/main'
