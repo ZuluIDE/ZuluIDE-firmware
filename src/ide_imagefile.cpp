@@ -1,19 +1,19 @@
 /**
  * ZuluIDE™ - Copyright (c) 2023 Rabbit Hole Computing™
  *
- * ZuluIDE™ firmware is licensed under the GPL version 3 or any later version. 
+ * ZuluIDE™ firmware is licensed under the GPL version 3 or any later version.
  *
  * https://www.gnu.org/licenses/gpl-3.0.html
  * ----
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version. 
+ * (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details. 
+ * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
@@ -35,12 +35,21 @@ IDEImageFile::IDEImageFile(): IDEImageFile(nullptr, 0)
 }
 
 IDEImageFile::IDEImageFile(uint8_t *buffer, size_t buffer_size):
-    m_blockdev(nullptr), m_contiguous(false), m_first_sector(0), m_capacity(0),
-    m_read_only(false), m_buffer(buffer), m_buffer_size(buffer_size), m_drive_type(DRIVE_TYPE_VIA_PREFIX)
+    m_buffer(buffer), m_buffer_size(buffer_size), m_drive_type(DRIVE_TYPE_VIA_PREFIX)
 {
+    clear();
     memset(m_prefix, 0, sizeof(m_prefix));
 }
 
+void IDEImageFile::clear()
+{
+    m_blockdev = nullptr;
+    m_contiguous = false;
+    m_first_sector = 0;
+    m_capacity = 0;
+    m_read_only = false;
+
+}
 
 bool IDEImageFile::open_file(const char *filename, bool read_only)
 {
@@ -64,7 +73,7 @@ bool IDEImageFile::open_file(FsVolume *volume, const char *filename, bool read_o
         m_capacity = 0;
         return false;
     }
-    
+
     m_capacity = m_file.size();
 
     uint32_t begin = 0, end = 0;
@@ -165,7 +174,7 @@ bool IDEImageFile::load_next_image()
 {
     char prev_image[MAX_FILE_PATH];
     char image_file[MAX_FILE_PATH];
-    
+
     if (get_filename(prev_image, MAX_FILE_PATH))
     {
         close();
@@ -291,7 +300,7 @@ bool IDEImageFile::find_next_prefix_image(const char *directory, const char *pre
                 }
                 else more_than_one_prefix = true;
             }
-            
+
             else if (strcasecmp(prefix, "z250") == 0)
             {
                 if (get_prefix()[0] == '\0')
@@ -391,7 +400,7 @@ void IDEImageFile::find_prefix(char *prefix, const char* file_name)
     {
         prefix[i] = tolower(file_name[i]);
     }
-}               
+}
 
 uint64_t IDEImageFile::capacity()
 {
@@ -536,7 +545,7 @@ bool IDEImageFile::write(uint64_t startpos, size_t blocksize, size_t num_blocks,
                 sd_cb_state.blocks_available - sd_cb_state.blocks_done,
                 sd_cb_state.bufsize_blocks - start_idx
             });
-            
+
             // Write data to SD card and process callbacks
             uint8_t *buf = m_buffer + blocksize * start_idx;
             platform_set_sd_callback(&IDEImageFile::sd_write_callback, buf);

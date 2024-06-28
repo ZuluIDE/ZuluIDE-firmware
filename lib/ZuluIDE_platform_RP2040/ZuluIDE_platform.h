@@ -73,6 +73,15 @@ void platform_write_led_override(bool state);
 // Disable the status LED
 void platform_disable_led(void);
 
+void platform_init_eject_button(uint8_t eject_button);
+
+// Returns the state of any platform-specific buttons.
+// The returned value should be a mask for buttons 1-8 in bits 0-7 respectively,
+// where '1' is a button pressed and '0' is a button released.
+// Debouncing logic is left up to the specific implementation.
+// This function should return without significantly delay.
+uint8_t platform_get_buttons();
+
 // Query IDE device id 0/1 requested on hardware DIP switches.
 // If platform has no DIP switches, returns 0.
 int platform_get_device_id(void);

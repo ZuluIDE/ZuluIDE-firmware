@@ -36,9 +36,9 @@ class IDERigidDevice: public IDEDevice, public IDEImage::Callback
 public:
     virtual void initialize(int devidx) override;
 
-    virtual void set_image(IDEImage *image);
+    virtual void reset() override;
 
-    virtual void poll();
+    virtual void set_image(IDEImage *image);
 
     virtual bool handle_command(ide_registers_t *regs);
 
@@ -46,7 +46,9 @@ public:
 
     virtual bool is_packet_device() { return false; }
 
-    virtual bool is_medium_present() { return m_image != nullptr; }
+    virtual bool is_medium_present() {return has_image();}
+
+    virtual bool has_image() { return m_image != nullptr; }
 
     virtual uint64_t capacity() { return (m_image ? m_image->capacity() : 0); }
 
@@ -55,6 +57,11 @@ public:
     virtual bool set_device_signature(uint8_t error, bool was_reset) override;
 
     virtual void fill_device_signature(ide_registers_t *regs) override;
+
+    virtual void eject_button_poll(bool immediate) {;}
+
+    virtual void sd_card_inserted() {;}
+
 protected:
     IDEImage *m_image;
 
