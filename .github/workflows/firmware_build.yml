@@ -35,11 +35,10 @@ jobs:
         with:
           path: ZuluIDE/distrib/*
           name: ZuluIDE binaries
-      
-      - name: Upload to latest release
-        with:
           repository: ZuluIDE/ZuluIDE-firmware
           token: ${{ secrets.SECRET_PAT }}
+      
+      - name: Upload to latest release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         if: github.ref == 'refs/heads/main'
