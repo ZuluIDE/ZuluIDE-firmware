@@ -36,6 +36,7 @@
 #include "status/status_controller.h"
 #include <zuluide/status/cdrom_status.h>
 #include <zuluide/status/removable_status.h>
+#include <zuluide/status/rigid_status.h>
 #include <zuluide/status/zip_status.h>
 #include <zuluide/status/device_status.h>
 #include <zuluide/status/system_status.h>
@@ -55,7 +56,6 @@ static IDERemovable g_ide_removable;
 static IDERigidDevice g_ide_rigid;
 static IDEImageFile g_ide_imagefile;
 static IDEDevice *g_ide_device;
-static bool g_is_fallback_device = false;
 
 zuluide::status::StatusController g_StatusController;
 zuluide::control::StdDisplayController g_DisplayController(&g_StatusController);
@@ -215,6 +215,39 @@ void init_logfile()
     first_open_after_boot = false;
 }
 
+drive_type_t searchForDriveType() {
+  zuluide::images::ImageIterator imgIter;
+  imgIter.Reset();
+  while(imgIter.MoveNext()) {
+    auto image = imgIter.Get().GetFilename().substr(0,4).c_str();
+    if (strncasecmp(image, "cdrm", sizeof("cdrm")) == 0) {
+      g_ide_imagefile.set_prefix(image);
+      return DRIVE_TYPE_CDROM;
+    } else if (strncasecmp(image, "zipd", sizeof("zipd")) == 0) {
+      g_ide_imagefile.set_prefix(image);
+      return DRIVE_TYPE_ZIP100;
+    } else if (strncasecmp(image, "z100", sizeof("z100")) == 0) {
+      g_ide_imagefile.set_prefix(image);
+      return DRIVE_TYPE_ZIP100;
+    } else if (strncasecmp(image, "z250", sizeof("z250")) == 0) {
+      g_ide_imagefile.set_prefix(image);
+      return DRIVE_TYPE_ZIP250;
+    } else if (strncasecmp(image, "remv", sizeof("remv")) == 0) {
+      g_ide_imagefile.set_prefix(image);
+      return DRIVE_TYPE_REMOVABLE;
+    }
+    else if (strncasecmp(image, "hddr", sizeof("hddr")) == 0)
+    {
+      g_ide_imagefile.set_prefix(image);
+      return DRIVE_TYPE_RIGID;
+    }
+
+  }
+
+  // If nothing is found, default to a CDROM.
+  return drive_type_t::DRIVE_TYPE_CDROM;
+}
+
 /***
  * Configures the status controller. The status controller is used to
 */
@@ -227,20 +260,66 @@ void setupStatusController()
 
   ini_gets("IDE", "device", "", device_name, sizeof(device_name), CONFIGFILE);
   std::unique_ptr<zuluide::status::IDeviceStatus> device;
-  if (strncasecmp(device_name, "cdrom", sizeof("cdrom")) == 0) {
-    device = std::move(std::make_unique<zuluide::status::CDROMStatus>(zuluide::status::CDROMStatus::Status::NoImage, zuluide::status::CDROMStatus::DriveSpeed::Single));
+  if (!g_sdcard_present) {
+    logmsg("SD card not loaded, defaulting to CD-ROM");
+    g_ide_imagefile.set_drive_type(drive_type_t::DRIVE_TYPE_CDROM);
+  } else if (strncasecmp(device_name, "cdrom", sizeof("cdrom")) == 0) {
+    g_ide_imagefile.set_drive_type(drive_type_t::DRIVE_TYPE_CDROM);
   } else if (strncasecmp(device_name, "zip100", sizeof("zip100")) == 0) {
-    device = std::move(std::make_unique<zuluide::status::ZipStatus>(zuluide::status::ZipStatus::Status::NoImage, zuluide::status::ZipStatus::ZipDriveType::Zip100));
+    g_ide_imagefile.set_drive_type(drive_type_t::DRIVE_TYPE_ZIP100);
   } else if (strncasecmp(device_name, "zip250", sizeof("zip250")) == 0) {
-    device = std::move(std::make_unique<zuluide::status::ZipStatus>(zuluide::status::ZipStatus::Status::NoImage, zuluide::status::ZipStatus::ZipDriveType::Zip250));
+    g_ide_imagefile.set_drive_type(drive_type_t::DRIVE_TYPE_ZIP250);
   } else if (strncasecmp(device_name, "removable", sizeof("removable")) == 0) {
-    device = std::move(std::make_unique<zuluide::status::RemovableStatus>(zuluide::status::RemovableStatus::Status::NoImage));
-  } else if (!device_name[0] && g_sdcard_present) {
-    logmsg("Warning device = [name] invalid, defaulting to CDROM");
-    device = std::move(std::make_unique<zuluide::status::CDROMStatus>(zuluide::status::CDROMStatus::Status::NoImage, zuluide::status::CDROMStatus::DriveSpeed::Single));
+    g_ide_imagefile.set_drive_type(drive_type_t::DRIVE_TYPE_REMOVABLE);
+  } else if (strncasecmp(device_name, "hdd", sizeof("removable")) == 0) {
+    g_ide_imagefile.set_drive_type(drive_type_t::DRIVE_TYPE_RIGID);
+  } else if (device_name[0] && g_sdcard_present) {
+    logmsg("Warning device = \"", device_name ,"\" invalid, defaulting to CD-ROM");
+    g_ide_imagefile.set_drive_type(drive_type_t::DRIVE_TYPE_CDROM);
   } else {
     logmsg("Selecting device type when loading first image.");
   }
+    // If the device type is not setup.
+  if (g_ide_imagefile.get_drive_type() == drive_type_t::DRIVE_TYPE_VIA_PREFIX) {
+    drive_type_t newDriveType = searchForDriveType();
+    g_ide_imagefile.set_drive_type(newDriveType);
+  }
+
+  switch (g_ide_imagefile.get_drive_type())
+  {
+  case DRIVE_TYPE_CDROM:
+    g_ide_device = &g_ide_cdrom;
+    device = std::move(std::make_unique<zuluide::status::CDROMStatus>(zuluide::status::CDROMStatus::Status::NoImage, zuluide::status::CDROMStatus::DriveSpeed::Single));
+    logmsg("Device is a CDROM drive");
+    break;
+  case DRIVE_TYPE_ZIP100:
+    g_ide_device = &g_ide_zipdrive;
+    device = std::move(std::make_unique<zuluide::status::ZipStatus>(zuluide::status::ZipStatus::Status::NoImage, zuluide::status::ZipStatus::ZipDriveType::Zip100));
+    logmsg("Device is a Iomega Zip Drive 100");
+    break;
+  case DRIVE_TYPE_ZIP250:
+    g_ide_device = &g_ide_zipdrive;
+    device = std::move(std::make_unique<zuluide::status::ZipStatus>(zuluide::status::ZipStatus::Status::NoImage, zuluide::status::ZipStatus::ZipDriveType::Zip250));
+    logmsg("Device is a Iomega Zip Drive 250");
+    break;
+  case DRIVE_TYPE_REMOVABLE:
+    g_ide_device = &g_ide_removable;
+    device = std::move(std::make_unique<zuluide::status::RemovableStatus>(zuluide::status::RemovableStatus::Status::NoImage));
+    logmsg("Device is a generic removable drive");
+    break;
+  case DRIVE_TYPE_RIGID:
+    g_ide_device = &g_ide_rigid;
+    device = std::move(std::make_unique<zuluide::status::RigidStatus>(zuluide::status::RigidStatus::Status::NoImage));
+    logmsg("Device is a hard drive");
+    break;
+  default:
+    g_ide_device = &g_ide_cdrom;
+    g_ide_imagefile.set_drive_type(DRIVE_TYPE_CDROM);
+    device = std::move(std::make_unique<zuluide::status::CDROMStatus>(zuluide::status::CDROMStatus::Status::NoImage, zuluide::status::CDROMStatus::DriveSpeed::Single));
+    logmsg("Device defaulting to a CDROM drive");
+    break;
+  }
+
 
   if (device) {
     g_StatusController.SetIsPrimary(isPrimary);
@@ -269,6 +348,9 @@ void setupStatusController()
   {
     g_StatusController.EndUpdate();
   }
+
+
+
   loadFirstImage();
 }
 
@@ -288,38 +370,6 @@ void loadFirstImage() {
 /*********************************/
 /* Main IDE handling loop        */
 /*********************************/
-drive_type_t searchForDriveType() {
-  zuluide::images::ImageIterator imgIter;
-  imgIter.Reset();
-  while(imgIter.MoveNext()) {
-    auto image = imgIter.Get().GetFilename().substr(0,4).c_str();
-    if (strncasecmp(image, "cdrm", sizeof("cdrm")) == 0) {
-      g_ide_imagefile.set_prefix(image);
-      return DRIVE_TYPE_CDROM;
-    } else if (strncasecmp(image, "zipd", sizeof("zipd")) == 0) {
-      g_ide_imagefile.set_prefix(image);
-      return DRIVE_TYPE_ZIP100;
-    } else if (strncasecmp(image, "z100", sizeof("z100")) == 0) {
-      g_ide_imagefile.set_prefix(image);
-      return DRIVE_TYPE_ZIP100;
-    } else if (strncasecmp(image, "z250", sizeof("z250")) == 0) {
-      g_ide_imagefile.set_prefix(image);
-      return DRIVE_TYPE_ZIP250;
-    } else if (strncasecmp(image, "remv", sizeof("remv")) == 0) {
-      g_ide_imagefile.set_prefix(image);
-      return DRIVE_TYPE_REMOVABLE;
-    }
-    else if (strncasecmp(image, "hddr", sizeof("hddr")) == 0)
-    {
-      g_ide_imagefile.set_prefix(image);
-      return  DRIVE_TYPE_RIGID;
-    }
-
-  }
-
-  // If nothing is found, default to a CDROM.
-  return drive_type_t::DRIVE_TYPE_CDROM;
-}
 
 void load_image(const zuluide::images::Image& toLoad);
 
@@ -329,7 +379,7 @@ void clear_image() {
   g_ide_zipdrive.set_image(nullptr);
   g_ide_removable.set_image(nullptr);
   g_ide_rigid.set_image(nullptr);
-  g_ide_imagefile = IDEImageFile((uint8_t*)g_ide_buffer, sizeof(g_ide_buffer));
+  g_ide_imagefile.clear();
 
   // Set the drive type for the image from the system state.
   if (g_ide_imagefile.get_drive_type() != drive_type_t::DRIVE_TYPE_VIA_PREFIX) {
@@ -343,13 +393,8 @@ void status_observer(const zuluide::status::SystemStatus& current) {
     // The current image has changed.
     if (current.HasLoadedImage()) {
       load_image(current.GetLoadedImage());
-    } else {
-      // no device choosen, defaulting to cdrom drive
-      if (g_is_fallback_device)
-        g_ide_device = &g_ide_cdrom;
-        g_ide_imagefile.set_drive_type(drive_type_t::DRIVE_TYPE_CDROM);
+    } else
       clear_image();
-    }
   }
 
   previous = current;
@@ -359,43 +404,6 @@ void load_image(const zuluide::images::Image& toLoad)
 {
   clear_image();
 
-  // If the device type is not setup.
-  if (g_ide_imagefile.get_drive_type() == drive_type_t::DRIVE_TYPE_VIA_PREFIX) {
-    drive_type_t newDriveType = searchForDriveType();
-    g_ide_imagefile.set_drive_type(newDriveType);
-  }
-
-  if (!g_is_fallback_device)
-  {
-    switch (g_ide_imagefile.get_drive_type())
-    {
-    case DRIVE_TYPE_CDROM:
-      g_ide_device = &g_ide_cdrom;
-      logmsg("Device is a CDROM drive");
-      break;
-    case DRIVE_TYPE_ZIP100:
-      g_ide_device = &g_ide_zipdrive;
-      logmsg("Device is a Iomega Zip Drive 100");
-      break;
-    case DRIVE_TYPE_ZIP250:
-      g_ide_device = &g_ide_zipdrive;
-      logmsg("Device is a Iomega Zip Drive 250");
-      break;
-    case DRIVE_TYPE_REMOVABLE:
-      g_ide_device = &g_ide_removable;
-      logmsg("Device is a generic removable drive");
-      break;
-    case DRIVE_TYPE_RIGID:
-      g_ide_device = &g_ide_rigid;
-      logmsg("Device is a hard drive");
-      break;
-    default:
-      g_ide_device = &g_ide_cdrom;
-      g_ide_imagefile.set_drive_type(DRIVE_TYPE_CDROM);
-      logmsg("Device defaulting to a CDROM drive");
-      break;
-    }
-  }
   logmsg("Loading image ", toLoad.GetFilename().c_str());
   g_ide_imagefile.open_file(toLoad.GetFilename().c_str(), false);
   if (g_ide_device) {
@@ -413,8 +421,6 @@ static void zuluide_setup_sd_card()
         g_StatusController.SetIsCardPresent(false);
         logmsg("SD card init failed, sdErrorCode: ", (int)SD.sdErrorCode(),
                     " sdErrorData: ", (int)SD.sdErrorData());
-        logmsg("No SD card detected, defaulting to CD-ROM");
-        g_is_fallback_device = true;
         blinkStatus(BLINK_ERROR_NO_SD_CARD);
     }
     else
@@ -446,13 +452,13 @@ void zuluide_init(void)
     platform_init();
     platform_late_init();
     zuluide_setup_sd_card();
+    g_ide_imagefile = IDEImageFile((uint8_t*)g_ide_buffer, sizeof(g_ide_buffer));
 
 #ifdef PLATFORM_MASS_STORAGE
   static bool check_mass_storage = true;
   if (check_mass_storage && ini_getbool("IDE", "enable_usb_mass_storage", false, CONFIGFILE))
   {
     check_mass_storage = false;
-
     // perform checks to see if a computer is attached and return true if we should enter MSC mode.
     if (platform_sense_msc())
     {
