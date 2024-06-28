@@ -35,8 +35,6 @@ jobs:
         with:
           path: ZuluIDE/distrib/*
           name: ZuluIDE binaries
-          repository: ZuluIDE/ZuluIDE-firmware
-          token: ${{ secrets.SECRET_PAT }}
       
       - name: Upload to latest release
         env:
