@@ -8,8 +8,7 @@ jobs:
   build_firmware:
     name: Build firmware on Ubuntu 20.04
     runs-on: ubuntu-20.04
-    permissions:
-        actions: write
+    repository: ZuluIDE/ZuluIDE-firmware
     
     steps:
       - name: Check out code from GitHub
@@ -52,8 +51,7 @@ jobs:
           gh release upload --repo ${GITHUB_REPOSITORY} --clobber latest *
 
       - name: Upload to newly created release
-        env:
-        
+        env: 
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         if: ${{ startsWith(github.ref, 'refs/tags/') }}
         run: |
