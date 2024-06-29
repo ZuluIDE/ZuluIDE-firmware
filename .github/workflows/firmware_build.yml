@@ -32,6 +32,7 @@ jobs:
 
       - name: Upload binaries into build artifacts
         uses: actions/upload-artifact@v4
+        permissions: write-all
         with:
           path: ZuluIDE/distrib/*
           name: ZuluIDE binaries
