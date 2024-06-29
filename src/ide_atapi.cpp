@@ -1,19 +1,19 @@
 /**
  * ZuluIDE™ - Copyright (c) 2023 Rabbit Hole Computing™
  *
- * ZuluIDE™ firmware is licensed under the GPL version 3 or any later version. 
+ * ZuluIDE™ firmware is licensed under the GPL version 3 or any later version.
  *
  * https://www.gnu.org/licenses/gpl-3.0.html
  * ----
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version. 
+ * (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details. 
+ * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
@@ -24,6 +24,7 @@
 #include "atapi_constants.h"
 #include "ZuluIDE.h"
 #include "ZuluIDE_config.h"
+#include <minIni.h>
 
 // Map from command index for command name for logging
 static const char *get_atapi_command_name(uint8_t cmd)
@@ -180,6 +181,10 @@ bool IDEATAPIDevice::cmd_identify_packet_device(ide_registers_t *regs)
 {
     uint16_t idf[256] = {0};
 
+    copy_id_string(&idf[IDE_IDENTIFY_OFFSET_SERIAL_NUMBER], 10, m_devconfig.ata_serial);
+    copy_id_string(&idf[IDE_IDENTIFY_OFFSET_FIRMWARE_REV], 4, m_devconfig.ata_revision);
+    copy_id_string(&idf[IDE_IDENTIFY_OFFSET_MODEL_NUMBER], 20, m_devconfig.ata_model);
+
     idf[IDE_IDENTIFY_OFFSET_GENERAL_CONFIGURATION] = 0x8000 | (m_devinfo.devtype << 8) | (m_devinfo.removable ? 0x80 : 0); // Device type
     idf[IDE_IDENTIFY_OFFSET_GENERAL_CONFIGURATION] |= (1 << 5); // Interrupt DRQ mode
     idf[IDE_IDENTIFY_OFFSET_CAPABILITIES_1] = 0x0200; // LBA supported
@@ -227,9 +232,6 @@ bool IDEATAPIDevice::cmd_identify_packet_device(ide_registers_t *regs)
         if (m_atapi_state.udma_mode == 0) idf[IDE_IDENTIFY_OFFSET_MODEINFO_ULTRADMA] |= (1 << 8);
     }
 
-    copy_id_string(&idf[IDE_IDENTIFY_OFFSET_FIRMWARE_REV], 4, m_devinfo.atapi_revision);
-    copy_id_string(&idf[IDE_IDENTIFY_OFFSET_MODEL_NUMBER], 20, m_devinfo.atapi_model);
-
     // Calculate checksum
     // See 8.15.61 Word 255: Integrity word
     uint8_t checksum = 0xA5;
@@ -242,7 +244,7 @@ bool IDEATAPIDevice::cmd_identify_packet_device(ide_registers_t *regs)
 
     ide_phy_start_write(sizeof(idf));
     ide_phy_write_block((uint8_t*)idf, sizeof(idf));
-    
+
     uint32_t start = millis();
     while (!ide_phy_is_write_finished())
     {
@@ -327,7 +329,7 @@ bool IDEATAPIDevice::set_device_signature(uint8_t error, bool was_reset)
 
     regs.error = error;
     fill_device_signature(&regs);
-    
+
     if (was_reset)
     {
         regs.error = 1; // Diagnostics ok
@@ -769,7 +771,7 @@ bool IDEATAPIDevice::atapi_test_unit_ready(const uint8_t *cmd)
 bool IDEATAPIDevice::atapi_start_stop_unit(const uint8_t *cmd)
 {
     uint8_t cmd_eject = *(cmd + ATAPI_START_STOP_EJT_OFFSET);
-    if ((ATAPI_START_STOP_PWR_CON_MASK & cmd_eject) == 0 && 
+    if ((ATAPI_START_STOP_PWR_CON_MASK & cmd_eject) == 0 &&
         (ATAPI_START_STOP_LOEJ & cmd_eject) != 0)
     {
         // Eject condition
@@ -814,9 +816,9 @@ bool IDEATAPIDevice::atapi_inquiry(const uint8_t *cmd)
     inquiry[ATAPI_INQUIRY_REMOVABLE_MEDIA] = m_devinfo.removable ? 0x80 : 0;
     inquiry[ATAPI_INQUIRY_ATAPI_VERSION] = 0x21;
     inquiry[ATAPI_INQUIRY_EXTRA_LENGTH] = count - 5;
-    strncpy((char*)&inquiry[ATAPI_INQUIRY_VENDOR], m_devinfo.ide_vendor, 8);
-    strncpy((char*)&inquiry[ATAPI_INQUIRY_PRODUCT], m_devinfo.ide_product, 16);
-    strncpy((char*)&inquiry[ATAPI_INQUIRY_REVISION], m_devinfo.ide_revision, 4);
+    strncpy((char*)&inquiry[ATAPI_INQUIRY_VENDOR], m_devinfo.atapi_vendor, 8);
+    strncpy((char*)&inquiry[ATAPI_INQUIRY_PRODUCT], m_devinfo.atapi_product, 16);
+    strncpy((char*)&inquiry[ATAPI_INQUIRY_REVISION], m_devinfo.atapi_version, 4);
 
     if (req_bytes < count) count = req_bytes;
     atapi_send_data(inquiry, count);
@@ -878,7 +880,7 @@ bool IDEATAPIDevice::atapi_mode_sense(const uint8_t *cmd)
     memset(hdr, 0, 8);
     write_be16(&hdr[0], resp_bytes - 2);
     hdr[2] = m_devinfo.medium_type;
-    
+
     if (resp_bytes > req_bytes) resp_bytes = req_bytes;
     atapi_send_data(m_buffer.bytes, resp_bytes);
 
@@ -944,7 +946,7 @@ bool IDEATAPIDevice::atapi_request_sense(const uint8_t *cmd)
     resp[2] = m_atapi_state.sense_key;
     resp[7] = sense_length - 7;
     write_be16(&resp[12], m_atapi_state.sense_asc);
-    
+
     if (req_bytes < sense_length) sense_length = req_bytes;
     atapi_send_data(m_buffer.bytes, sense_length);
 
@@ -1102,7 +1104,7 @@ bool IDEATAPIDevice::doRead(uint32_t lba, uint32_t transfer_len)
     bool status = m_image->read((uint64_t)lba * m_devinfo.bytes_per_sector,
                                 m_devinfo.bytes_per_sector, transfer_len,
                                 this);
-    
+
     if (status)
     {
         return atapi_send_wait_finish() && atapi_cmd_ok();
@@ -1133,7 +1135,7 @@ bool IDEATAPIDevice::atapi_write(const uint8_t *cmd)
         return atapi_cmd_error(ATAPI_SENSE_NOT_READY, ATAPI_ASC_NO_MEDIUM);
     }
     else if (m_atapi_state.not_ready) return atapi_cmd_error(ATAPI_SENSE_NOT_READY, ATAPI_ASC_UNIT_BECOMING_READY);
-    
+
     uint32_t lba, transfer_len;
     if (cmd[0] == ATAPI_CMD_WRITE6)
     {
@@ -1252,4 +1254,22 @@ void IDEATAPIDevice::insert_media()
             m_removable.ejected = false;
             m_atapi_state.not_ready = true;
     }
+}
+
+void IDEATAPIDevice::set_inquiry_strings(char* default_vendor, char* default_product, char* default_version)
+{
+    char input_str[17];
+    uint8_t input_len;
+
+    memset(input_str, ' ', 16);
+    input_len = ini_gets("IDE", "atapi_product", default_product, input_str, 17, CONFIGFILE);
+    memcpy(m_devinfo.atapi_product, input_str, input_len);
+
+    memset(input_str, ' ', 8);
+    input_len = ini_gets("IDE","atapi_vendor", default_vendor, input_str, 9, CONFIGFILE);
+    memcpy(m_devinfo.atapi_vendor, input_str, input_len);
+
+    memset(input_str, ' ', 4);
+    input_len = ini_gets("IDE","atapi_version", default_version, input_str, 5, CONFIGFILE);
+    memcpy(m_devinfo.atapi_version, input_str, input_len);
 }

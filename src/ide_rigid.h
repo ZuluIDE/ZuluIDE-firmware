@@ -67,10 +67,6 @@ protected:
         // uint8_t media_status_events;
         uint8_t sectors_per_track;
         uint8_t heads;
-        char serial_number[20+1];
-        char firmware_rev[8+1];
-        char model_number[40+1];
-
     } m_devinfo;
 
     enum ata_data_state_t {

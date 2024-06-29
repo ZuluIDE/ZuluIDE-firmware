@@ -1,19 +1,19 @@
 /**
  * ZuluIDE™ - Copyright (c) 2023 Rabbit Hole Computing™
  *
- * ZuluIDE™ firmware is licensed under the GPL version 3 or any later version. 
+ * ZuluIDE™ firmware is licensed under the GPL version 3 or any later version.
  *
  * https://www.gnu.org/licenses/gpl-3.0.html
  * ----
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version. 
+ * (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details. 
+ * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
@@ -26,7 +26,7 @@
  * Major contributions by saybur <saybur@users.noreply.github.com>
  *
  * Some of the TOC structures are based on code from:
- * 
+ *
  * SCSI2SD V6 - Copyright (C) 2014 Michael McMaster <michael@codesrc.com>
  */
 
@@ -273,12 +273,9 @@ void IDECDROMDevice::initialize(int devidx)
     m_devinfo.devtype = ATAPI_DEVTYPE_CDROM;
     m_devinfo.removable = true;
     m_devinfo.bytes_per_sector = 2048;
-    
-    strncpy(m_devinfo.ide_vendor, "ZuluIDE", sizeof(m_devinfo.ide_vendor));
-    strncpy(m_devinfo.ide_product, "CD-ROM", sizeof(m_devinfo.ide_product));
-    memcpy(m_devinfo.ide_revision, ZULU_FW_VERSION, sizeof(m_devinfo.ide_revision));
-    strncpy(m_devinfo.atapi_model, "ZuluIDE CD-ROM", sizeof(m_devinfo.atapi_model));
-    memcpy(m_devinfo.atapi_revision, ZULU_FW_VERSION, sizeof(m_devinfo.atapi_revision));
+
+    set_inquiry_strings("ZuluIDE", "ZuluIDE CD-ROM", "1.0");
+    set_ident_strings("ZuluIDE CD-ROM", "1234567890", "1.0");
 
     m_devinfo.num_profiles = 1;
     m_devinfo.profiles[0] = ATAPI_PROFILE_CDROM;

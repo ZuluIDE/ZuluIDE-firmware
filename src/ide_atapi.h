@@ -71,13 +71,9 @@ protected:
         uint8_t media_status_events;
 
         // Response to INQUIRY
-        char ide_vendor[8];
-        char ide_product[16];
-        char ide_revision[4];
-
-        // Response to IDENTIFY PACKET DEVICE
-        char atapi_model[20];
-        char atapi_revision[4];
+        char atapi_vendor[8];
+        char atapi_product[16];
+        char atapi_version[4];
 
         // Profiles reported to GET CONFIGURATION
         uint16_t num_profiles;
@@ -186,6 +182,9 @@ protected:
 
     // ATAPI get_configuration responses
     virtual size_t atapi_get_configuration(uint16_t feature, uint8_t *buffer, size_t max_bytes);
+
+    // ATAPI standard inquiry string settings
+    void set_inquiry_strings(char* default_vendor, char* default_product, char* default_version);
 };
 
 

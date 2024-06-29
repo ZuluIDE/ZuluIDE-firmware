@@ -68,10 +68,17 @@ protected:
         int max_udma_mode;
         int max_pio_mode;
         int max_blocksize;
+        // Response to IDENTIFY PACKET DEVICE/IDENTIFY DEVICE
+        char ata_model[40];
+        char ata_revision[8];
+        char ata_serial[20];
+
     } m_devconfig;
 
     // PHY capabilities limited by active device configuration
     ide_phy_capabilities_t m_phy_caps;
+
+    void set_ident_strings(char* default_model, char* default_serial, char* default_revision);
 };
 
 // Initialize the protocol layer with devices
@@ -82,3 +89,4 @@ const ide_phy_config_t *ide_protocol_get_config();
 
 // Call this periodically to process events
 void ide_protocol_poll();
+
