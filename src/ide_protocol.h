@@ -90,7 +90,7 @@ protected:
     // PHY capabilities limited by active device configuration
     ide_phy_capabilities_t m_phy_caps;
 
-    void set_ident_strings(char* default_model, char* default_serial, char* default_revision);
+    void set_ident_strings(const char* default_model, const char* default_serial, const char* default_revision);
 };
 
 // Initialize the protocol layer with devices

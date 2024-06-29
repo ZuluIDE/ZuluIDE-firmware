@@ -62,8 +62,9 @@ void IDEZipDrive::initialize(int devidx)
     m_media_status_notification = false;
 
     m_zip_disk_info.button_pressed = false;
-    memset(m_zip_disk_info.serial_string, ' ', sizeof(m_zip_disk_info) -1);
-    m_zip_disk_info.serial_string[sizeof(m_zip_disk_info)- 1];
+
+    memset(m_zip_disk_info.serial_string, ' ', sizeof(m_zip_disk_info) - 2);
+    m_zip_disk_info.serial_string[sizeof(m_zip_disk_info.serial_string) - 1] = '\0';
 }
 
 // Capacity is based on image size

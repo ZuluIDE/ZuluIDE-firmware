@@ -1351,7 +1351,7 @@ void IDEATAPIDevice::sd_card_inserted()
     }
 }
 
-void IDEATAPIDevice::set_inquiry_strings(char* default_vendor, char* default_product, char* default_version)
+void IDEATAPIDevice::set_inquiry_strings(const char* default_vendor, const char* default_product, const char* default_version)
 {
     char input_str[17];
     uint8_t input_len;

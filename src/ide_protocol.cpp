@@ -412,7 +412,7 @@ void ide_protocol_poll()
     }
 }
 
-void IDEDevice::set_ident_strings(char* default_model, char* default_serial, char* default_revision)
+void IDEDevice::set_ident_strings(const char* default_model, const char* default_serial, const char* default_revision)
 {
     char input_str[41];
     uint8_t input_len;

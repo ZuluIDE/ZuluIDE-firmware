@@ -201,5 +201,5 @@ protected:
     virtual size_t atapi_get_configuration(uint16_t feature, uint8_t *buffer, size_t max_bytes);
 
     // ATAPI standard inquiry string settings
-    void set_inquiry_strings(char* default_vendor, char* default_product, char* default_version);
+    void set_inquiry_strings(const char* default_vendor, const char* default_product, const char* default_version);
 };
