@@ -256,6 +256,8 @@ void ide_protocol_poll()
                     // keep result from latest HWRST.
                     g_drive1_detected = false;
                 }
+                if (g_ide_devices[0]) g_ide_devices[0]->reset();
+                if (g_ide_devices[1]) g_ide_devices[1]->reset();
             }
 
             if (g_ide_devices[0]) g_ide_devices[0]->handle_event(evt);

@@ -1,19 +1,19 @@
 /**
  * ZuluIDE™ - Copyright (c) 2023 Rabbit Hole Computing™
  *
- * ZuluIDE™ firmware is licensed under the GPL version 3 or any later version. 
+ * ZuluIDE™ firmware is licensed under the GPL version 3 or any later version.
  *
  * https://www.gnu.org/licenses/gpl-3.0.html
  * ----
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version. 
+ * (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details. 
+ * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
@@ -35,11 +35,20 @@ public:
     // Loads configuration
     virtual void initialize(int devidx);
 
+    // Resets member variables after IDE/ATA reset
+    virtual void reset() = 0;
+
     // Set image backing file to access
     virtual void set_image(IDEImage *image) = 0;
 
-    // Called periodically by main loop
-    virtual void poll() = 0;
+    // polls eject buttons status
+    virtual void eject_button_poll(bool immediate) = 0;
+
+    // device medium is present
+    virtual bool is_medium_present() = 0;
+
+    // tests if an image is open
+    virtual bool has_image() = 0;
 
     // Called whenever new command is received from host.
     // The handler should use ide_phy_send_msg() to send response.
@@ -50,7 +59,7 @@ public:
     // Implementation can be empty.
     virtual void handle_event(ide_event_t event) = 0;
 
-    // Returns true if this device implements the ATAPI packet command set 
+    // Returns true if this device implements the ATAPI packet command set
     virtual bool is_packet_device() { return false; }
 
     // Returns true if this device does not use the IORdy signal
@@ -60,6 +69,9 @@ public:
 
     // Set signature values for ide register
     virtual void fill_device_signature(ide_registers_t *regs) = 0;
+
+    // Called when an SD card is reinserted
+    virtual void sd_card_inserted() = 0;
 
 
 protected:

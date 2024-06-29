@@ -1,19 +1,19 @@
 /**
  * ZuluIDE™ - Copyright (c) 2023 Rabbit Hole Computing™
  *
- * ZuluIDE™ firmware is licensed under the GPL version 3 or any later version. 
+ * ZuluIDE™ firmware is licensed under the GPL version 3 or any later version.
  *
  * https://www.gnu.org/licenses/gpl-3.0.html
  * ----
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version. 
+ * (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details. 
+ * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
@@ -60,6 +60,10 @@ void IDEZipDrive::initialize(int devidx)
     m_removable.reinsert_media_on_inquiry =  ini_getbool("IDE", "reinsert_media_on_inquiry", true, CONFIGFILE);
 
     m_media_status_notification = false;
+
+    m_zip_disk_info.button_pressed = false;
+    memset(m_zip_disk_info.serial_string, ' ', sizeof(m_zip_disk_info) -1);
+    m_zip_disk_info.serial_string[sizeof(m_zip_disk_info)- 1];
 }
 
 // Capacity is based on image size
@@ -78,6 +82,14 @@ bool IDEZipDrive::handle_command(ide_registers_t *regs)
         case IDE_CMD_GET_MEDIA_STATUS: return cmd_get_media_status(regs);
         default: return IDEATAPIDevice::handle_command(regs);
     }
+}
+
+void IDEZipDrive::button_eject_media()
+{
+    if (m_removable.prevent_removable)
+        m_zip_disk_info.button_pressed = true;
+    else
+        eject_media();
 }
 
 bool IDEZipDrive::cmd_set_features(ide_registers_t *regs)
@@ -115,26 +127,25 @@ void IDEZipDrive::set_image(IDEImage *image)
         image->get_filename(filename, sizeof(filename));
         uint64_t actual_size = image->capacity();
         uint64_t expected_size = ZIP100_SECTORSIZE * ZIP100_SECTORCOUNT;
+        // use filename for Zip disk serial string
+        size_t filename_len = strlen(filename);
+        size_t serial_len = sizeof(m_zip_disk_info.serial_string) - 1;
+        if ( filename_len > serial_len)
+            filename_len = serial_len;
+        memset(m_zip_disk_info.serial_string, ' ', serial_len);
+        m_zip_disk_info.serial_string[serial_len] = '\0';
+        memcpy(m_zip_disk_info.serial_string, filename, filename_len);
+
+        m_zip_disk_info.button_pressed = false;
+
         if (actual_size < expected_size)
         {
             logmsg("-- WARNING: Image file ", filename, " is only ", (int)actual_size, " bytes, expecting more than or equal to", (int)expected_size, " bytes");
         }
-   
+
     }
 
     IDEATAPIDevice::set_image(image);
-
-    // Notify host of media change
-    m_atapi_state.unit_attention = true;
-
-    if (!image)
-    {
-        m_atapi_state.sense_asc = ATAPI_ASC_NO_MEDIUM;
-    }
-    else
-    {
-       m_atapi_state.sense_asc = ATAPI_ASC_MEDIUM_CHANGE;
-    }
 }
 
 // "ATAPI devices shall swap bytes for ASCII fields to maintain compatibility with ATA."
@@ -174,7 +185,7 @@ bool IDEZipDrive::cmd_identify_packet_device(ide_registers_t *regs)
         idf[IDE_IDENTIFY_OFFSET_PIO_CYCLETIME_IORDY] =  0x01f4;
         idf[IDE_IDENTIFY_OFFSET_STANDARD_VERSION_MAJOR] = 0;
         idf[IDE_IDENTIFY_OFFSET_STANDARD_VERSION_MINOR] = 0;
-        idf[IDE_IDENTIFY_OFFSET_MODEINFO_ULTRADMA] = 0; 
+        idf[IDE_IDENTIFY_OFFSET_MODEINFO_ULTRADMA] = 0;
         idf[IDE_IDENTIFY_OFFSET_REMOVABLE_MEDIA_SUPPORT] = 0x0101; // PACKET, Removable device command sets supported
     }
     else if (m_image && m_image->get_drive_type() == drive_type_t::DRIVE_TYPE_ZIP250)
@@ -182,7 +193,7 @@ bool IDEZipDrive::cmd_identify_packet_device(ide_registers_t *regs)
         idf[IDE_IDENTIFY_OFFSET_CAPABILITIES_1] = 0x0F00;
         idf[IDE_IDENTIFY_OFFSET_PIO_MODE_ATA1] = 0x0200;
         idf[IDE_IDENTIFY_OFFSET_MODE_INFO_VALID] = 0x0006;
-        idf[IDE_IDENTIFY_OFFSET_MODEINFO_MULTIWORD] = 0x0203;  
+        idf[IDE_IDENTIFY_OFFSET_MODEINFO_MULTIWORD] = 0x0203;
         idf[IDE_IDENTIFY_OFFSET_MODEINFO_PIO] = 0x0001;
         idf[IDE_IDENTIFY_OFFSET_MULTIWORD_CYCLETIME_MIN] = 0x0096;
         idf[IDE_IDENTIFY_OFFSET_MULTIWORD_CYCLETIME_REC] = 0x0096;
@@ -199,7 +210,7 @@ bool IDEZipDrive::cmd_identify_packet_device(ide_registers_t *regs)
         logmsg("Unsupported Zip Drive type");
         return false;
     }
-    
+
     idf[IDE_IDENTIFY_OFFSET_CAPABILITIES_2] = 0x4002;
     // vendor specific - Copyright notice
     idf[129] = 0x2863;
@@ -236,7 +247,7 @@ bool IDEZipDrive::cmd_identify_packet_device(ide_registers_t *regs)
             return false;
         }
     }
-    
+
     ide_phy_assert_irq(IDE_STATUS_DEVRDY);
 
     return true;
@@ -269,7 +280,7 @@ bool IDEZipDrive::cmd_get_media_status(ide_registers_t *regs)
         ide_phy_assert_irq(IDE_STATUS_DEVRDY | IDE_STATUS_ERR);
     }
     return true;
-} 
+}
 
 
 bool IDEZipDrive::handle_atapi_command(const uint8_t *cmd)
@@ -279,7 +290,7 @@ bool IDEZipDrive::handle_atapi_command(const uint8_t *cmd)
         case ATAPI_CMD_FORMAT_UNIT: return atapi_format_unit(cmd);
         case ATAPI_CMD_READ_FORMAT_CAPACITIES: return atapi_read_format_capacities(cmd);
         case ATAPI_CMD_VERIFY10: return atapi_verify(cmd);
-        case ATAPI_CMD_VENDOR_0x06: return atapi_zip_disk_serial(cmd);
+        case ATAPI_CMD_VENDOR_0x06: return atapi_zip_disk_0x06(cmd);
         case ATAPI_CMD_VENDOR_0x0D: return atapi_zip_disk_0x0D(cmd);
         default:
             return IDEATAPIDevice::handle_atapi_command(cmd);
@@ -288,6 +299,7 @@ bool IDEZipDrive::handle_atapi_command(const uint8_t *cmd)
 
 bool IDEZipDrive::atapi_format_unit(const uint8_t *cmd)
 {
+    if (!is_medium_present()) return atapi_cmd_not_ready_error();
     // Read format descriptor
     atapi_recv_data_block(m_buffer.bytes, 12);
 
@@ -312,17 +324,6 @@ bool IDEZipDrive::atapi_read_format_capacities(const uint8_t *cmd)
     return atapi_cmd_ok();
 }
 
-bool IDEZipDrive::atapi_read_capacity(const uint8_t *cmd)
-{
-    uint32_t last_lba = capacity_lba() - 1;
-    uint8_t *buf = m_buffer.bytes;
-    write_be32(&buf[0], last_lba);
-    write_be32(&buf[4], 512);
-    atapi_send_data(buf, 8);
-
-    return atapi_cmd_ok();
-}
-
 bool IDEZipDrive::atapi_verify(const uint8_t *cmd)
 {
     dbgmsg("---- ATAPI VERIFY dummy implementation");
@@ -332,7 +333,7 @@ bool IDEZipDrive::atapi_verify(const uint8_t *cmd)
 bool IDEZipDrive::atapi_inquiry(const uint8_t *cmd)
 {
     uint8_t req_bytes = cmd[4];
-     
+
     uint8_t *inquiry = m_buffer.bytes;
     uint8_t count = 0;
 
@@ -457,7 +458,7 @@ bool IDEZipDrive::atapi_inquiry(const uint8_t *cmd)
     return atapi_cmd_ok();
 }
 
-bool IDEZipDrive::atapi_zip_disk_serial(const uint8_t *cmd)
+bool IDEZipDrive::atapi_zip_disk_0x06(const uint8_t *cmd)
 {
 
     if (cmd[2] != 0x02)
@@ -468,25 +469,27 @@ bool IDEZipDrive::atapi_zip_disk_serial(const uint8_t *cmd)
     const uint8_t count = 64;
     uint8_t *buf = m_buffer.bytes;
     memset(buf, 0x00, count);
-    if (!is_medium_present() || m_image == nullptr)
+
+    // These seem to differ between different drives, even of the same type
+    if (m_image &&  m_image->get_drive_type() == drive_type_t::DRIVE_TYPE_ZIP100)
+    {
+        buf[0x3E] = 0x00;
+        buf[0x3F] = 0x12;
+    }
+    else if(m_image && m_image->get_drive_type() == drive_type_t::DRIVE_TYPE_ZIP250)
+    {
+        buf[62] = 0x10;
+        buf[63] = 0x10;
+    }
+
+    if (!is_medium_present())
     {
         // no disk
         buf[0] = 0x02;
         buf[1] = 0x3E;
         buf[2] = 0x04;
         buf[11] = 0x02;
-        buf[62] = 0x10;
-        buf[63] = 0x10;
-        if (m_image &&  m_image->get_drive_type() == drive_type_t::DRIVE_TYPE_ZIP100)
-        {
-            buf[0x3E] = 0x00;
-            buf[0x3F] = 0x12;
-        }
-        else if(m_image && m_image->get_drive_type() == drive_type_t::DRIVE_TYPE_ZIP250)
-        {
-            buf[62] = 0x10;
-            buf[63] = 0x10;
-        }
+
     }
     else
     {
@@ -495,7 +498,7 @@ bool IDEZipDrive::atapi_zip_disk_serial(const uint8_t *cmd)
             // 100MB disk
             buf[0x00] = 0x02;
             buf[0x01] = 0x3E;
-            buf[0x02] = 0x00;
+            buf[0x02] = m_zip_disk_info.button_pressed ? 0x01 : 0x00;
             buf[0x03] = 0x02;
             buf[0x04] = 0x00;
             buf[0x05] = 0x00;
@@ -515,31 +518,8 @@ bool IDEZipDrive::atapi_zip_disk_serial(const uint8_t *cmd)
             buf[0x13] = 0x00;
             buf[0x14] = 0x00;
             buf[0x15] = 0x00;
-            buf[0x16] = 0x30;
-            buf[0x17] = 0x36;
-            buf[0x18] = 0x33;
-            buf[0x19] = 0x31;
-            buf[0x1A] = 0x32;
-            buf[0x1B] = 0x33;
-            buf[0x1C] = 0x39;
-            buf[0x1D] = 0x30;
-            buf[0x1E] = 0x31;
-            buf[0x1F] = 0x30;
-            buf[0x20] = 0x39;
-            buf[0x21] = 0x30;
-            buf[0x22] = 0x32;
-            buf[0x23] = 0x32;
-            buf[0x24] = 0x30;
-            buf[0x25] = 0x31;
-            buf[0x26] = 0x30;
-            buf[0x27] = 0x33;
-            buf[0x28] = 0x5A;
-            buf[0x29] = 0x49;
-            buf[0x2A] = 0x50;
-            buf[0x2B] = 0x31;
-            buf[0x2C] = 0x20;
-            buf[0x2D] = 0x20;
-            buf[0x2E] = 0x20;
+            // serial number
+            memcpy(buf + 0x16, m_zip_disk_info.serial_string, sizeof(m_zip_disk_info.serial_string) -1);
             buf[0x2F] = 0x41;
             buf[0x30] = 0x34;
             buf[0x31] = 0x32;
@@ -555,19 +535,17 @@ bool IDEZipDrive::atapi_zip_disk_serial(const uint8_t *cmd)
             buf[0x3B] = 0x20;
             buf[0x3C] = 0x20;
             buf[0x3D] = 0x20;
-            buf[0x3E] = 0x00;
-            buf[0x3F] = 0x12;
         }
         else if (m_image && m_image->get_drive_type() == drive_type_t::DRIVE_TYPE_ZIP250)
         {
-            // 100MB disk
-            buf[0] = 0x02;
-            buf[1] = 0x3E;
-            buf[2] = 0x00;
-            buf[3] = 0x02;
-            buf[6] = 0x02;
-            buf[7] = 0xFF;
-            buf[8] = 0xFF;
+            // 250 disk
+            buf[0x00] = 0x02;
+            buf[0x01] = 0x3E;
+            buf[0x02] = m_zip_disk_info.button_pressed ? 0x01 : 0x00;
+            buf[0x03] = 0x02;
+            buf[0x06] = 0x02;
+            buf[0x07] = 0xFF;
+            buf[0x08] = 0xFF;
             buf[0x09] = 0x00;
             buf[0x0A] = 0x00;
             buf[0x0B] = 0x02;
@@ -621,8 +599,6 @@ bool IDEZipDrive::atapi_zip_disk_serial(const uint8_t *cmd)
             buf[0x3B] = 0x20;
             buf[0x3C] = 0x20;
             buf[0x3D] = 0x20;
-            buf[0x3E] = 0x10;
-            buf[0x3F] = 0x10;
         }
     }
     atapi_send_data(buf, count);
@@ -646,7 +622,7 @@ size_t IDEZipDrive::atapi_get_mode_page(uint8_t page_ctrl, uint8_t page_idx, uin
         buffer[5] = 0x00;
         buffer[6] = 0x00;
         buffer[7] = 0x00;
-        
+
         if (page_ctrl == 1)
         {
             // Mask out unchangeable parameters
@@ -655,7 +631,7 @@ size_t IDEZipDrive::atapi_get_mode_page(uint8_t page_ctrl, uint8_t page_idx, uin
 
         return 8;
     }
-    
+
     if (page_idx == ATAPI_MODESENSE_FLEXDISK)
     {
         memset(buffer, 0, 32);
@@ -695,7 +671,7 @@ size_t IDEZipDrive::atapi_get_mode_page(uint8_t page_ctrl, uint8_t page_idx, uin
         buffer[9] = 0xFF;
         buffer[10] = 0xFF;
         buffer[11] = 0xFF;
-        
+
         if (page_ctrl == 1)
         {
             // Mask out unchangeable parameters

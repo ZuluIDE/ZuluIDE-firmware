@@ -51,6 +51,11 @@ void IDERigidDevice::initialize(int devidx)
     set_ident_strings("ZuluIDE Hard Drive", "123456789", "1.0");
 }
 
+void IDERigidDevice::reset()
+{
+    memset(&m_removable, 0, sizeof(m_removable));
+}
+
 void IDERigidDevice::set_image(IDEImage *image)
 {
     m_image = image;
@@ -58,12 +63,6 @@ void IDERigidDevice::set_image(IDEImage *image)
     // m_atapi_state.unit_attention = true;
     // m_atapi_state.sense_asc = ATAPI_ASC_MEDIUM_CHANGE;
 }
-
-void IDERigidDevice::poll()
-{
-
-}
-
 
 bool IDERigidDevice::handle_command(ide_registers_t *regs)
 {
