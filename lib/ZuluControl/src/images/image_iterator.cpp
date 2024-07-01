@@ -141,12 +141,24 @@ bool ImageIterator::MovePrevious() {
   return false;
 }
 
+void ImageIterator::Cleanup() {
+  if (currentFile.isOpen()) {
+    currentFile.close();
+  }
+  
+  if (root.isOpen()) {
+    root.close();
+  }
+}
+
 void ImageIterator::Reset() {
+  Cleanup();
+  
   if (!root.open("/")) {
     logmsg("Failed to open root directory.");
   }
 
-  if(root.isOpen()) {
+  if (root.isOpen()) {
     FsFile curFile;
     bool oneIsValid = false;
     bool firstIdxSet = false;

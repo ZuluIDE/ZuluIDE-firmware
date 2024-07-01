@@ -131,3 +131,49 @@ bool SystemStatus::IsCardPresent() const {
 void SystemStatus::SetIsCardPresent(bool value) {
   isCardPresent = value;
 }
+
+static const char* toString(bool value) {
+  if (value) {
+    return "true";
+  } else {
+    return "false";
+  }
+}
+
+static void outputField(std::string& output, const char* fieldName, const std::string& value) {
+  output.append("\"");
+  output.append(fieldName);
+  output.append("\":\"");
+  output.append(value);
+  output.append("\"");
+}
+
+static void outputField(std::string& output, const char* fieldName, const char* value) {
+  output.append("\"");
+  output.append(fieldName);
+  output.append("\":\"");
+  output.append(value);
+  output.append("\"");
+}
+
+static void outputField(std::string& output, const char* fieldName, bool value) {
+  outputField(output, fieldName, toString(value));
+}
+
+
+std::string SystemStatus::ToJson() const {
+  std::string output = "{";
+  outputField(output, "isPrimary", isPrimary);
+  output.append(",");
+  outputField(output, "isCardPresent", isCardPresent);
+  output.append(",");
+  outputField(output, "fwVer", firmwareVersion);
+  if (loadedImage) {
+    output.append(",");
+    output.append(loadedImage->ToJson("image"));
+  }
+  
+  output.append("}");
+  
+  return output;
+}
