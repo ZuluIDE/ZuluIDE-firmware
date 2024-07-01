@@ -24,7 +24,7 @@
 #include "atapi_constants.h"
 #include "ZuluIDE.h"
 #include "ZuluIDE_config.h"
-#include "minIni.h"
+#include <minIni.h>
 
 // Map from command index for command name for logging
 static const char *get_atapi_command_name(uint8_t cmd)
@@ -189,6 +189,10 @@ bool IDEATAPIDevice::cmd_identify_packet_device(ide_registers_t *regs)
 {
     uint16_t idf[256] = {0};
 
+    copy_id_string(&idf[IDE_IDENTIFY_OFFSET_SERIAL_NUMBER], 10, m_devconfig.ata_serial);
+    copy_id_string(&idf[IDE_IDENTIFY_OFFSET_FIRMWARE_REV], 4, m_devconfig.ata_revision);
+    copy_id_string(&idf[IDE_IDENTIFY_OFFSET_MODEL_NUMBER], 20, m_devconfig.ata_model);
+
     idf[IDE_IDENTIFY_OFFSET_GENERAL_CONFIGURATION] = 0x8000 | (m_devinfo.devtype << 8) | (m_devinfo.removable ? 0x80 : 0); // Device type
     idf[IDE_IDENTIFY_OFFSET_GENERAL_CONFIGURATION] |= (1 << 5); // Interrupt DRQ mode
     idf[IDE_IDENTIFY_OFFSET_CAPABILITIES_1] = 0x0200; // LBA supported
@@ -235,9 +239,6 @@ bool IDEATAPIDevice::cmd_identify_packet_device(ide_registers_t *regs)
         idf[IDE_IDENTIFY_OFFSET_MODEINFO_ULTRADMA] = 0x0001;
         if (m_atapi_state.udma_mode == 0) idf[IDE_IDENTIFY_OFFSET_MODEINFO_ULTRADMA] |= (1 << 8);
     }
-
-    copy_id_string(&idf[IDE_IDENTIFY_OFFSET_FIRMWARE_REV], 4, m_devinfo.atapi_revision);
-    copy_id_string(&idf[IDE_IDENTIFY_OFFSET_MODEL_NUMBER], 20, m_devinfo.atapi_model);
 
     // Calculate checksum
     // See 8.15.61 Word 255: Integrity word
@@ -842,9 +843,9 @@ bool IDEATAPIDevice::atapi_inquiry(const uint8_t *cmd)
     inquiry[ATAPI_INQUIRY_REMOVABLE_MEDIA] = m_devinfo.removable ? 0x80 : 0;
     inquiry[ATAPI_INQUIRY_ATAPI_VERSION] = 0x21;
     inquiry[ATAPI_INQUIRY_EXTRA_LENGTH] = count - 5;
-    strncpy((char*)&inquiry[ATAPI_INQUIRY_VENDOR], m_devinfo.ide_vendor, 8);
-    strncpy((char*)&inquiry[ATAPI_INQUIRY_PRODUCT], m_devinfo.ide_product, 16);
-    strncpy((char*)&inquiry[ATAPI_INQUIRY_REVISION], m_devinfo.ide_revision, 4);
+    strncpy((char*)&inquiry[ATAPI_INQUIRY_VENDOR], m_devinfo.atapi_vendor, 8);
+    strncpy((char*)&inquiry[ATAPI_INQUIRY_PRODUCT], m_devinfo.atapi_product, 16);
+    strncpy((char*)&inquiry[ATAPI_INQUIRY_REVISION], m_devinfo.atapi_version, 4);
 
     if (req_bytes < count) count = req_bytes;
     atapi_send_data(inquiry, count);
@@ -1348,4 +1349,22 @@ void IDEATAPIDevice::sd_card_inserted()
     {
         insert_media();
     }
+}
+
+void IDEATAPIDevice::set_inquiry_strings(const char* default_vendor, const char* default_product, const char* default_version)
+{
+    char input_str[17];
+    uint8_t input_len;
+
+    memset(input_str, ' ', 16);
+    input_len = ini_gets("IDE", "atapi_product", default_product, input_str, 17, CONFIGFILE);
+    memcpy(m_devinfo.atapi_product, input_str, input_len);
+
+    memset(input_str, ' ', 8);
+    input_len = ini_gets("IDE","atapi_vendor", default_vendor, input_str, 9, CONFIGFILE);
+    memcpy(m_devinfo.atapi_vendor, input_str, input_len);
+
+    memset(input_str, ' ', 4);
+    input_len = ini_gets("IDE","atapi_version", default_version, input_str, 5, CONFIGFILE);
+    memcpy(m_devinfo.atapi_version, input_str, input_len);
 }

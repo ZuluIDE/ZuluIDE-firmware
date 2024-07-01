@@ -1,19 +1,19 @@
 /**
  * ZuluIDE™ - Copyright (c) 2024 Rabbit Hole Computing™
  *
- * ZuluIDE™ firmware is licensed under the GPL version 3 or any later version. 
+ * ZuluIDE™ firmware is licensed under the GPL version 3 or any later version.
  *
  * https://www.gnu.org/licenses/gpl-3.0.html
  * ----
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version. 
+ * (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details. 
+ * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
@@ -38,12 +38,9 @@ void IDERemovable::initialize(int devidx)
     m_devinfo.removable = true;
     m_devinfo.writable = true;
     m_devinfo.bytes_per_sector = REMOVABLE_SECTORSIZE;
-    
-    strncpy(m_devinfo.ide_vendor, "ZULUIDE", sizeof(m_devinfo.ide_vendor));
-    strncpy(m_devinfo.ide_product, "REMOVABLE", sizeof(m_devinfo.ide_product));
-    memcpy(m_devinfo.ide_revision, "14.A", sizeof(m_devinfo.ide_revision));
-    strncpy(m_devinfo.atapi_model, "ZULUIDE REMOVABLE", sizeof(m_devinfo.atapi_model));
-    memcpy(m_devinfo.atapi_revision, "14.A", sizeof(m_devinfo.atapi_revision));
+
+    set_inquiry_strings("ZULUIDE", "REMOVABLE", "1.0");
+    set_ident_strings("ZULUIDE REMOVABLE", "1234567890", "1.0");
 
     m_devinfo.num_profiles = 1;
     m_devinfo.profiles[0] = ATAPI_PROFILE_REMOVABLE;
@@ -147,7 +144,7 @@ size_t IDERemovable::atapi_get_mode_page(uint8_t page_ctrl, uint8_t page_idx, ui
         buffer[5] = 0x00;
         buffer[6] = 0x00;
         buffer[7] = 0x00;
-        
+
         if (page_ctrl == 1)
         {
             // Mask out unchangeable parameters
@@ -171,7 +168,7 @@ size_t IDERemovable::atapi_get_mode_page(uint8_t page_ctrl, uint8_t page_idx, ui
         buffer[9] = 0xFF;
         buffer[10] = 0xFF;
         buffer[11] = 0xFF;
-        
+
         if (page_ctrl == 1)
         {
             // Mask out unchangeable parameters
