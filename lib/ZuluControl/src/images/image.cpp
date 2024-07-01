@@ -48,3 +48,64 @@ bool Image::operator==(const Image& other) {
 const uint64_t Image::GetFileSizeBytes() const {
   return fileSizeBytes;
 }
+
+static void outputField(std::string& output, const char* fieldName, const std::string& value) {
+  output.append("\"");
+  output.append(fieldName);
+  output.append("\":\"");
+  output.append(value);
+  output.append("\"");
+}
+
+static void outputField(std::string& output, const char* fieldName, uint64_t value) {
+  outputField(output, fieldName, std::to_string(value));
+}
+
+static const char* toString(Image::ImageType type) {
+  switch (type) {
+  case Image::ImageType::cdrom: {
+    return "cdrom";
+  }
+    
+  case Image::ImageType::zip100: {
+    return "zip100";
+  }
+
+  case Image::ImageType::zip250: {
+    return "zip250";
+  }
+
+  case Image::ImageType::zip750: {
+    return "zip750";
+  }
+
+  case Image::ImageType::generic: {
+    return "generic";
+  }
+
+  case Image::ImageType::unknown:
+  default: {
+    return "unknown";
+  }
+  }
+}
+
+std::string Image::ToJson() {
+  std::string buffer;
+  buffer.append("{");
+  outputField(buffer, "filename", filenm);
+  buffer.append(",");
+  outputField(buffer, "size", fileSizeBytes);
+  buffer.append(",");
+  outputField(buffer, "type", toString(imgType));
+  buffer.append("}");
+  return buffer;
+}
+
+std::string Image::ToJson(const char* fieldName) {
+  std::string buffer = "\"";
+  buffer.append(fieldName);
+  buffer.append("\":");
+  buffer.append(ToJson());
+  return buffer;
+}
