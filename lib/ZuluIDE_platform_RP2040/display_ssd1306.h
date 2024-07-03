@@ -27,6 +27,7 @@
 #include <zuluide/status/system_status.h>
 #include <zuluide/control/display_state.h>
 #include <memory>
+#include <pico/time.h>
 
 using namespace zuluide::status;
 
@@ -37,6 +38,11 @@ namespace zuluide {
     void init(TwoWire* wire);
     virtual void HandleUpdate(const SystemStatus& current);
     void HandleUpdate(const zuluide::control::DisplayState& current);
+    /***
+	Called in a polling fashion in order to allow the display to animate
+	itself (e.g., scrolling text.)
+     */
+    void Refresh();
   private:
     TwoWire* m_wire;
     Adafruit_SSD1306 graph;
@@ -45,14 +51,21 @@ namespace zuluide {
     uint16_t lineLength;
     uint16_t lineCount;
     uint16_t centerBase;
+    absolute_time_t nextRefresh;
+    uint16_t imageNameWidthPixels;
+    uint16_t imageNameOffsetPixels;
+    /***
+	Indicates whether to scroll the text automatically or to use the manual rotary encoder scrolling.
+     */
+    bool scrollText;
     std::unique_ptr<zuluide::control::DisplayState> currentDispState;
     std::unique_ptr<SystemStatus> currentSysStatus;
     void updateDisplay();
-    void displayStatus();
+    void displayStatus(bool isRefresh);
     void displayMenu();
     void displayEject();
-    void displaySelect();
-    void displayInfo();
+    void displaySelect(bool isRefresh);
+    void displayInfo(bool isRefresh);    
     uint8_t cdrom_loaded[16*4] =
       {
 0x0,0xf,0xe0,0x0,
