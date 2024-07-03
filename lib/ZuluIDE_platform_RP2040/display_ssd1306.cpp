@@ -29,6 +29,12 @@ using namespace zuluide::status;
 #define SS1306_ADDR 0x3c
 #endif
 
+#ifndef SCROLL_INTERVAL_MS
+#define SCROLL_INTERVAL_MS 60
+#endif
+
+#define IMAGE_NAME_SPACING 5
+
 static const char* toString(const zuluide::control::MenuState::Entry value);
 static const char* toString(const zuluide::control::EjectState::Entry value);
 static uint16_t centerText(const char* text, Adafruit_SSD1306& graph);
@@ -36,7 +42,7 @@ static uint16_t centerText(const std::string& text, Adafruit_SSD1306& graph);
 static void truncate(std::string& toProcess);
 static std::string makeImageSizeStr(uint64_t size);
 
-DisplaySSD1306::DisplaySSD1306()
+DisplaySSD1306::DisplaySSD1306() : nextRefresh(at_the_end_of_time), scrollText(true)
 {
 }
 
@@ -60,7 +66,7 @@ void DisplaySSD1306::init(TwoWire* wire) {
 
     graph.clearDisplay();
     graph.setTextColor(WHITE, BLACK);
-    graph.setCursor(0, lineCount / 2);    
+    graph.setCursor(0, lineCount / 2);
     graph.print("Initializing");
     graph.display();
   } else {
@@ -82,7 +88,7 @@ void DisplaySSD1306::updateDisplay() {
   if (currentDispState && currentSysStatus) {
     switch (currentDispState->GetCurrentMode()) {
     case zuluide::control::Mode::Status: {
-      displayStatus();
+      displayStatus(false);
       break;
     }
     case zuluide::control::Mode::Menu:
@@ -92,15 +98,18 @@ void DisplaySSD1306::updateDisplay() {
       displayEject();
       break;
     case zuluide::control::Mode::Select:
-      displaySelect();
+      displaySelect(false);
       break;
     case zuluide::control::Mode::NewImage:
       break;
     case zuluide::control::Mode::Info: {
-      displayInfo();
+      displayInfo(false);
       break;
     }
     }
+
+    // Set the time of the next refresh.
+    nextRefresh = make_timeout_time_ms(SCROLL_INTERVAL_MS);
   } else {
     // Show loading message.
     if (!currentDispState && !currentSysStatus) {
@@ -113,22 +122,57 @@ void DisplaySSD1306::updateDisplay() {
   }
 }
 
-void DisplaySSD1306::displayStatus() {
-  graph.clearDisplay();  
+void DisplaySSD1306::displayStatus(bool isRefresh) {
+  graph.clearDisplay();
   graph.setTextColor(WHITE, BLACK);
   graph.setCursor(32, centerBase);
   if (currentSysStatus->HasLoadedImage()) {
-    graph.drawBitmap(0, 8, cdrom_loaded, 32, 16, WHITE);
     int offset = currentDispState->GetStatusState().GetImageNameOffset();
     const char* filename = currentSysStatus->GetLoadedImage().GetFilename().c_str();
-    if (offset < currentSysStatus->GetLoadedImage().GetFilename().length()) {
+    if (!isRefresh) {
+      // If this isn't a refresh, then store the width of the image name.
+      int16_t x=0, y=0;
+      uint16_t h=0;
+      graph.getTextBounds(filename, 0 ,0, &x, &y, &imageNameWidthPixels, &h);
+      imageNameWidthPixels += IMAGE_NAME_SPACING;
+      imageNameOffsetPixels = 0;
+    }
+
+    if (scrollText) {
+      auto left = 32 - imageNameOffsetPixels;
+      // Move the cursor.
+      graph.setCursor(left, centerBase);
+
+      // Print the text
+      graph.print(filename);
+
+      // Calculate tail location for wrap-around.
+      auto tail = 32 - imageNameOffsetPixels + imageNameWidthPixels + IMAGE_NAME_SPACING;
+      if (tail < 128) {
+	graph.setCursor(tail, centerBase);
+
+	// Print the text
+	graph.print(filename);
+      }
+
+      imageNameOffsetPixels++;
+      if (imageNameOffsetPixels >= imageNameWidthPixels + IMAGE_NAME_SPACING) {
+	imageNameOffsetPixels = 0;
+      }
+    } else if (offset < currentSysStatus->GetLoadedImage().GetFilename().length()) {
       graph.print(filename + offset);
     } else {
       graph.print(filename + (strlen(filename) - 1));
     }
 
+    // Black out the icon area.
+    graph.fillRect(0, 0, 32, 32, BLACK);
+
+    // Draw the icon.
+    graph.drawBitmap(0, 8, cdrom_loaded, 32, 16, WHITE);
+
     auto size = currentSysStatus->GetLoadedImage().GetFileSizeBytes();
-    if (size != 0) {      
+    if (size != 0) {
       auto sizeStr = makeImageSizeStr(size);
       auto toShow = sizeStr.c_str();
       graph.setCursor(32, centerBase + lineHeight);
@@ -145,11 +189,11 @@ void DisplaySSD1306::displayStatus() {
   // Display primary/secondary
   int16_t x=0, y=0;
   uint16_t h=0, w=0;
-  const char* text = currentSysStatus->IsPrimary() ? "pri" : "sec";  
+  const char* text = currentSysStatus->IsPrimary() ? "pri" : "sec";
   graph.getTextBounds(text, 0 ,0, &x, &y, &w, &h);
   graph.setCursor(128 - w, 0);
   graph.print(text);
-  
+
   graph.display();
 }
 
@@ -179,7 +223,7 @@ void DisplaySSD1306::displayMenu() {
   if (currentDispState->GetMenuState().GetCurrentEntry() == zuluide::control::MenuState::Entry::Eject) {
     graph.setTextColor(BLACK, WHITE);
   }
-  
+
   graph.getTextBounds(selectMenuText, 0 ,0, &x, &y, &w, &h);
   graph.setCursor(96 - w / 2, 8 + MENU_OFFSET);
   graph.print(selectMenuText);
@@ -189,7 +233,7 @@ void DisplaySSD1306::displayMenu() {
   if (currentDispState->GetMenuState().GetCurrentEntry() == zuluide::control::MenuState::Entry::Info) {
     graph.setTextColor(BLACK, WHITE);
   }
-  
+
   graph.getTextBounds(selectMenuText, 0 ,0, &x, &y, &w, &h);
   graph.setCursor(32 - w / 2, 24 + MENU_OFFSET);
   graph.print(selectMenuText);
@@ -199,12 +243,12 @@ void DisplaySSD1306::displayMenu() {
   if (currentDispState->GetMenuState().GetCurrentEntry() == zuluide::control::MenuState::Entry::Back) {
     graph.setTextColor(BLACK, WHITE);
   }
-  
+
   graph.getTextBounds(selectMenuText, 0 ,0, &x, &y, &w, &h);
   graph.setCursor(96 - w / 2, 24 + MENU_OFFSET);
   graph.print(selectMenuText);
   graph.setTextColor(WHITE, BLACK);
-    
+
   graph.display();
 }
 
@@ -239,7 +283,7 @@ void DisplaySSD1306::displayEject() {
   graph.display();
 }
 
-void DisplaySSD1306::displaySelect() {
+void DisplaySSD1306::displaySelect(bool isRefresh) {
   graph.clearDisplay();
   graph.setTextColor(WHITE, BLACK);
 
@@ -252,18 +296,51 @@ void DisplaySSD1306::displaySelect() {
   const char* toShow;
   if (!currentDispState->GetSelectState().IsShowingBack() && currentDispState->GetSelectState().HasCurrentImage()) {
     auto img = currentDispState->GetSelectState().GetCurrentImage();
-    graph.setCursor(centerText(img.GetFilename(), graph), centerBase);
 
-    auto offset = currentDispState->GetSelectState().GetImageNameOffset();
-    auto filename = img.GetFilename().c_str();
-    if (offset < img.GetFilename().length()) {
-      graph.print(filename + offset);
+    if (!isRefresh) {
+      // If this isn't a refresh, then store the width of the image name.
+      int16_t x=0, y=0;
+      uint16_t h=0;
+      graph.getTextBounds(img.GetFilename().c_str(), 0 ,0, &x, &y, &imageNameWidthPixels, &h);
+      imageNameWidthPixels += IMAGE_NAME_SPACING;
+      imageNameOffsetPixels = 0;
+    }
+
+    if (scrollText) {
+      auto left = 0 - imageNameOffsetPixels;
+      // Move the cursor.
+      graph.setCursor(left, centerBase);
+
+      // Print the text
+      graph.print(img.GetFilename().c_str());
+
+      // Calculate tail location for wrap-around.
+      auto tail = 0 - imageNameOffsetPixels + imageNameWidthPixels + IMAGE_NAME_SPACING;
+      if (tail < 128) {
+	graph.setCursor(tail, centerBase);
+
+	// Print the text
+	graph.print(img.GetFilename().c_str());
+      }
+
+      imageNameOffsetPixels++;
+      if (imageNameOffsetPixels >= imageNameWidthPixels + IMAGE_NAME_SPACING) {
+	imageNameOffsetPixels = 0;
+      }
     } else {
-      graph.print(filename + (img.GetFilename().length() - 1));
+      graph.setCursor(centerText(img.GetFilename(), graph), centerBase);
+
+      auto offset = currentDispState->GetSelectState().GetImageNameOffset();
+      auto filename = img.GetFilename().c_str();
+      if (offset < img.GetFilename().length()) {
+	graph.print(filename + offset);
+      } else {
+	graph.print(filename + (img.GetFilename().length() - 1));
+      }
     }
 
     auto size = img.GetFileSizeBytes();
-    if (size != 0) {      
+    if (size != 0) {
       auto sizeStr = makeImageSizeStr(size);
       toShow = sizeStr.c_str();
       graph.setCursor(centerText(toShow, graph), centerBase + h);
@@ -278,7 +355,7 @@ void DisplaySSD1306::displaySelect() {
   graph.display();
 }
 
-void DisplaySSD1306::displayInfo() {
+void DisplaySSD1306::displayInfo(bool isRefresh) {
   graph.clearDisplay();
   graph.setTextColor(WHITE, BLACK);
 
@@ -290,18 +367,82 @@ void DisplaySSD1306::displayInfo() {
 
   graph.setCursor(centerText(ZULUIDE_TITLE, graph), centerBase);
   graph.print(ZULUIDE_TITLE);
-  
+
   auto firmwareVersion = currentSysStatus->GetFirmwareVersion().c_str();
-  graph.setCursor(centerText(firmwareVersion, graph), centerBase + h);
-  
-  auto offset = currentDispState->GetInfoState().GetFirmwareOffset();
-  if (offset < currentSysStatus->GetFirmwareVersion().length()) {
-    graph.print(firmwareVersion + offset);
-  } else {
-    graph.print(firmwareVersion + (currentSysStatus->GetFirmwareVersion().length() - 1));
+  if (!isRefresh) {
+    // If this isn't a refresh, then store the width of the image name.
+    int16_t x=0, y=0;
+    uint16_t h=0;
+    graph.getTextBounds(firmwareVersion, 0 ,0, &x, &y, &imageNameWidthPixels, &h);
+    imageNameWidthPixels += IMAGE_NAME_SPACING;
+    imageNameOffsetPixels = 0;
   }
-  
+
+  if (scrollText) {
+    auto left = 0 - imageNameOffsetPixels;
+    // Move the cursor.
+    graph.setCursor(left, centerBase + h);
+
+    // Print the text
+    graph.print(firmwareVersion);
+
+    // Calculate tail location for wrap-around.
+    auto tail = 0 - imageNameOffsetPixels + imageNameWidthPixels + IMAGE_NAME_SPACING;
+    if (tail < 128) {
+      graph.setCursor(tail, centerBase + h);
+
+      // Print the text
+      graph.print(firmwareVersion);
+    }
+
+    imageNameOffsetPixels++;
+    if (imageNameOffsetPixels >= imageNameWidthPixels + IMAGE_NAME_SPACING) {
+      imageNameOffsetPixels = 0;
+    }
+  } else {
+    graph.setCursor(centerText(firmwareVersion, graph), centerBase + h);
+
+    auto offset = currentDispState->GetInfoState().GetFirmwareOffset();
+    if (offset < currentSysStatus->GetFirmwareVersion().length()) {
+      graph.print(firmwareVersion + offset);
+    } else {
+      graph.print(firmwareVersion + (currentSysStatus->GetFirmwareVersion().length() - 1));
+    }
+  }
+
   graph.display();
+}
+
+void DisplaySSD1306::Refresh() {
+  if (absolute_time_diff_us (get_absolute_time(), nextRefresh) > 0) {
+    return;
+  }
+
+  nextRefresh = make_timeout_time_ms(SCROLL_INTERVAL_MS);
+
+  if (currentDispState && currentSysStatus) {
+    switch (currentDispState->GetCurrentMode()) {
+    case zuluide::control::Mode::Status: {
+      displayStatus(true);
+      break;
+    }
+    case zuluide::control::Mode::Menu:
+      displayMenu();
+      break;
+    case zuluide::control::Mode::Eject:
+      displayEject();
+      break;
+    case zuluide::control::Mode::Select:
+      displaySelect(true);
+      break;
+    case zuluide::control::Mode::NewImage:
+      break;
+    case zuluide::control::Mode::Info: {
+      displayInfo(true);
+      break;
+    }
+    }
+  }
 }
 
 static uint16_t centerText(const char* text, Adafruit_SSD1306& graph) {
