@@ -44,6 +44,8 @@ public:
 
     virtual void handle_event(ide_event_t event);
 
+    virtual bool disables_iordy() override { return true; }
+
     virtual bool is_packet_device() { return false; }
 
     virtual bool is_medium_present() {return has_image();}
@@ -117,8 +119,7 @@ protected:
     virtual bool cmd_write(ide_registers_t *regs, bool dma_transfer);
     virtual bool cmd_init_dev_params(ide_registers_t *regs);
     virtual bool cmd_identify_device(ide_registers_t *regs);
-
-
+    virtual bool cmd_recalibrate(ide_registers_t *regs);
 
     // Helper methods
     // convert lba to cylinder, head, sector values

@@ -30,6 +30,7 @@
 #define IDE_STATUS_DEVRDY   0x40
 #define IDE_STATUS_DEVFAULT 0x20
 #define IDE_STATUS_SERVICE  0x10
+#define IDE_STATUS_DSC      0x10
 #define IDE_STATUS_DATAREQ  0x08
 #define IDE_STATUS_CORR     0x04
 #define IDE_STATUS_IDX      0x02
@@ -51,6 +52,7 @@
 #define IDE_DEVCTRL_HOB     0x80
 
 // Device bits register bits
+#define IDE_DEVICE_LBA  0x40;
 #define IDE_DEVICE_DEV  0x10;
 
 // IDE command set defined as X-macro
@@ -59,6 +61,7 @@
 X(IDE_CMD_NOP                                       , 0x00) \
 X(IDE_CMD_CFA_REQUEST_EXTENDED_ERROR                , 0x03) \
 X(IDE_CMD_DEVICE_RESET                              , 0x08) \
+X(IDE_CMD_RECALIBRATE                               , 0x10) \
 X(IDE_CMD_READ_SECTORS                              , 0x20) \
 X(IDE_CMD_READ_SECTORS_EXT                          , 0x24) \
 X(IDE_CMD_READ_DMA_EXT                              , 0x25) \

@@ -352,7 +352,7 @@ void ide_phy_stop_transfers(int *crc_errors)
 void ide_phy_assert_irq(uint8_t ide_status)
 {
     fpga_wrcmd(FPGA_CMD_ASSERT_IRQ, &ide_status, 1);
-    // dbgmsg("ide_phy_assert_irq(", ide_status, ")");
+    dbgmsg("ide_phy_assert_irq(", ide_status, ")");
 }
 
 void ide_phy_set_signals(uint8_t signals)

@@ -25,6 +25,7 @@
 #include "ZuluIDE.h"
 #include "ZuluIDE_config.h"
 
+extern uint8_t g_ide_signals;
 // Map from command index for command name for logging
 static const char *get_atapi_command_name(uint8_t cmd)
 {
@@ -70,6 +71,7 @@ bool IDERigidDevice::handle_command(ide_registers_t *regs)
     {
         // Command need the device signature
         case IDE_CMD_DEVICE_RESET:
+//        case IDE_CMD_EXECUTE_DEVICE_DIAGNOSTIC:
             return set_device_signature(IDE_ERROR_ABORT, false);
 
         // Supported IDE commands
@@ -81,9 +83,16 @@ bool IDERigidDevice::handle_command(ide_registers_t *regs)
         case IDE_CMD_WRITE_SECTORS: return cmd_write(regs, false);
         case IDE_CMD_INIT_DEV_PARAMS: return cmd_init_dev_params(regs);
         case IDE_CMD_IDENTIFY_DEVICE: return cmd_identify_device(regs);
+        case IDE_CMD_RECALIBRATE: return cmd_recalibrate(regs);
+
 
         default: return false;
     }
+}
+
+static bool is_lba_mode(ide_registers_t *regs)
+{
+    return regs->device & IDE_DEVICE_LBA;
 }
 
 bool IDERigidDevice::cmd_nop(ide_registers_t *regs)
@@ -91,7 +100,7 @@ bool IDERigidDevice::cmd_nop(ide_registers_t *regs)
     // CMD_NOP always fails with CMD_ABORTED
     regs->error = IDE_ERROR_ABORT;
     ide_phy_set_regs(regs);
-    ide_phy_assert_irq(IDE_STATUS_DEVRDY | IDE_STATUS_ERR);
+    ide_phy_assert_irq(IDE_STATUS_DEVRDY | IDE_STATUS_DSC | IDE_STATUS_ERR);
     return true;
 }
 
@@ -145,7 +154,7 @@ bool IDERigidDevice::cmd_set_features(ide_registers_t *regs)
     ide_phy_set_regs(regs);
     if (regs->error == 0)
     {
-        ide_phy_assert_irq(IDE_STATUS_DEVRDY);
+        ide_phy_assert_irq(IDE_STATUS_DEVRDY | IDE_STATUS_DSC);
     }
     else
     {
@@ -225,9 +234,9 @@ bool IDERigidDevice::cmd_read(ide_registers_t *regs, bool dma_transfer)
             regs->lba_low = sector;
         }
         m_ata_state.data_state = ATA_DATA_IDLE;
-        regs->status = IDE_STATUS_DEVRDY;
+        regs->status = IDE_STATUS_DEVRDY | IDE_STATUS_DSC;
         ide_phy_set_regs(regs);
-        ide_phy_assert_irq(IDE_STATUS_DEVRDY);
+        ide_phy_assert_irq(IDE_STATUS_DEVRDY | IDE_STATUS_DSC);
     }
     return status;
 }
@@ -306,18 +315,15 @@ bool IDERigidDevice::cmd_write(ide_registers_t *regs, bool dma_transfer)
 
 bool IDERigidDevice::cmd_init_dev_params(ide_registers_t *regs)
 {
-    regs->status = IDE_STATUS_BSY;
-    ide_phy_set_regs(regs);
-
     m_devinfo.sectors_per_track =  regs->sector_count;
     m_devinfo.heads = (0x0F & regs->device) + 1;
     dbgmsg("Setting initial dev parameters: sectors/track = ", (int) m_devinfo.sectors_per_track, ", heads = ", (int)m_devinfo.heads);
 
-    regs->status = IDE_STATUS_DEVRDY;
+    regs->status = IDE_STATUS_DEVRDY | IDE_STATUS_DSC;
     regs->error = 0;
     ide_phy_set_regs(regs);
     // Command complete
-    ide_phy_assert_irq(IDE_STATUS_DEVRDY);
+    ide_phy_assert_irq(IDE_STATUS_DEVRDY | IDE_STATUS_DSC);
     return true;
 }
 
@@ -325,7 +331,6 @@ bool IDERigidDevice::cmd_init_dev_params(ide_registers_t *regs)
 bool IDERigidDevice::cmd_identify_device(ide_registers_t *regs)
 {
     uint16_t idf[256] = {0};
-    
     // Apple IDE hard drive settings - model DSAA-3360
     // idf[IDE_IDENTIFY_OFFSET_GENERAL_CONFIGURATION] = 0x045A;
     // idf[IDE_IDENTIFY_OFFSET_NUM_CYLINDERS] = 0x03A1;
@@ -347,8 +352,8 @@ bool IDERigidDevice::cmd_identify_device(ide_registers_t *regs)
     // idf[IDE_IDENTIFY_OFFSET_CURRENT_CYLINDERS] = 0x03A1;
     // idf[IDE_IDENTIFY_OFFSET_CURRENT_HEADS] = 0x0010;
     // idf[IDE_IDENTIFY_OFFSET_CURRENT_SECTORS_PER_TRACK] = 0x0030;
-    idf[IDE_IDENTIFY_OFFSET_CURRENT_CAPACITY_IN_SECTORS_LOW] = 0xE300;
-    idf[IDE_IDENTIFY_OFFSET_CURRENT_CAPACITY_IN_SECTORS_HI] = 0x000A;
+    // idf[IDE_IDENTIFY_OFFSET_CURRENT_CAPACITY_IN_SECTORS_LOW] = 0xE300;
+    // idf[IDE_IDENTIFY_OFFSET_CURRENT_CAPACITY_IN_SECTORS_HI] = 0x000A;
     // idf[IDE_IDENTIFY_OFFSET_MULTI_SECTOR_VALID] = 0x0120;
     // idf[IDE_IDENTIFY_OFFSET_TOTAL_SECTORS]     = 0xE300;
     // idf[IDE_IDENTIFY_OFFSET_TOTAL_SECTORS + 1] = 0x000A;
@@ -364,11 +369,11 @@ bool IDERigidDevice::cmd_identify_device(ide_registers_t *regs)
      // Generic IDE hard drive
     idf[IDE_IDENTIFY_OFFSET_GENERAL_CONFIGURATION] = (m_devinfo.removable ? 0x80 : 0x40); // Device type
     // \todo Calc these from LBA or maybe visa versa
-    // idf[IDE_IDENTIFY_OFFSET_NUM_CYLINDERS] = 0x03A1;
-    // idf[IDE_IDENTIFY_OFFSET_NUM_HEADS] = 0x0010;
-    // idf[IDE_IDENTIFY_OFFSET_BYTES_PER_TRACK] = 0xE808;
-    // idf[IDE_IDENTIFY_OFFSET_BYTES_PER_SECTOR] = 0x0226;
-    // idf[IDE_IDENTIFY_OFFSET_SECTORS_PER_TRACK] = 0x0030;
+    idf[IDE_IDENTIFY_OFFSET_NUM_CYLINDERS] = 0x03A1;
+    idf[IDE_IDENTIFY_OFFSET_NUM_HEADS] = 0x0010;
+    idf[IDE_IDENTIFY_OFFSET_BYTES_PER_TRACK] = 0xE808;
+    idf[IDE_IDENTIFY_OFFSET_BYTES_PER_SECTOR] = 0x0226;
+    idf[IDE_IDENTIFY_OFFSET_SECTORS_PER_TRACK] = 0x0030;
     copy_id_string(&idf[IDE_IDENTIFY_OFFSET_SERIAL_NUMBER], 10, m_devinfo.serial_number);
     // \todo set on older drives
     // idf[IDE_IDENTIFY_OFFSET_BUFFER_TYPE] = 0x0003;
@@ -392,8 +397,8 @@ bool IDERigidDevice::cmd_identify_device(ide_registers_t *regs)
     // idf[IDE_IDENTIFY_OFFSET_CURRENT_HEADS] = 0x0010;
     // idf[IDE_IDENTIFY_OFFSET_CURRENT_SECTORS_PER_TRACK] = 0x0030;
     uint64_t sectors = capacity_lba();
-    // idf[IDE_IDENTIFY_OFFSET_CURRENT_CAPACITY_IN_SECTORS_LOW] = sectors & 0xFFFF;;
-    // idf[IDE_IDENTIFY_OFFSET_CURRENT_CAPACITY_IN_SECTORS_HI] = (sectors >> 16) & 0xFFFF;
+    idf[IDE_IDENTIFY_OFFSET_CURRENT_CAPACITY_IN_SECTORS_LOW] = sectors & 0xFFFF;;
+    idf[IDE_IDENTIFY_OFFSET_CURRENT_CAPACITY_IN_SECTORS_HI] = (sectors >> 16) & 0xFFFF;
     idf[IDE_IDENTIFY_OFFSET_TOTAL_SECTORS]     = sectors & 0xFFFF;
     idf[IDE_IDENTIFY_OFFSET_TOTAL_SECTORS + 1] = (sectors >> 16) & 0xFFFF;
     idf[IDE_IDENTIFY_OFFSET_MODEINFO_SINGLEWORD] = 0;// 0x0007; // disabling single word dma
@@ -444,6 +449,7 @@ bool IDERigidDevice::cmd_identify_device(ide_registers_t *regs)
 
     ide_phy_start_write(sizeof(idf));
     ide_phy_write_block((uint8_t*)idf, sizeof(idf));
+    
 
     uint32_t start = millis();
     while (!ide_phy_is_write_finished())
@@ -455,13 +461,24 @@ bool IDERigidDevice::cmd_identify_device(ide_registers_t *regs)
             return false;
         }
     }
-
     regs->error = 0;
+    regs->status = IDE_STATUS_DEVRDY | IDE_STATUS_DSC;
     ide_phy_set_regs(regs);
-    ide_phy_assert_irq(IDE_STATUS_DEVRDY);
     return true;
 }
 
+
+bool IDERigidDevice::cmd_recalibrate(ide_registers_t *regs)
+{
+
+    regs->lba_low = is_lba_mode(regs) ? 0 : 1;
+    regs->lba_high = 0;
+    regs->lba_mid =  0;
+    regs->device &= 0xF0;
+    ide_phy_set_regs(regs);
+    ide_phy_assert_irq(IDE_STATUS_DEVRDY | IDE_STATUS_DSC); 
+    return true;
+}
 
 void IDERigidDevice::handle_event(ide_event_t evt)
 {
@@ -497,7 +514,7 @@ bool IDERigidDevice::set_device_signature(uint8_t error, bool was_reset)
     }
     ide_phy_set_regs(&regs);
 
-    ide_phy_assert_irq(IDE_STATUS_DEVRDY);
+    ide_phy_assert_irq(IDE_STATUS_DEVRDY | IDE_STATUS_DSC);
 
     return true;
 }

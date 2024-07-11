@@ -56,7 +56,7 @@ static IDEDevice *g_ide_devices[2];
 static ide_event_t g_last_reset_event;
 static uint32_t g_last_reset_time;
 static bool g_drive1_detected;
-static uint8_t g_ide_signals;
+uint8_t g_ide_signals;
 static uint32_t g_last_event_time;
 static ide_event_t g_last_event;
 static ide_registers_t g_prev_ide_regs;
@@ -211,7 +211,7 @@ void ide_protocol_poll()
                 logmsg("-- Command handler failed for ", get_ide_command_name(cmd));
                 regs.error = IDE_ERROR_ABORT;
                 ide_phy_set_regs(&regs);
-                ide_phy_assert_irq(IDE_STATUS_DEVRDY | IDE_STATUS_ERR);
+                ide_phy_assert_irq(IDE_STATUS_DEVRDY | IDE_STATUS_DSC | IDE_STATUS_ERR);
             }
             // \todo figure out if possibly reading the status from the FPGA is causing
             // `ide_phy_is_command_interrupted` to crash the board on certain IDE controllers
@@ -407,7 +407,10 @@ void ide_protocol_poll()
 
             regs.status &= ~IDE_STATUS_BSY;
             ide_phy_set_regs(&regs);
-            ide_phy_assert_irq(IDE_STATUS_DEVRDY | regs.status);
+            if (g_ide_devices[0]->is_packet_device())
+                ide_phy_assert_irq(IDE_STATUS_DEVRDY | regs.status);
+            else
+                ide_phy_assert_irq(IDE_STATUS_DEVRDY | IDE_STATUS_DSC | regs.status);
         }
     }
 }

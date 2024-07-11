@@ -73,12 +73,12 @@ bool IDEATAPIDevice::handle_command(ide_registers_t *regs)
     {
         // Commands superseded by the ATAPI packet interface
         case IDE_CMD_IDENTIFY_DEVICE:
-        case IDE_CMD_EXECUTE_DEVICE_DIAGNOSTIC:
         case IDE_CMD_DEVICE_RESET:
         case IDE_CMD_READ_SECTORS:
         case IDE_CMD_READ_SECTORS_EXT:
             return set_device_signature(IDE_ERROR_ABORT, false);
-
+        case IDE_CMD_EXECUTE_DEVICE_DIAGNOSTIC:
+            return set_device_signature(0, false);
         // Supported IDE commands
         case IDE_CMD_NOP: return cmd_nop(regs);
         case IDE_CMD_SET_FEATURES: return cmd_set_features(regs);
