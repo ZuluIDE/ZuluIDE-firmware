@@ -281,6 +281,53 @@ bool ide_phy_is_write_finished()
     }
 }
 
+void ide_phy_start_read_buffer(uint32_t blocklen)
+{
+    // dbgmsg("ide_phy_start_read(", (int)blocklen, ", ", udma_mode, ")");
+    g_ide_phy.crc_errors = 0;
+    g_ide_phy.block_crc1 = g_ide_phy.block_crc0 = 0;
+    uint16_t last_word_idx = (blocklen + 1) / 2 - 1;
+
+        // Transfer in PIO mode
+    fpga_wrcmd(FPGA_CMD_START_READ, (const uint8_t*)&last_word_idx, 2);
+    g_ide_phy.udma_mode = -1;
+    ide_registers_t regs;
+    ide_phy_get_regs(&regs);
+    regs.status = IDE_STATUS_DEVRDY | IDE_STATUS_DSC | IDE_STATUS_DATAREQ;
+    ide_phy_set_regs(&regs);
+
+    g_ide_phy.transfer_running = true;
+}
+
+void ide_phy_start_rigid_read(uint32_t blocklen, int udma_mode)
+{
+    // dbgmsg("ide_phy_start_read(", (int)blocklen, ", ", udma_mode, ")");
+    g_ide_phy.crc_errors = 0;
+    g_ide_phy.block_crc1 = g_ide_phy.block_crc0 = 0;
+    uint16_t last_word_idx = (blocklen + 1) / 2 - 1;
+    ide_registers_t regs;
+    ide_phy_get_regs(&regs);
+    if (udma_mode < 0)
+    {
+        // Transfer in PIO mode
+        fpga_wrcmd(FPGA_CMD_START_READ, (const uint8_t*)&last_word_idx, 2);
+        g_ide_phy.udma_mode = -1;
+        regs.status = IDE_STATUS_DEVRDY | IDE_STATUS_DSC | IDE_STATUS_DATAREQ;
+        ide_phy_set_regs(&regs);
+    }
+    else
+    {
+        // Transfer in UDMA mode
+        uint8_t arg[3] = {(uint8_t)udma_mode,
+                          (uint8_t)(last_word_idx),
+                          (uint8_t)((last_word_idx) >> 8)};
+        fpga_wrcmd(FPGA_CMD_START_UDMA_READ, arg, 3);
+        g_ide_phy.udma_mode = udma_mode;
+    }
+
+    g_ide_phy.transfer_running = true;
+}
+
 void ide_phy_start_read(uint32_t blocklen, int udma_mode)
 {
     // dbgmsg("ide_phy_start_read(", (int)blocklen, ", ", udma_mode, ")");
@@ -352,7 +399,7 @@ void ide_phy_stop_transfers(int *crc_errors)
 void ide_phy_assert_irq(uint8_t ide_status)
 {
     fpga_wrcmd(FPGA_CMD_ASSERT_IRQ, &ide_status, 1);
-    dbgmsg("ide_phy_assert_irq(", ide_status, ")");
+    // dbgmsg("ide_phy_assert_irq(", ide_status, ")");
 }
 
 void ide_phy_set_signals(uint8_t signals)

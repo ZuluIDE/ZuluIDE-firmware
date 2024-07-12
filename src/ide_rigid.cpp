@@ -26,6 +26,8 @@
 #include "ZuluIDE_config.h"
 
 extern uint8_t g_ide_signals;
+static uint8_t ide_disk_buffer[512];
+
 // Map from command index for command name for logging
 static const char *get_atapi_command_name(uint8_t cmd)
 {
@@ -47,12 +49,17 @@ void IDERigidDevice::initialize(int devidx)
     strncpy(m_devinfo.model_number, "ZuluIDE Hard Drive", sizeof(m_devinfo.model_number));
     strncpy(m_devinfo.firmware_rev, "1.0", sizeof(m_devinfo.firmware_rev));
     m_devinfo.bytes_per_sector = 512;
+    m_devinfo.sectors_per_track = 63;
+    m_devinfo.heads = 16;
     m_devinfo.writable = true;
     IDEDevice::initialize(devidx);
 }
 
 void IDERigidDevice::reset()
 {
+    m_devinfo.bytes_per_sector = 512;
+    m_devinfo.sectors_per_track = 63;
+    m_devinfo.heads = 16;
     memset(&m_removable, 0, sizeof(m_removable));
 }
 
@@ -81,6 +88,8 @@ bool IDERigidDevice::handle_command(ide_registers_t *regs)
         case IDE_CMD_WRITE_DMA: return cmd_write(regs, true);
         case IDE_CMD_READ_SECTORS: return cmd_read(regs, false);
         case IDE_CMD_WRITE_SECTORS: return cmd_write(regs, false);
+        case IDE_CMD_READ_BUFFER: return cmd_read_buffer(regs);
+        case IDE_CMD_WRITE_BUFFER: return cmd_write_buffer(regs);
         case IDE_CMD_INIT_DEV_PARAMS: return cmd_init_dev_params(regs);
         case IDE_CMD_IDENTIFY_DEVICE: return cmd_identify_device(regs);
         case IDE_CMD_RECALIBRATE: return cmd_recalibrate(regs);
@@ -145,6 +154,10 @@ bool IDERigidDevice::cmd_set_features(ide_registers_t *regs)
     {
         dbgmsg("-- Enable revert to power-on defaults");
     }
+    else if (feature == IDE_SET_FEATURE_ENABLE_ECC)
+    {
+        dbgmsg("-- Enable ECC --");
+    }
     else
     {
         dbgmsg("-- Unknown SET_FEATURE: ", feature);
@@ -158,7 +171,7 @@ bool IDERigidDevice::cmd_set_features(ide_registers_t *regs)
     }
     else
     {
-        ide_phy_assert_irq(IDE_STATUS_DEVRDY | IDE_STATUS_ERR);
+        ide_phy_assert_irq(IDE_STATUS_DEVRDY | IDE_STATUS_DSC | IDE_STATUS_ERR);
     }
 
     return true;
@@ -181,7 +194,6 @@ bool IDERigidDevice::cmd_read(ide_registers_t *regs, bool dma_transfer)
     if (dma_transfer && m_phy_caps.max_udma_mode < 0)
         return false;
 
-    bool lba_mode = false;
     uint32_t lba = 0;
     uint16_t sector_count = regs->sector_count == 0 ? 256 : regs->sector_count;
     uint8_t head = 0;
@@ -191,9 +203,10 @@ bool IDERigidDevice::cmd_read(ide_registers_t *regs, bool dma_transfer)
     m_ata_state.dma_requested = dma_transfer;
     m_ata_state.crc_errors = 0;
 
+    regs->status |= IDE_STATUS_DEVRDY | IDE_STATUS_DSC;
+    ide_phy_set_regs(regs);
 
-    lba_mode = !!(regs->device & 0x40);
-    if (lba_mode)
+    if (is_lba_mode(regs))
     {
         lba |= 0xF & (regs->device << 24);
         lba |= regs->lba_high << 16;
@@ -208,44 +221,43 @@ bool IDERigidDevice::cmd_read(ide_registers_t *regs, bool dma_transfer)
         sector = regs->lba_low;
         lba = (cylinder * m_devinfo.heads + head) * m_devinfo.sectors_per_track + (sector - 1);
     }
-    bool status = m_image->read((uint64_t)lba * m_devinfo.bytes_per_sector, m_devinfo.bytes_per_sector, sector_count, this);
-    status = status && ata_send_wait_finish();
-    if (status)
+    // access out of bounds
+    if (lba >= capacity_lba())
     {
-        uint32_t new_lba = lba + sector_count - 1;
-        ide_phy_get_regs(regs);
-        if (lba_mode)
+        lba = capacity_lba();
+        regs->device = 0xF & (lba << 24);
+        regs->lba_high = lba << 16;
+        regs->lba_mid = lba << 8;
+        regs->lba_low = lba;
+        regs->error = IDE_ERROR_ABORT;
+        ide_phy_set_regs(regs);
+        ide_phy_assert_irq(IDE_STATUS_DEVRDY | IDE_STATUS_DSC | IDE_STATUS_ERR);
+    }
+    else
+    {
+        bool status = m_image->read((uint64_t)lba * m_devinfo.bytes_per_sector, m_devinfo.bytes_per_sector, sector_count, this);
+        status = status && ata_send_wait_finish();
+        m_ata_state.data_state = ATA_DATA_IDLE;
+        if (status)
         {
-            regs->device &= 0xF0;
-            regs->device |= (0x0F) & (new_lba >> 24);
-            regs->lba_high = new_lba >> 16;
-            regs->lba_mid = new_lba >> 8;
-            regs->lba_low = new_lba;
+           
+            ide_phy_assert_irq(IDE_STATUS_DEVRDY | IDE_STATUS_DSC);
         }
         else
         {
-            sector = (new_lba % m_devinfo.sectors_per_track) + 1;
-            cylinder = (new_lba / m_devinfo.sectors_per_track) / m_devinfo.heads;
-            head = (new_lba / m_devinfo.sectors_per_track) % m_devinfo.heads;
-            regs->device &= 0xF0; 
-            regs->device |= (0x0F) & head;
-            regs->lba_high = cylinder >> 8;
-            regs->lba_mid = cylinder;
-            regs->lba_low = sector;
+            regs->error = IDE_ERROR_ABORT;
+            ide_phy_set_regs(regs);
+            ide_phy_assert_irq(IDE_STATUS_DEVRDY | IDE_STATUS_DSC | IDE_STATUS_ERR);
         }
-        m_ata_state.data_state = ATA_DATA_IDLE;
-        regs->status = IDE_STATUS_DEVRDY | IDE_STATUS_DSC;
-        ide_phy_set_regs(regs);
-        ide_phy_assert_irq(IDE_STATUS_DEVRDY | IDE_STATUS_DSC);
     }
-    return status;
+    return true;
 }
 
 bool IDERigidDevice::cmd_write(ide_registers_t *regs, bool dma_transfer)
 {
     if (dma_transfer && m_phy_caps.max_udma_mode < 0)
         return false;
-    bool lba_mode = false;
+
     uint32_t lba = 0;
     uint16_t sector_count = regs->sector_count == 0 ? 256 : regs->sector_count;
     uint8_t head = 0;
@@ -256,8 +268,7 @@ bool IDERigidDevice::cmd_write(ide_registers_t *regs, bool dma_transfer)
     m_ata_state.dma_requested = dma_transfer;
     m_ata_state.crc_errors = 0;
 
-    lba_mode = !!(regs->device & 0x40);
-    if (lba_mode)
+    if (is_lba_mode(regs))
     {
         lba |= 0xF & (regs->device) << 24;
         lba |= regs->lba_high << 16;
@@ -275,42 +286,72 @@ bool IDERigidDevice::cmd_write(ide_registers_t *regs, bool dma_transfer)
 
     if (m_image && m_image->writable())
     {
-    status = m_image->write((uint64_t)lba * m_devinfo.bytes_per_sector,
+        status = m_image->write((uint64_t)lba * m_devinfo.bytes_per_sector,
                             m_devinfo.bytes_per_sector, sector_count,
                             this);
     }
 
     if (status)
     {
-        ide_phy_get_regs(regs);
-        uint32_t new_lba = lba + sector_count - 1;
-        if (lba_mode)
-        {
-            regs->device |= (0x0F) & (new_lba >> 24);
-            regs->lba_high = new_lba >> 16;
-            regs->lba_mid = new_lba >> 8;
-            regs->lba_low = new_lba;
-        }
-        else
-        {
-            sector = (new_lba % m_devinfo.sectors_per_track) + 1;
-            cylinder = (new_lba / m_devinfo.sectors_per_track) / m_devinfo.heads;
-            head = (new_lba / m_devinfo.sectors_per_track) % m_devinfo.heads;
-            regs->device |= (0x0F) & head;
-            regs->lba_high = cylinder >> 8;
-            regs->lba_mid = cylinder;
-            regs->lba_low = sector;
-
-        }
-        regs->status = IDE_STATUS_DEVRDY;
-        ide_phy_set_regs(regs);
-        ide_phy_assert_irq(IDE_STATUS_DEVRDY);
+        ide_phy_assert_irq(IDE_STATUS_DEVRDY | IDE_STATUS_DSC);
     }
     else
     {
-        // \todo do something if the read fails
+        regs->error = IDE_ERROR_ABORT;
+        ide_phy_set_regs(regs);
+        ide_phy_assert_irq(IDE_STATUS_DEVRDY | IDE_STATUS_DSC | IDE_STATUS_ERR);
     }
     return status;
+}
+
+bool IDERigidDevice::cmd_read_buffer(ide_registers_t *regs)
+{
+    m_ata_state.data_state = ATA_DATA_IDLE;
+    m_ata_state.dma_requested = false;
+    m_ata_state.crc_errors = 0;
+    ata_send_data_block(ide_disk_buffer, 512);
+    if (!ata_send_wait_finish())
+    {
+        logmsg("IDERigidDevice::cmd_read_buffer() failed");
+        return false;
+    }
+    ide_phy_assert_irq(IDE_STATUS_DEVRDY | IDE_STATUS_DSC | IDE_STATUS_DATAREQ);
+    return true;
+}
+
+bool IDERigidDevice::cmd_write_buffer(ide_registers_t *regs)
+{
+
+    m_ata_state.data_state = ATA_DATA_IDLE;
+    m_ata_state.dma_requested = false;
+    m_ata_state.crc_errors = 0;
+
+    ide_phy_start_read_buffer(512);
+    uint32_t start = millis();
+    
+    while (!ide_phy_can_read_block())
+    {
+        if ((uint32_t)(millis() - start) > 10000)
+        {
+            logmsg("IDERigidDevice::cmd_write_buffer() read timeout");
+            ide_phy_stop_transfers();
+            return false;
+        }
+
+        if (ide_phy_is_command_interrupted())
+        {
+            dbgmsg("IDERigidDevice::cmd_write_buffer() interrupted");
+            return false;
+        }
+    }
+    ide_phy_read_block(ide_disk_buffer, 512, false);
+    ide_phy_stop_transfers();
+
+    regs->status |= IDE_STATUS_BSY;
+    ide_phy_set_regs(regs);
+
+    ide_phy_assert_irq(IDE_STATUS_DEVRDY | IDE_STATUS_DSC);
+    return true;
 }
 
 bool IDERigidDevice::cmd_init_dev_params(ide_registers_t *regs)
@@ -367,13 +408,18 @@ bool IDERigidDevice::cmd_identify_device(ide_registers_t *regs)
     // idf[129] = 0x000B;
 
      // Generic IDE hard drive
+    uint64_t lba = capacity_lba();
+    uint16_t cylinders;
+    uint8_t heads;
+    uint8_t sectors;
+    lba2chs(lba, cylinders, heads, sectors);
     idf[IDE_IDENTIFY_OFFSET_GENERAL_CONFIGURATION] = (m_devinfo.removable ? 0x80 : 0x40); // Device type
     // \todo Calc these from LBA or maybe visa versa
-    idf[IDE_IDENTIFY_OFFSET_NUM_CYLINDERS] = 0x03A1;
-    idf[IDE_IDENTIFY_OFFSET_NUM_HEADS] = 0x0010;
-    idf[IDE_IDENTIFY_OFFSET_BYTES_PER_TRACK] = 0xE808;
-    idf[IDE_IDENTIFY_OFFSET_BYTES_PER_SECTOR] = 0x0226;
-    idf[IDE_IDENTIFY_OFFSET_SECTORS_PER_TRACK] = 0x0030;
+    idf[IDE_IDENTIFY_OFFSET_NUM_CYLINDERS] = cylinders;
+    idf[IDE_IDENTIFY_OFFSET_NUM_HEADS] = m_devinfo.heads;
+    idf[IDE_IDENTIFY_OFFSET_BYTES_PER_TRACK] = m_devinfo.bytes_per_sector * m_devinfo.sectors_per_track;
+    idf[IDE_IDENTIFY_OFFSET_BYTES_PER_SECTOR] = m_devinfo.bytes_per_sector;
+    idf[IDE_IDENTIFY_OFFSET_SECTORS_PER_TRACK] = m_devinfo.sectors_per_track;
     copy_id_string(&idf[IDE_IDENTIFY_OFFSET_SERIAL_NUMBER], 10, m_devinfo.serial_number);
     // \todo set on older drives
     // idf[IDE_IDENTIFY_OFFSET_BUFFER_TYPE] = 0x0003;
@@ -381,7 +427,7 @@ bool IDERigidDevice::cmd_identify_device(ide_registers_t *regs)
     // idf[IDE_IDENTIFY_OFFSET_ECC_LONG_CMDS] = 0x0010;
     copy_id_string(&idf[IDE_IDENTIFY_OFFSET_FIRMWARE_REV], 4, m_devinfo.firmware_rev);
     copy_id_string(&idf[IDE_IDENTIFY_OFFSET_MODEL_NUMBER], 20, m_devinfo.model_number);
-    idf[IDE_IDENTIFY_OFFSET_MAX_SECTORS] = 0x8020;
+    idf[IDE_IDENTIFY_OFFSET_MAX_SECTORS] = 0;// 0x8020;
     
     idf[IDE_IDENTIFY_OFFSET_CAPABILITIES_1] = (m_phy_caps.supports_iordy ? 1 << 11 : 0) | 
                                             // 1 << 10 | 
@@ -393,14 +439,14 @@ bool IDERigidDevice::cmd_identify_device(ide_registers_t *regs)
     idf[IDE_IDENTIFY_OFFSET_MODE_INFO_VALID] |= 0x04; // UDMA support word valid
     idf[IDE_IDENTIFY_OFFSET_MODE_INFO_VALID] |= 0x02; // PIO support word valid
     // \todo set on older drives
-    // idf[IDE_IDENTIFY_OFFSET_CURRENT_CYLINDERS] = 0x03A1;
-    // idf[IDE_IDENTIFY_OFFSET_CURRENT_HEADS] = 0x0010;
-    // idf[IDE_IDENTIFY_OFFSET_CURRENT_SECTORS_PER_TRACK] = 0x0030;
-    uint64_t sectors = capacity_lba();
-    idf[IDE_IDENTIFY_OFFSET_CURRENT_CAPACITY_IN_SECTORS_LOW] = sectors & 0xFFFF;;
-    idf[IDE_IDENTIFY_OFFSET_CURRENT_CAPACITY_IN_SECTORS_HI] = (sectors >> 16) & 0xFFFF;
-    idf[IDE_IDENTIFY_OFFSET_TOTAL_SECTORS]     = sectors & 0xFFFF;
-    idf[IDE_IDENTIFY_OFFSET_TOTAL_SECTORS + 1] = (sectors >> 16) & 0xFFFF;
+    idf[IDE_IDENTIFY_OFFSET_CURRENT_CYLINDERS] = 0x3FFF;
+    idf[IDE_IDENTIFY_OFFSET_CURRENT_HEADS] = 0x0010;
+    idf[IDE_IDENTIFY_OFFSET_CURRENT_SECTORS_PER_TRACK] = 0x0030;
+  
+    idf[IDE_IDENTIFY_OFFSET_CURRENT_CAPACITY_IN_SECTORS_LOW] = 0xFD00;// sectors & 0xFFFF;;
+    idf[IDE_IDENTIFY_OFFSET_CURRENT_CAPACITY_IN_SECTORS_HI] = 0x00BF;// (sectors >> 16) & 0xFFFF;
+    idf[IDE_IDENTIFY_OFFSET_TOTAL_SECTORS]     = lba & 0xFFFF;
+    idf[IDE_IDENTIFY_OFFSET_TOTAL_SECTORS + 1] = (lba >> 16) & 0xFFFF;
     idf[IDE_IDENTIFY_OFFSET_MODEINFO_SINGLEWORD] = 0;// 0x0007; // disabling single word dma
     idf[IDE_IDENTIFY_OFFSET_MODEINFO_MULTIWORD] = 0; // 0x0103; // disabling multi-word dma
     
@@ -715,18 +761,18 @@ bool IDERigidDevice::ata_recv_data(uint8_t *data, size_t blocksize, size_t num_b
     // }
 
     // Set number bytes to transfer to registers
-    ide_registers_t regs = {};
-    ide_phy_get_regs(&regs);
-    regs.status = IDE_STATUS_BSY;
+    // ide_registers_t regs = {};
+    // ide_phy_get_regs(&regs);
+
     // regs.sector_count = 0; // Data transfer to device
     // regs.lba_mid = (uint8_t)blocksize;
     // regs.lba_high = (uint8_t)(blocksize >> 8);
-    ide_phy_set_regs(&regs);
+    // ide_phy_set_regs(&regs);
 
     // Start data transfer for first block
     int udma_mode = (m_ata_state.dma_requested ? m_ata_state.udma_mode : -1);
-    ide_phy_start_read(blocksize, udma_mode);
-
+    ide_phy_start_rigid_read(blocksize, udma_mode);
+   
     // Receive blocks
     for (size_t i = 0; i < num_blocks; i++)
     {
@@ -750,6 +796,8 @@ bool IDERigidDevice::ata_recv_data(uint8_t *data, size_t blocksize, size_t num_b
         // Read out previous block
         bool continue_transfer = (i + 1 < num_blocks);
         ide_phy_read_block(data + blocksize * i, blocksize, continue_transfer);
+        if (i < num_blocks - 1)
+            ide_phy_assert_irq(IDE_STATUS_DEVRDY | IDE_STATUS_DSC | IDE_STATUS_DATAREQ);
     }
 
     ide_phy_stop_transfers();
