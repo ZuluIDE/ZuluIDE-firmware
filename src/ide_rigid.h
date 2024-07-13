@@ -76,6 +76,10 @@ protected:
         // uint8_t media_status_events;
         uint8_t sectors_per_track;
         uint8_t heads;
+        uint16_t cylinders;
+        uint8_t current_sectors;
+        uint8_t current_heads;
+        uint16_t current_cylinders;
         char serial_number[20+1];
         char firmware_rev[8+1];
         char model_number[40+1];

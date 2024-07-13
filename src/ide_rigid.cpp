@@ -40,6 +40,36 @@ static const char *get_atapi_command_name(uint8_t cmd)
     }
 }
 
+
+
+static bool find_chs_capacity(uint64_t lba, uint16_t max_cylinders, uint8_t min_heads, uint16_t &c, uint8_t &h, uint8_t &s)
+{
+    bool found_chs = false;
+    uint16_t cylinders;
+    for (uint8_t heads = 16 ; heads >= min_heads; heads--)
+    {
+        if (lba % heads != 0)
+            continue;
+        for (uint8_t sectors = 63; sectors >= 1; sectors--)
+        {
+            if (lba % (heads * sectors) == 0)
+            {
+                cylinders = lba / (heads * sectors);
+                if (cylinders > max_cylinders)
+                    continue;
+                found_chs = true;
+                c = cylinders;
+                h = heads;
+                s = sectors;
+                break;
+            }
+        }
+        if (found_chs)
+            break;
+    }
+    return found_chs;
+}
+
 void IDERigidDevice::initialize(int devidx)
 {
     memset(&m_devinfo, 0, sizeof(m_devinfo));
@@ -49,19 +79,48 @@ void IDERigidDevice::initialize(int devidx)
     strncpy(m_devinfo.model_number, "ZuluIDE Hard Drive", sizeof(m_devinfo.model_number));
     strncpy(m_devinfo.firmware_rev, "1.0", sizeof(m_devinfo.firmware_rev));
     m_devinfo.bytes_per_sector = 512;
-    m_devinfo.sectors_per_track = 63;
-    m_devinfo.heads = 16;
+
+    uint64_t cap = capacity();
+    uint64_t lba = capacity_lba();
+
+    bool found_chs = false;
+    if (cap <= IDE_CHS_528MB_LIMIT_BYTES)
+    {
+        found_chs = find_chs_capacity(lba, 1024, 1, m_devinfo.cylinders, m_devinfo.heads, m_devinfo.sectors_per_track);
+    }
+    else if (cap <= IDE_CHS_8GB_WITH_GAP_LIMIT_BYTES)
+    {
+        found_chs = find_chs_capacity(lba, 16383, 9, m_devinfo.cylinders, m_devinfo.heads, m_devinfo.sectors_per_track);
+        if (!found_chs)
+            found_chs = find_chs_capacity(lba, 32767, 5, m_devinfo.cylinders, m_devinfo.heads, m_devinfo.sectors_per_track);
+        if (!found_chs)
+            found_chs = find_chs_capacity(lba, 65535, 1, m_devinfo.cylinders, m_devinfo.heads, m_devinfo.sectors_per_track);
+    }
+    else
+    {
+        m_devinfo.cylinders = 16383;
+        m_devinfo.heads = 16;
+        m_devinfo.sectors_per_track = 63;
+    }
+
+    m_devinfo.current_cylinders = m_devinfo.cylinders;
+    m_devinfo.current_heads = m_devinfo.heads;
+    m_devinfo.current_sectors = m_devinfo.sectors_per_track;
+    dbgmsg("Derived Cylinders/Heads/Sectors from ", (int) (capacity() / 1000000), "MB is C: ", (int) m_devinfo.cylinders,
+        " H: ",(int) m_devinfo.heads,
+        " S: ", (int) m_devinfo.sectors_per_track);
     m_devinfo.writable = true;
     IDEDevice::initialize(devidx);
 }
 
 void IDERigidDevice::reset()
 {
-    m_devinfo.bytes_per_sector = 512;
-    m_devinfo.sectors_per_track = 63;
-    m_devinfo.heads = 16;
+    m_devinfo.current_cylinders = m_devinfo.cylinders;
+    m_devinfo.current_heads = m_devinfo.heads;
+    m_devinfo.current_sectors = m_devinfo.sectors_per_track;
     memset(&m_removable, 0, sizeof(m_removable));
 }
+
 
 void IDERigidDevice::set_image(IDEImage *image)
 {
@@ -240,7 +299,7 @@ bool IDERigidDevice::cmd_read(ide_registers_t *regs, bool dma_transfer)
         m_ata_state.data_state = ATA_DATA_IDLE;
         if (status)
         {
-           
+
             ide_phy_assert_irq(IDE_STATUS_DEVRDY | IDE_STATUS_DSC);
         }
         else
@@ -328,7 +387,7 @@ bool IDERigidDevice::cmd_write_buffer(ide_registers_t *regs)
 
     ide_phy_start_read_buffer(512);
     uint32_t start = millis();
-    
+
     while (!ide_phy_can_read_block())
     {
         if ((uint32_t)(millis() - start) > 10000)
@@ -356,8 +415,16 @@ bool IDERigidDevice::cmd_write_buffer(ide_registers_t *regs)
 
 bool IDERigidDevice::cmd_init_dev_params(ide_registers_t *regs)
 {
-    m_devinfo.sectors_per_track =  regs->sector_count;
-    m_devinfo.heads = (0x0F & regs->device) + 1;
+    m_devinfo.current_sectors =  regs->sector_count;
+    m_devinfo.current_heads = (0x0F & regs->device) + 1;
+    uint64_t cap = capacity_lba();
+    if (cap > 16514064)
+        cap = 16514064;
+    uint32_t cylinders = cap / (m_devinfo.sectors_per_track * m_devinfo.heads);
+    if (cylinders > 65535)
+        cylinders = 65535;
+    m_devinfo.current_cylinders = cylinders;
+
     dbgmsg("Setting initial dev parameters: sectors/track = ", (int) m_devinfo.sectors_per_track, ", heads = ", (int)m_devinfo.heads);
 
     regs->status = IDE_STATUS_DEVRDY | IDE_STATUS_DSC;
@@ -404,18 +471,15 @@ bool IDERigidDevice::cmd_identify_device(ide_registers_t *regs)
     // idf[IDE_IDENTIFY_OFFSET_MULTIWORD_CYCLETIME_MIN] = 0x00F0;
     // idf[IDE_IDENTIFY_OFFSET_MULTIWORD_CYCLETIME_REC] = 0x00F0;
     // idf[IDE_IDENTIFY_OFFSET_PIO_CYCLETIME_MIN] = 0x00F0;
-    // idf[IDE_IDENTIFY_OFFSET_PIO_CYCLETIME_IORDY] = 0x00B4; 
+    // idf[IDE_IDENTIFY_OFFSET_PIO_CYCLETIME_IORDY] = 0x00B4;
     // idf[129] = 0x000B;
 
      // Generic IDE hard drive
     uint64_t lba = capacity_lba();
-    uint16_t cylinders;
-    uint8_t heads;
-    uint8_t sectors;
-    lba2chs(lba, cylinders, heads, sectors);
+
     idf[IDE_IDENTIFY_OFFSET_GENERAL_CONFIGURATION] = (m_devinfo.removable ? 0x80 : 0x40); // Device type
     // \todo Calc these from LBA or maybe visa versa
-    idf[IDE_IDENTIFY_OFFSET_NUM_CYLINDERS] = cylinders;
+    idf[IDE_IDENTIFY_OFFSET_NUM_CYLINDERS] = m_devinfo.cylinders;
     idf[IDE_IDENTIFY_OFFSET_NUM_HEADS] = m_devinfo.heads;
     idf[IDE_IDENTIFY_OFFSET_BYTES_PER_TRACK] = m_devinfo.bytes_per_sector * m_devinfo.sectors_per_track;
     idf[IDE_IDENTIFY_OFFSET_BYTES_PER_SECTOR] = m_devinfo.bytes_per_sector;
@@ -428,10 +492,10 @@ bool IDERigidDevice::cmd_identify_device(ide_registers_t *regs)
     copy_id_string(&idf[IDE_IDENTIFY_OFFSET_FIRMWARE_REV], 4, m_devinfo.firmware_rev);
     copy_id_string(&idf[IDE_IDENTIFY_OFFSET_MODEL_NUMBER], 20, m_devinfo.model_number);
     idf[IDE_IDENTIFY_OFFSET_MAX_SECTORS] = 0;// 0x8020;
-    
-    idf[IDE_IDENTIFY_OFFSET_CAPABILITIES_1] = (m_phy_caps.supports_iordy ? 1 << 11 : 0) | 
-                                            // 1 << 10 | 
-                                            (1 << 9) | 
+
+    idf[IDE_IDENTIFY_OFFSET_CAPABILITIES_1] = (m_phy_caps.supports_iordy ? 1 << 11 : 0) |
+                                            // 1 << 10 |
+                                            (1 << 9) |
                                             (m_phy_caps.max_udma_mode >= 0 ? 1 << 8 : 0); //IORDY may be support or disabled and LBA supported
     idf[IDE_IDENTIFY_OFFSET_PIO_MODE_ATA1] = (m_phy_caps.max_pio_mode << 8);
     // \todo set on older drives
@@ -439,17 +503,17 @@ bool IDERigidDevice::cmd_identify_device(ide_registers_t *regs)
     idf[IDE_IDENTIFY_OFFSET_MODE_INFO_VALID] |= 0x04; // UDMA support word valid
     idf[IDE_IDENTIFY_OFFSET_MODE_INFO_VALID] |= 0x02; // PIO support word valid
     // \todo set on older drives
-    idf[IDE_IDENTIFY_OFFSET_CURRENT_CYLINDERS] = 0x3FFF;
-    idf[IDE_IDENTIFY_OFFSET_CURRENT_HEADS] = 0x0010;
-    idf[IDE_IDENTIFY_OFFSET_CURRENT_SECTORS_PER_TRACK] = 0x0030;
-  
-    idf[IDE_IDENTIFY_OFFSET_CURRENT_CAPACITY_IN_SECTORS_LOW] = 0xFD00;// sectors & 0xFFFF;;
-    idf[IDE_IDENTIFY_OFFSET_CURRENT_CAPACITY_IN_SECTORS_HI] = 0x00BF;// (sectors >> 16) & 0xFFFF;
+    idf[IDE_IDENTIFY_OFFSET_CURRENT_CYLINDERS] = m_devinfo.current_cylinders;
+    idf[IDE_IDENTIFY_OFFSET_CURRENT_HEADS] = m_devinfo.current_heads;
+    idf[IDE_IDENTIFY_OFFSET_CURRENT_SECTORS_PER_TRACK] = m_devinfo.current_sectors;
+    uint32_t current_sector_cap = m_devinfo.current_cylinders * m_devinfo.current_heads * m_devinfo.current_sectors;
+    idf[IDE_IDENTIFY_OFFSET_CURRENT_CAPACITY_IN_SECTORS_LOW] = current_sector_cap & 0xFFFF;;
+    idf[IDE_IDENTIFY_OFFSET_CURRENT_CAPACITY_IN_SECTORS_HI] = (current_sector_cap >> 16) & 0xFFFF;
     idf[IDE_IDENTIFY_OFFSET_TOTAL_SECTORS]     = lba & 0xFFFF;
     idf[IDE_IDENTIFY_OFFSET_TOTAL_SECTORS + 1] = (lba >> 16) & 0xFFFF;
     idf[IDE_IDENTIFY_OFFSET_MODEINFO_SINGLEWORD] = 0;// 0x0007; // disabling single word dma
     idf[IDE_IDENTIFY_OFFSET_MODEINFO_MULTIWORD] = 0; // 0x0103; // disabling multi-word dma
-    
+
     idf[IDE_IDENTIFY_OFFSET_MODEINFO_PIO] = (m_phy_caps.max_pio_mode >= 3) ? 1 : 0; // PIO3 supported?
     idf[IDE_IDENTIFY_OFFSET_PIO_CYCLETIME_MIN] = m_phy_caps.min_pio_cycletime_no_iordy; // Without IORDY
     idf[IDE_IDENTIFY_OFFSET_PIO_CYCLETIME_IORDY] = m_phy_caps.min_pio_cycletime_with_iordy; // With IORDY
@@ -495,7 +559,7 @@ bool IDERigidDevice::cmd_identify_device(ide_registers_t *regs)
 
     ide_phy_start_write(sizeof(idf));
     ide_phy_write_block((uint8_t*)idf, sizeof(idf));
-    
+
 
     uint32_t start = millis();
     while (!ide_phy_is_write_finished())
@@ -522,7 +586,7 @@ bool IDERigidDevice::cmd_recalibrate(ide_registers_t *regs)
     regs->lba_mid =  0;
     regs->device &= 0xF0;
     ide_phy_set_regs(regs);
-    ide_phy_assert_irq(IDE_STATUS_DEVRDY | IDE_STATUS_DSC); 
+    ide_phy_assert_irq(IDE_STATUS_DEVRDY | IDE_STATUS_DSC);
     return true;
 }
 
@@ -673,7 +737,7 @@ bool IDERigidDevice::ata_send_data_block(const uint8_t *data, uint16_t blocksize
 {
     // dbgmsg("---- Send data block ", (uint32_t)data, " ", (int)blocksize, " udma_mode:", m_ata_state.udma_mode);
 
-    if (m_ata_state.data_state != ATA_DATA_WRITE || blocksize != m_ata_state.blocksize) 
+    if (m_ata_state.data_state != ATA_DATA_WRITE || blocksize != m_ata_state.blocksize)
     {
         ata_send_wait_finish();
         m_ata_state.blocksize = blocksize;
@@ -749,7 +813,7 @@ bool IDERigidDevice::ata_recv_data(uint8_t *data, size_t blocksize, size_t num_b
         blocksize /= split;
         num_blocks *= split;
     }
-    // Causing timeouts 
+    // Causing timeouts
     // else
     // {
     //     // Combine blocks for better performance
@@ -772,7 +836,7 @@ bool IDERigidDevice::ata_recv_data(uint8_t *data, size_t blocksize, size_t num_b
     // Start data transfer for first block
     int udma_mode = (m_ata_state.dma_requested ? m_ata_state.udma_mode : -1);
     ide_phy_start_rigid_read(blocksize, udma_mode);
-   
+
     // Receive blocks
     for (size_t i = 0; i < num_blocks; i++)
     {
@@ -816,7 +880,7 @@ bool IDERigidDevice::ata_recv_data_block(uint8_t *data, uint16_t blocksize)
     ide_phy_set_regs(&regs);
 
     // Start data transfer
-    int udma_mode = (m_ata_state.dma_requested ? m_ata_state.udma_mode : -1); 
+    int udma_mode = (m_ata_state.dma_requested ? m_ata_state.udma_mode : -1);
     ide_phy_start_read(blocksize, udma_mode);
 
     uint32_t start = millis();

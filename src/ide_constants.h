@@ -1,19 +1,19 @@
 /**
  * ZuluIDE™ - Copyright (c) 2023 Rabbit Hole Computing™
  *
- * ZuluIDE™ firmware is licensed under the GPL version 3 or any later version. 
+ * ZuluIDE™ firmware is licensed under the GPL version 3 or any later version.
  *
  * https://www.gnu.org/licenses/gpl-3.0.html
  * ----
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version. 
+ * (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details. 
+ * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
@@ -127,7 +127,7 @@ X(IDE_CMD_SET_MAX_ADDRESS                           , 0xF9)
 enum ide_cmd_t {
 #define IDE_ENUM_ENTRY(name, code) name = code,
 IDE_COMMAND_LIST(IDE_ENUM_ENTRY)
-#undef IDE_ENUM_ENTRY 
+#undef IDE_ENUM_ENTRY
 };
 
 // IDE_CMD_IDENTIFY_DEVICE response format
@@ -154,7 +154,7 @@ IDE_COMMAND_LIST(IDE_ENUM_ENTRY)
 #define IDE_IDENTIFY_OFFSET_CURRENT_HEADS            55
 #define IDE_IDENTIFY_OFFSET_CURRENT_SECTORS_PER_TRACK       56
 #define IDE_IDENTIFY_OFFSET_CURRENT_CAPACITY_IN_SECTORS_LOW 57
-#define IDE_IDENTIFY_OFFSET_CURRENT_CAPACITY_IN_SECTORS_HI  58 
+#define IDE_IDENTIFY_OFFSET_CURRENT_CAPACITY_IN_SECTORS_HI  58
 #define IDE_IDENTIFY_OFFSET_MULTI_SECTOR_VALID       59
 #define IDE_IDENTIFY_OFFSET_TOTAL_SECTORS            60
 #define IDE_IDENTIFY_OFFSET_MODEINFO_SINGLEWORD      62
@@ -212,3 +212,9 @@ IDE_COMMAND_LIST(IDE_ENUM_ENTRY)
 #define IDE_SET_FEATURE_ENABLE_REVERT_TO_POWERON    0xCC
 #define IDE_SET_FEATURE_DISABLE_RELEASE_IRQ         0xDD
 #define IDE_SET_FEATURE_DISABLE_SERVICE_IRQ         0xDE
+
+// Cylinder Head Sector
+#define IDE_CHS_528MB_LIMIT_BYTES 528482304
+// ATA-3 Spec Annex B Table B.1 max cylinders 16,383
+#define IDE_CHS_8GB_WITH_GAP_LIMIT_BYTES 8455200768
+#define IDE_CHS_8GB_WITH_LIMIT_BYTES 8455716864
