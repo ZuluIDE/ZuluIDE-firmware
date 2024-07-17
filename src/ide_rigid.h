@@ -138,7 +138,7 @@ protected:
     // Wait for any previously started transfers to finish
     bool ata_send_wait_finish();
     // Receive one or multiple data blocks synchronously
-    bool ata_recv_data(uint8_t *data, size_t blocksize, size_t num_blocks = 1);
+    bool ata_recv_data(uint8_t *data, size_t blocksize, size_t num_blocks = 1, bool first_xfer = true, bool last_xfer = true);
     // Receive single data block
     bool ata_recv_data_block(uint8_t *data, uint16_t blocksize);
 
@@ -157,7 +157,7 @@ protected:
     virtual ssize_t read_callback(const uint8_t *data, size_t blocksize, size_t num_blocks);
 
     // Write handlers
-    virtual ssize_t write_callback(uint8_t *data, size_t blocksize, size_t num_blocks);
+    virtual ssize_t write_callback(uint8_t *data, size_t blocksize, size_t num_blocks, bool first_xfer, bool last_xfer);
 };
 
 

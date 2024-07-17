@@ -1214,7 +1214,7 @@ bool IDEATAPIDevice::doWrite(uint32_t lba, uint32_t transfer_len)
 }
 
 // Called by IDEImage to request reception of more data from IDE bus
-ssize_t IDEATAPIDevice::write_callback(uint8_t *data, size_t blocksize, size_t num_blocks)
+ssize_t IDEATAPIDevice::write_callback(uint8_t *data, size_t blocksize, size_t num_blocks, bool first_xfer, bool last_xfer)
 {
     if (atapi_recv_data(data, blocksize, num_blocks))
     {

@@ -124,6 +124,9 @@
 //     0x84:   Write to IDE data buffer (length set by 0x82):
 //                 Byte 0-N: Data to transmit
 //
+//     0x85:   Configure data buffer for read from IDE bus, payload:
+//                 Byte 0-1: Block length minus 1 (words)
+//
 //     0x8A:   Configure data buffer for write to IDE bus using UltraDMA, payload:
 //                 Byte 0:   UDMA mode (currently must be 0)
 //                 Byte 1-2: Block length minus 1 (words)
@@ -174,6 +177,8 @@ void fpga_dump_ide_regs();
 #define FPGA_CMD_READ_IDE_REGS          0x01
 #define FPGA_CMD_READ_DATABUF           0x02
 #define FPGA_CMD_READ_DATABUF_CONT      0x03
+#define FPGA_CMD_ATA_READ               0x05
+#define FPGA_CMD_ATA_READ_CONT          0x06
 #define FPGA_CMD_READ_UDMA_CRC          0x0A
 #define FPGA_CMD_PROTOCOL_VERSION       0x7D
 #define FPGA_CMD_LICENSE_CHECK          0x7E
@@ -183,6 +188,7 @@ void fpga_dump_ide_regs();
 #define FPGA_CMD_START_WRITE            0x82
 #define FPGA_CMD_START_READ             0x83
 #define FPGA_CMD_WRITE_DATABUF          0x84
+#define FPGA_CMD_ATA_START_READ         0x85
 #define FPGA_CMD_START_UDMA_WRITE       0x8A
 #define FPGA_CMD_START_UDMA_READ        0x8B
 #define FPGA_CMD_WRITE_IDE_SIGNALS      0x90

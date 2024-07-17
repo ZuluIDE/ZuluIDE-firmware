@@ -299,18 +299,19 @@ void ide_phy_start_read_buffer(uint32_t blocklen)
     g_ide_phy.transfer_running = true;
 }
 
-void ide_phy_start_rigid_read(uint32_t blocklen, int udma_mode)
+void ide_phy_start_ata_read(uint32_t blocklen, int udma_mode)
 {
     // dbgmsg("ide_phy_start_read(", (int)blocklen, ", ", udma_mode, ")");
     g_ide_phy.crc_errors = 0;
     g_ide_phy.block_crc1 = g_ide_phy.block_crc0 = 0;
+    
     uint16_t last_word_idx = (blocklen + 1) / 2 - 1;
     ide_registers_t regs;
     ide_phy_get_regs(&regs);
     if (udma_mode < 0)
     {
         // Transfer in PIO mode
-        fpga_wrcmd(FPGA_CMD_START_READ, (const uint8_t*)&last_word_idx, 2);
+        fpga_wrcmd(FPGA_CMD_ATA_START_READ, (const uint8_t*)&last_word_idx, 2);
         g_ide_phy.udma_mode = -1;
         regs.status = IDE_STATUS_DEVRDY | IDE_STATUS_DSC | IDE_STATUS_DATAREQ;
         ide_phy_set_regs(&regs);
@@ -381,6 +382,14 @@ void ide_phy_read_block(uint8_t *buf, uint32_t blocklen, bool continue_transfer)
             g_ide_phy.crc_errors++;
         }
     }
+}
+
+void ide_phy_ata_read_block(uint8_t *buf, uint32_t blocklen, bool continue_transfer)
+{
+    // dbgmsg("ide_phy_ata_read_block, cont = ", (int)continue_transfer);
+    uint8_t cmd = continue_transfer ? FPGA_CMD_ATA_READ_CONT : FPGA_CMD_ATA_READ;
+    fpga_rdcmd(cmd, buf, blocklen);
+    // dbgmsg("ide_phy_read_block(", bytearray(buf, blocklen), ")");
 }
 
 void ide_phy_stop_transfers(int *crc_errors)

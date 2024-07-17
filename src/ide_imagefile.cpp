@@ -528,21 +528,25 @@ bool IDEImageFile::write(uint64_t startpos, size_t blocksize, size_t num_blocks,
     sd_cb_state.blocks_done = 0;
     sd_cb_state.blocks_available = 0;
     sd_cb_state.bufsize_blocks = m_buffer_size / blocksize;
-
+    bool first_run = true;
     while (sd_cb_state.blocks_done < num_blocks && !sd_cb_state.error)
     {
         platform_poll();
 
+        // \todo is this needed?
         // Check if callback can provide more data
-        sd_write_callback(0);
-
+        if (first_run)
+        {
+            first_run = false;
+            sd_write_callback(0);
+        }
         // Check if there is data to be written to SD card
-        if (sd_cb_state.blocks_done < sd_cb_state.blocks_available)
+        if (sd_cb_state.blocks_done < sd_cb_state.num_blocks)
         {
             // Check how many contiguous blocks are available to process.
             size_t start_idx = sd_cb_state.blocks_done % sd_cb_state.bufsize_blocks;
             size_t max_write = std::min({
-                sd_cb_state.blocks_available - sd_cb_state.blocks_done,
+                sd_cb_state.blocks_available - sd_cb_state.blocks_done % sd_cb_state.bufsize_blocks,
                 sd_cb_state.bufsize_blocks - start_idx
             });
 
@@ -587,8 +591,10 @@ void IDEImageFile::sd_write_callback(uint32_t bytes_complete)
         if (max_read > 0)
         {
             // Receive data from callback
+            bool last_xfer = sd_cb_state.num_blocks == sd_cb_state.blocks_done + max_read;
+            bool first_xfer = sd_cb_state.blocks_done == 0;
             uint8_t *data_start = sd_cb_state.buffer + start_idx * sd_cb_state.blocksize;
-            ssize_t status = sd_cb_state.callback->write_callback(data_start, sd_cb_state.blocksize, max_read);
+            ssize_t status = sd_cb_state.callback->write_callback(data_start, sd_cb_state.blocksize, max_read, first_xfer, last_xfer);
             if (status < 0)
                 sd_cb_state.error = true;
             else

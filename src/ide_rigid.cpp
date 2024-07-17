@@ -217,6 +217,10 @@ bool IDERigidDevice::cmd_set_features(ide_registers_t *regs)
     {
         dbgmsg("-- Enable ECC --");
     }
+    else if (feature == IDE_SET_FEATURE_ENABLE_READ_AHEAD)
+    {
+        dbgmsg("-- Enable read look-ahead --");
+    }
     else
     {
         dbgmsg("-- Unknown SET_FEATURE: ", feature);
@@ -350,11 +354,7 @@ bool IDERigidDevice::cmd_write(ide_registers_t *regs, bool dma_transfer)
                             this);
     }
 
-    if (status)
-    {
-        ide_phy_assert_irq(IDE_STATUS_DEVRDY | IDE_STATUS_DSC);
-    }
-    else
+    if (!status)
     {
         regs->error = IDE_ERROR_ABORT;
         ide_phy_set_regs(regs);
@@ -802,7 +802,7 @@ bool IDERigidDevice::ata_send_wait_finish()
 }
 
 
-bool IDERigidDevice::ata_recv_data(uint8_t *data, size_t blocksize, size_t num_blocks)
+bool IDERigidDevice::ata_recv_data(uint8_t *data, size_t blocksize, size_t num_blocks, bool first_xfer, bool last_xfer)
 {
     size_t max_blocksize = m_phy_caps.max_blocksize;
     if (blocksize > max_blocksize)
@@ -825,17 +825,18 @@ bool IDERigidDevice::ata_recv_data(uint8_t *data, size_t blocksize, size_t num_b
     // }
 
     // Set number bytes to transfer to registers
-    // ide_registers_t regs = {};
-    // ide_phy_get_regs(&regs);
+    ide_registers_t regs = {};
+    ide_phy_get_regs(&regs);
 
-    // regs.sector_count = 0; // Data transfer to device
-    // regs.lba_mid = (uint8_t)blocksize;
-    // regs.lba_high = (uint8_t)(blocksize >> 8);
-    // ide_phy_set_regs(&regs);
+    regs.sector_count = 0; // Data transfer to device
+    regs.lba_mid = (uint8_t)blocksize;
+    regs.lba_high = (uint8_t)(blocksize >> 8);
+    ide_phy_set_regs(&regs);
 
     // Start data transfer for first block
     int udma_mode = (m_ata_state.dma_requested ? m_ata_state.udma_mode : -1);
-    ide_phy_start_rigid_read(blocksize, udma_mode);
+    if (first_xfer)
+        ide_phy_start_ata_read(blocksize, udma_mode);
 
     // Receive blocks
     for (size_t i = 0; i < num_blocks; i++)
@@ -850,21 +851,22 @@ bool IDERigidDevice::ata_recv_data(uint8_t *data, size_t blocksize, size_t num_b
                 return false;
             }
 
-            if (ide_phy_is_command_interrupted())
-            {
-                dbgmsg("IDERigidDevice::ata_recv_data() interrupted");
-                return false;
-            }
+            // if (ide_phy_is_command_interrupted())
+            // {
+            //     dbgmsg("IDERigidDevice::ata_recv_data() interrupted");
+            //     return false;
+            // }
         }
 
         // Read out previous block
-        bool continue_transfer = (i + 1 < num_blocks);
-        ide_phy_read_block(data + blocksize * i, blocksize, continue_transfer);
-        if (i < num_blocks - 1)
-            ide_phy_assert_irq(IDE_STATUS_DEVRDY | IDE_STATUS_DSC | IDE_STATUS_DATAREQ);
+        bool continue_transfer = !last_xfer || (i + 1 < num_blocks);
+        if (udma_mode < 0)
+            ide_phy_ata_read_block(data + blocksize * i, blocksize, continue_transfer);
+        else
+            ide_phy_read_block(data + blocksize * i, blocksize, continue_transfer);
     }
-
-    ide_phy_stop_transfers();
+    if (last_xfer)
+        ide_phy_stop_transfers();
     return true;
 }
 
@@ -915,9 +917,9 @@ ssize_t IDERigidDevice::read_callback(const uint8_t *data, size_t blocksize, siz
 }
 
 // Called by IDEImage to request reception of more data from IDE bus
-ssize_t IDERigidDevice::write_callback(uint8_t *data, size_t blocksize, size_t num_blocks)
+ssize_t IDERigidDevice::write_callback(uint8_t *data, size_t blocksize, size_t num_blocks, bool first_xfer, bool last_xfer)
 {
-    if (ata_recv_data(data, blocksize, num_blocks))
+    if (ata_recv_data(data, blocksize, num_blocks, first_xfer, last_xfer))
     {
         return num_blocks;
     }
