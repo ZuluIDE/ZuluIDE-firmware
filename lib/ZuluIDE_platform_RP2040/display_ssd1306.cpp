@@ -169,7 +169,9 @@ void DisplaySSD1306::displayStatus(bool isRefresh) {
     graph.fillRect(0, 0, 32, 32, BLACK);
 
     // Draw the icon.
-    graph.drawBitmap(0, 8, cdrom_loaded, 32, 16, WHITE);
+    auto dev_icon = currentSysStatus->GetDeviceType() == drive_type_t::DRIVE_TYPE_ZIP100 ? zipdrive_loaded : cdrom_loaded;
+
+    graph.drawBitmap(0, 8, dev_icon, 32, 16, WHITE);
 
     auto size = currentSysStatus->GetLoadedImage().GetFileSizeBytes();
     if (size != 0) {
@@ -179,10 +181,13 @@ void DisplaySSD1306::displayStatus(bool isRefresh) {
       graph.print(toShow);
     }
   } else if (!currentSysStatus->IsCardPresent()) {
-    graph.drawBitmap(0, 8, cdrom_empty, 32, 16, WHITE);
+    auto dev_icon = currentSysStatus->GetDeviceType() == drive_type_t::DRIVE_TYPE_ZIP100 ? zipdrive_empty : cdrom_empty;
+    graph.drawBitmap(0, 8, dev_icon, 32, 16, WHITE);
+
     graph.print("[NO SD CARD]");
   } else {
-    graph.drawBitmap(0, 8, cdrom_empty, 32, 16, WHITE);
+    auto dev_icon = currentSysStatus->GetDeviceType() == drive_type_t::DRIVE_TYPE_ZIP100 ? zipdrive_empty : cdrom_empty;
+    graph.drawBitmap(0, 8, dev_icon, 32, 16, WHITE);
     graph.print("[NO IMAGE]");
   }
 
