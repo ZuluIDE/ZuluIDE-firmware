@@ -191,6 +191,7 @@ void fpga_dump_ide_regs();
 #define FPGA_CMD_ATA_START_READ         0x85
 #define FPGA_CMD_START_UDMA_WRITE       0x8A
 #define FPGA_CMD_START_UDMA_READ        0x8B
+#define FPGA_CMD_START_ATA_UDMA_READ    0x8C
 #define FPGA_CMD_WRITE_IDE_SIGNALS      0x90
 #define FPGA_CMD_ASSERT_IRQ             0x91
 #define FPGA_CMD_CLR_IRQ_FLAGS          0x92

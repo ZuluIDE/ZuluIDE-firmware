@@ -322,7 +322,7 @@ void ide_phy_start_ata_read(uint32_t blocklen, int udma_mode)
         uint8_t arg[3] = {(uint8_t)udma_mode,
                           (uint8_t)(last_word_idx),
                           (uint8_t)((last_word_idx) >> 8)};
-        fpga_wrcmd(FPGA_CMD_START_UDMA_READ, arg, 3);
+        fpga_wrcmd(FPGA_CMD_START_ATA_UDMA_READ, arg, 3);
         g_ide_phy.udma_mode = udma_mode;
     }
 
@@ -388,8 +388,20 @@ void ide_phy_ata_read_block(uint8_t *buf, uint32_t blocklen, bool continue_trans
 {
     // dbgmsg("ide_phy_ata_read_block, cont = ", (int)continue_transfer);
     uint8_t cmd = continue_transfer ? FPGA_CMD_ATA_READ_CONT : FPGA_CMD_ATA_READ;
-    fpga_rdcmd(cmd, buf, blocklen);
+    uint32_t our_crc = 0xDEADBEEF;
+    fpga_rdcmd(cmd, buf, blocklen, &our_crc);
     // dbgmsg("ide_phy_read_block(", bytearray(buf, blocklen), ")");
+    if (g_ide_phy.udma_mode >= 0 && our_crc != 0xDEADBEEF)
+    {
+        uint16_t host_crc = 0;
+        fpga_rdcmd(FPGA_CMD_READ_UDMA_CRC, (uint8_t*)&host_crc, 2);
+
+        if (our_crc != host_crc)
+        {
+            logmsg("WARNING: UltraDMA receive from IDE CRC mismatch, calculated ", our_crc, ", host sent ", host_crc);
+            g_ide_phy.crc_errors++;
+        }
+    }
 }
 
 void ide_phy_stop_transfers(int *crc_errors)

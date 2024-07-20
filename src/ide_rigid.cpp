@@ -804,6 +804,8 @@ bool IDERigidDevice::ata_send_wait_finish()
 
 bool IDERigidDevice::ata_recv_data(uint8_t *data, size_t blocksize, size_t num_blocks, bool first_xfer, bool last_xfer)
 {
+    // dbgmsg("---- Receive data blocks ", (int)num_blocks, " size ", (int)blocksize, " first: ", first_xfer, " last: ", last_xfer);
+
     size_t max_blocksize = m_phy_caps.max_blocksize;
     if (blocksize > max_blocksize)
     {
@@ -824,14 +826,7 @@ bool IDERigidDevice::ata_recv_data(uint8_t *data, size_t blocksize, size_t num_b
     //     }
     // }
 
-    // Set number bytes to transfer to registers
-    // ide_registers_t regs = {};
-    // ide_phy_get_regs(&regs);
 
-    // regs.sector_count = 0; // Data transfer to device
-    // regs.lba_mid = (uint8_t)blocksize;
-    // regs.lba_high = (uint8_t)(blocksize >> 8);
-    // ide_phy_set_regs(&regs);
 
     // Start data transfer for first block
     int udma_mode = (m_ata_state.dma_requested ? m_ata_state.udma_mode : -1);
@@ -861,14 +856,16 @@ bool IDERigidDevice::ata_recv_data(uint8_t *data, size_t blocksize, size_t num_b
 
         // Read out previous block
         bool continue_transfer = !last_xfer || (i + 1 < num_blocks);
-        if (udma_mode < 0)
-            ide_phy_ata_read_block(data + blocksize * i, blocksize, continue_transfer);
-        else
-            ide_phy_read_block(data + blocksize * i, blocksize, continue_transfer);
+        // dbgmsg("Reading datablock ", (int)i, " continue ", continue_transfer);
+        ide_phy_ata_read_block(data + blocksize * i, blocksize, continue_transfer);
     }
 
     if (last_xfer)
+    {
         ide_phy_stop_transfers();
+        if (m_ata_state.dma_requested)
+            ide_phy_assert_irq(IDE_STATUS_DEVRDY | IDE_STATUS_DSC);
+    }
     return true;
 }
 
