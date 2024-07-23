@@ -395,11 +395,19 @@ void ide_phy_ata_read_block(uint8_t *buf, uint32_t blocklen, bool continue_trans
     {
         uint16_t host_crc = 0;
         fpga_rdcmd(FPGA_CMD_READ_UDMA_CRC, (uint8_t*)&host_crc, 2);
-
         if (our_crc != host_crc)
         {
-            logmsg("WARNING: UltraDMA receive from IDE CRC mismatch, calculated ", our_crc, ", host sent ", host_crc);
-            g_ide_phy.crc_errors++;
+            if (continue_transfer)
+            {
+                logmsg("WARNING: UltraDMA receive from IDE CRC mismatch, calculated ", our_crc, ", host sent ", host_crc);
+                g_ide_phy.crc_errors++;
+            }
+            else
+            {
+                // Host may send extra words after device request end of transfer. The host uses the values for the host
+                // CRC. ZuluIDE does not read these extra words so the device CRC may be different.
+                dbgmsg("Ignoring UltraDMA CRC from host ", host_crc, " does not match, ", our_crc, " on last transfer.");
+            }
         }
     }
 }
