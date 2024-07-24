@@ -152,6 +152,8 @@ bool IDERigidDevice::handle_command(ide_registers_t *regs)
         case IDE_CMD_INIT_DEV_PARAMS: return cmd_init_dev_params(regs);
         case IDE_CMD_IDENTIFY_DEVICE: return cmd_identify_device(regs);
         case IDE_CMD_RECALIBRATE: return cmd_recalibrate(regs);
+        case IDE_CMD_IDLE_97H:
+        case IDE_CMD_IDLE_E3H: return cmd_idle(regs);
 
 
         default: return false;
@@ -586,6 +588,17 @@ bool IDERigidDevice::cmd_recalibrate(ide_registers_t *regs)
     regs->lba_mid =  0;
     regs->device &= 0xF0;
     ide_phy_set_regs(regs);
+    ide_phy_assert_irq(IDE_STATUS_DEVRDY | IDE_STATUS_DSC);
+    return true;
+}
+
+bool IDERigidDevice::cmd_idle(ide_registers_t *regs)
+{
+    if (regs->sector_count == 0)
+        dbgmsg("IDERigidDevice::cmd_idle() - disabling timeout");
+    else
+        dbgmsg("IDERigidDevice::cmd_idle() - ignoring timeout setting ");
+
     ide_phy_assert_irq(IDE_STATUS_DEVRDY | IDE_STATUS_DSC);
     return true;
 }

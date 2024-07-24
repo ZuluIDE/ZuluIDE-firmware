@@ -126,6 +126,7 @@ protected:
     virtual bool cmd_init_dev_params(ide_registers_t *regs);
     virtual bool cmd_identify_device(ide_registers_t *regs);
     virtual bool cmd_recalibrate(ide_registers_t *regs);
+    virtual bool cmd_idle(ide_registers_t *regs);
 
     // Helper methods
     // convert lba to cylinder, head, sector values

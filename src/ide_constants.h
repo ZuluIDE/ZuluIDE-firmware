@@ -84,6 +84,7 @@ X(IDE_CMD_CFA_TRANSLATE_SECTOR                      , 0x87) \
 X(IDE_CMD_EXECUTE_DEVICE_DIAGNOSTIC                 , 0x90) \
 X(IDE_CMD_INIT_DEV_PARAMS                           , 0x91) \
 X(IDE_CMD_DOWNLOAD_MICROCODE                        , 0x92) \
+X(IDE_CMD_IDLE_97H                                  , 0x97) \
 X(IDE_CMD_PACKET                                    , 0xA0) \
 X(IDE_CMD_IDENTIFY_PACKET_DEVICE                    , 0xA1) \
 X(IDE_CMD_SERVICE                                   , 0xA2) \
@@ -105,7 +106,7 @@ X(IDE_CMD_MEDIA_UNLOCK                              , 0xDF) \
 X(IDE_CMD_STANDBY_IMMEDIATE                         , 0xE0) \
 X(IDE_CMD_IDLE_IMMEDIATE                            , 0xE1) \
 X(IDE_CMD_STANDBY                                   , 0xE2) \
-X(IDE_CMD_IDLE                                      , 0xE3) \
+X(IDE_CMD_IDLE_E3H                                  , 0xE3) \
 X(IDE_CMD_READ_BUFFER                               , 0xE4) \
 X(IDE_CMD_CHECK_POWER_MODE                          , 0xE5) \
 X(IDE_CMD_SLEEP                                     , 0xE6) \
