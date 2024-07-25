@@ -913,6 +913,9 @@ void zuluide_main_loop1(void)
       // Notify the I2C server of updates.
       g_I2cServer.HandleUpdate(*currentStatus);
       delete(currentStatus);
+    } else {
+      // Only need to check refresh if there wasn't an update.
+      display.Refresh();
     }
 
     g_I2cServer.Poll();

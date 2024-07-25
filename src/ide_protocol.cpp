@@ -1,19 +1,19 @@
 /**
  * ZuluIDE™ - Copyright (c) 2023 Rabbit Hole Computing™
  *
- * ZuluIDE™ firmware is licensed under the GPL version 3 or any later version. 
+ * ZuluIDE™ firmware is licensed under the GPL version 3 or any later version.
  *
  * https://www.gnu.org/licenses/gpl-3.0.html
  * ----
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version. 
+ * (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details. 
+ * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
@@ -146,7 +146,7 @@ void ide_protocol_poll()
         evt = IDE_EVENT_HWRST;
         g_ide_reset_after_init_done = true;
     }
-    
+
     if (evt != IDE_EVENT_NONE)
     {
         LED_ON();
@@ -412,6 +412,24 @@ void ide_protocol_poll()
     }
 }
 
+void IDEDevice::set_ident_strings(const char* default_model, const char* default_serial, const char* default_revision)
+{
+    char input_str[41];
+    uint8_t input_len;
+
+    memset(input_str, ' ', 40);
+    input_len = ini_gets("IDE", "ide_model", default_model, input_str, 41, CONFIGFILE);
+    memcpy(m_devconfig.ata_model, input_str, input_len);
+
+    memset(input_str, ' ', 20);
+    input_len = ini_gets("IDE","ide_serial", default_serial, input_str, 21, CONFIGFILE);
+    memcpy(m_devconfig.ata_serial, input_str, input_len);
+
+    memset(input_str, ' ', 8);
+    input_len = ini_gets("IDE","ide_revision", default_revision, input_str, 9, CONFIGFILE);
+    memcpy(m_devconfig.ata_revision, input_str, input_len);
+}
+
 void IDEDevice::initialize(int devidx)
 {
     memset(&m_devconfig, 0, sizeof(m_devconfig));
@@ -422,7 +440,6 @@ void IDEDevice::initialize(int devidx)
     m_devconfig.max_pio_mode = ini_getl("IDE", "max_pio", 3, CONFIGFILE);
     m_devconfig.max_udma_mode = ini_getl("IDE", "max_udma", 0, CONFIGFILE);
     m_devconfig.max_blocksize = ini_getl("IDE", "max_blocksize", m_phy_caps.max_blocksize, CONFIGFILE);
-
     logmsg("Device ", devidx, " configuration:");
     logmsg("-- Max PIO mode: ", m_devconfig.max_pio_mode, " (phy max ", m_phy_caps.max_pio_mode, ")");
     logmsg("-- Max UDMA mode: ", m_devconfig.max_udma_mode, " (phy max ", m_phy_caps.max_udma_mode, ")");

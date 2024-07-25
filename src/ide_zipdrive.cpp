@@ -41,11 +41,16 @@ void IDEZipDrive::initialize(int devidx)
     m_devinfo.writable = true;
     m_devinfo.bytes_per_sector = ZIP100_SECTORSIZE;
 
-    strncpy(m_devinfo.ide_vendor, "IOMEGA", sizeof(m_devinfo.ide_vendor));
-    strncpy(m_devinfo.ide_product, "ZIP 100", sizeof(m_devinfo.ide_product));
-    memcpy(m_devinfo.ide_revision, "14.A", sizeof(m_devinfo.ide_revision));
-    strncpy(m_devinfo.atapi_model, "IOMEGA ZIP 100", sizeof(m_devinfo.atapi_model));
-    memcpy(m_devinfo.atapi_revision, "14.A", sizeof(m_devinfo.atapi_revision));
+    if (m_image && m_image->get_drive_type() ==  drive_type_t::DRIVE_TYPE_ZIP250)
+    {
+        set_inquiry_strings("IOMEGA", "ZIP 250", "41.S");
+        set_ident_strings("IOMEGA  ZIP 250       ATAPI", "00DB47B188C61421", "41.S");
+    }
+    else
+    {
+        set_inquiry_strings("IOMEGA", "ZIP 100", "14.A");
+        set_ident_strings("IOMEGA  ZIP 100       ATAPI", "", "14.A");
+    }
 
     m_devinfo.num_profiles = 1;
     m_devinfo.profiles[0] = ATAPI_PROFILE_REMOVABLE;
@@ -57,8 +62,9 @@ void IDEZipDrive::initialize(int devidx)
     m_media_status_notification = false;
 
     m_zip_disk_info.button_pressed = false;
-    memset(m_zip_disk_info.serial_string, ' ', sizeof(m_zip_disk_info) -1);
-    m_zip_disk_info.serial_string[sizeof(m_zip_disk_info)- 1];
+
+    memset(m_zip_disk_info.serial_string, ' ', sizeof(m_zip_disk_info) - 2);
+    m_zip_disk_info.serial_string[sizeof(m_zip_disk_info.serial_string) - 1] = '\0';
 }
 
 // Capacity is based on image size
@@ -162,11 +168,13 @@ bool IDEZipDrive::cmd_identify_packet_device(ide_registers_t *regs)
 
     idf[IDE_IDENTIFY_OFFSET_GENERAL_CONFIGURATION] = 0x80A0;
 
+
+    copy_id_string(&idf[IDE_IDENTIFY_OFFSET_SERIAL_NUMBER], 10, m_devconfig.ata_serial);
+    copy_id_string(&idf[IDE_IDENTIFY_OFFSET_FIRMWARE_REV], 4, m_devconfig.ata_revision);
+    copy_id_string(&idf[IDE_IDENTIFY_OFFSET_MODEL_NUMBER], 20, m_devconfig.ata_model);
+
     if (m_image == nullptr ||  m_image->get_drive_type() == drive_type_t::DRIVE_TYPE_ZIP100)
     {
-        copy_id_string(&idf[IDE_IDENTIFY_OFFSET_SERIAL_NUMBER], 10, "");
-        copy_id_string(&idf[IDE_IDENTIFY_OFFSET_FIRMWARE_REV], 4, "14.A");
-        copy_id_string(&idf[IDE_IDENTIFY_OFFSET_MODEL_NUMBER], 20, "IOMEGA  ZIP 100       ATAPI");
         idf[IDE_IDENTIFY_OFFSET_CAPABILITIES_1] = 0x0E00;
         idf[IDE_IDENTIFY_OFFSET_PIO_MODE_ATA1] = 0;
         idf[IDE_IDENTIFY_OFFSET_MODE_INFO_VALID] = 0x0002;
@@ -183,9 +191,6 @@ bool IDEZipDrive::cmd_identify_packet_device(ide_registers_t *regs)
     }
     else if (m_image && m_image->get_drive_type() == drive_type_t::DRIVE_TYPE_ZIP250)
     {
-        copy_id_string(&idf[IDE_IDENTIFY_OFFSET_SERIAL_NUMBER], 10, "80DB40BF14061510");
-        copy_id_string(&idf[IDE_IDENTIFY_OFFSET_FIRMWARE_REV], 4, "41.S");
-        copy_id_string(&idf[IDE_IDENTIFY_OFFSET_MODEL_NUMBER], 20, "IOMEGA  ZIP 250       ATAPI");
         idf[IDE_IDENTIFY_OFFSET_CAPABILITIES_1] = 0x0F00;
         idf[IDE_IDENTIFY_OFFSET_PIO_MODE_ATA1] = 0x0200;
         idf[IDE_IDENTIFY_OFFSET_MODE_INFO_VALID] = 0x0006;
@@ -348,36 +353,11 @@ bool IDEZipDrive::atapi_inquiry(const uint8_t *cmd)
         inquiry[6] = 0x00;
         inquiry[7] = 0x00;
         // Vendor ID
-        inquiry[8] = 0x49;
-        inquiry[9] = 0x4F;
-        inquiry[10] = 0x4D;
-        inquiry[11] = 0x45;
-        inquiry[12] = 0x47;
-        inquiry[13] = 0x41;
-        inquiry[14] = 0x20;
+        memcpy(inquiry + 8, m_devinfo.atapi_vendor, sizeof(m_devinfo.atapi_vendor));
         // Product ID
-        inquiry[15] = 0x20;
-        inquiry[16] = 0x5A;
-        inquiry[17] = 0x49;
-        inquiry[18] = 0x50;
-        inquiry[19] = 0x20;
-        inquiry[20] = 0x31;
-        inquiry[21] = 0x30;
-        inquiry[22] = 0x30;
-        inquiry[23] = 0x20;
-        inquiry[24] = 0x20;
-        inquiry[25] = 0x20;
-        inquiry[26] = 0x20;
-        inquiry[27] = 0x20;
-        inquiry[28] = 0x20;
-        inquiry[29] = 0x20;
-        inquiry[30] = 0x20;
-        inquiry[31] = 0x20;
+        memcpy(inquiry + 15, m_devinfo.atapi_product, sizeof(m_devinfo.atapi_product));
         // Product Revision
-        inquiry[32] = 0x31;
-        inquiry[33] = 0x34;
-        inquiry[34] = 0x2E;
-        inquiry[35] = 0x41;
+        memcpy(inquiry + 32, m_devinfo.atapi_version, sizeof(m_devinfo.atapi_version));
         // vendor specific data
         inquiry[36] = 0x30;
         inquiry[37] = 0x39;
@@ -425,34 +405,13 @@ bool IDEZipDrive::atapi_inquiry(const uint8_t *cmd)
         inquiry[1]   = 0x80;
         inquiry[3]   = 0x01;
         inquiry[4]   = 0x75;
-        inquiry[8]   = 0x49;
-        inquiry[9]   = 0x4F;
-        inquiry[10]  = 0x4D;
-        inquiry[11]  = 0x45;
-        inquiry[12]  = 0x47;
-        inquiry[13]  = 0x41;
-        inquiry[14]  = 0x20;
-        inquiry[15]  = 0x20;
-        inquiry[16]  = 0x5A;
-        inquiry[17]  = 0x49;
-        inquiry[18]  = 0x50;
-        inquiry[19]  = 0x20;
-        inquiry[20]  = 0x32;
-        inquiry[21]  = 0x35;
-        inquiry[22]  = 0x30;
-        inquiry[23]  = 0x20;
-        inquiry[24]  = 0x20;
-        inquiry[25]  = 0x20;
-        inquiry[26]  = 0x20;
-        inquiry[27]  = 0x20;
-        inquiry[28]  = 0x20;
-        inquiry[29]  = 0x20;
-        inquiry[30]  = 0x20;
-        inquiry[31]  = 0x20;
-        inquiry[32]  = 0x34;
-        inquiry[33]  = 0x31;
-        inquiry[34]  = 0x2E;
-        inquiry[35]  = 0x53;
+        // Vendor ID
+        memcpy(inquiry + 8, m_devinfo.atapi_vendor, sizeof(m_devinfo.atapi_vendor));
+        // Product ID
+        memcpy(inquiry + 15, m_devinfo.atapi_product, sizeof(m_devinfo.atapi_product));
+        // Product Revision
+        memcpy(inquiry + 32, m_devinfo.atapi_version, sizeof(m_devinfo.atapi_version));
+        // vendor specific data
         inquiry[36]  = 0x30;
         inquiry[37]  = 0x38;
         inquiry[38]  = 0x2F;
@@ -502,7 +461,12 @@ bool IDEZipDrive::atapi_inquiry(const uint8_t *cmd)
 
 bool IDEZipDrive::atapi_zip_disk_0x06(const uint8_t *cmd)
 {
-    // Currently zip disks of size 100MB info is returned
+
+    if (cmd[2] != 0x02)
+    {
+        dbgmsg("Vendor 0x06 sub command ", cmd[0], " unsupported");
+    }
+    // Currently zip disks of size 100MB info is returned 
     const uint8_t count = 64;
     uint8_t *buf = m_buffer.bytes;
     memset(buf, 0x00, count);

@@ -24,7 +24,7 @@
 #include "atapi_constants.h"
 #include "ZuluIDE.h"
 #include "ZuluIDE_config.h"
-
+#include <minIni.h>
 // Map from command index for command name for logging
 static const char *get_atapi_command_name(uint8_t cmd)
 {
@@ -39,15 +39,16 @@ static const char *get_atapi_command_name(uint8_t cmd)
 
 void IDERigidDevice::initialize(int devidx)
 {
+
+    IDEDevice::initialize(devidx);
+
     memset(&m_devinfo, 0, sizeof(m_devinfo));
     memset(&m_ata_state, 0, sizeof(m_ata_state));
     memset(&m_removable, 0, sizeof(m_removable));
-    strncpy(m_devinfo.serial_number, "123456789", sizeof(m_devinfo.serial_number));
-    strncpy(m_devinfo.model_number, "ZuluIDE Hard Drive", sizeof(m_devinfo.model_number));
-    strncpy(m_devinfo.firmware_rev, "1.0", sizeof(m_devinfo.firmware_rev));
     m_devinfo.bytes_per_sector = 512;
     m_devinfo.writable = true;
-    IDEDevice::initialize(devidx);
+
+    set_ident_strings("ZuluIDE Hard Drive", "123456789", "1.0");
 }
 
 void IDERigidDevice::reset()
@@ -325,6 +326,9 @@ bool IDERigidDevice::cmd_init_dev_params(ide_registers_t *regs)
 bool IDERigidDevice::cmd_identify_device(ide_registers_t *regs)
 {
     uint16_t idf[256] = {0};
+    copy_id_string(&idf[IDE_IDENTIFY_OFFSET_SERIAL_NUMBER], 10, m_devconfig.ata_serial);
+    copy_id_string(&idf[IDE_IDENTIFY_OFFSET_FIRMWARE_REV], 4, m_devconfig.ata_revision);
+    copy_id_string(&idf[IDE_IDENTIFY_OFFSET_MODEL_NUMBER], 20, m_devconfig.ata_model);
     
     // Apple IDE hard drive settings - model DSAA-3360
     // idf[IDE_IDENTIFY_OFFSET_GENERAL_CONFIGURATION] = 0x045A;
@@ -369,13 +373,11 @@ bool IDERigidDevice::cmd_identify_device(ide_registers_t *regs)
     // idf[IDE_IDENTIFY_OFFSET_BYTES_PER_TRACK] = 0xE808;
     // idf[IDE_IDENTIFY_OFFSET_BYTES_PER_SECTOR] = 0x0226;
     // idf[IDE_IDENTIFY_OFFSET_SECTORS_PER_TRACK] = 0x0030;
-    copy_id_string(&idf[IDE_IDENTIFY_OFFSET_SERIAL_NUMBER], 10, m_devinfo.serial_number);
     // \todo set on older drives
     // idf[IDE_IDENTIFY_OFFSET_BUFFER_TYPE] = 0x0003;
     // idf[IDE_IDENTIFY_OFFSET_BUFFER_SIZE_512] = 0x00C0;
     // idf[IDE_IDENTIFY_OFFSET_ECC_LONG_CMDS] = 0x0010;
-    copy_id_string(&idf[IDE_IDENTIFY_OFFSET_FIRMWARE_REV], 4, m_devinfo.firmware_rev);
-    copy_id_string(&idf[IDE_IDENTIFY_OFFSET_MODEL_NUMBER], 20, m_devinfo.model_number);
+
     idf[IDE_IDENTIFY_OFFSET_MAX_SECTORS] = 0x8020;
     
     idf[IDE_IDENTIFY_OFFSET_CAPABILITIES_1] = (m_phy_caps.supports_iordy ? 1 << 11 : 0) | 
