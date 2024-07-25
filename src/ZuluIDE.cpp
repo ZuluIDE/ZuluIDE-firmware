@@ -184,7 +184,6 @@ void save_logfile(bool always = false)
       return;
     }
 
-  
     static uint32_t prev_log_pos = 0;
     static uint32_t prev_log_len = 0;
     static uint32_t prev_log_save = 0;
@@ -248,7 +247,6 @@ drive_type_t searchForDriveType() {
       g_ide_imagefile.set_prefix(image);
       return DRIVE_TYPE_RIGID;
     }
-
   }
 
   imgIter.Cleanup();
@@ -280,7 +278,7 @@ void setupStatusController()
     g_ide_imagefile.set_drive_type(drive_type_t::DRIVE_TYPE_ZIP250);
   } else if (strncasecmp(device_name, "removable", sizeof("removable")) == 0) {
     g_ide_imagefile.set_drive_type(drive_type_t::DRIVE_TYPE_REMOVABLE);
-  } else if (strncasecmp(device_name, "hdd", sizeof("removable")) == 0) {
+  } else if (strncasecmp(device_name, "hdd", sizeof("hdd")) == 0) {
     g_ide_imagefile.set_drive_type(drive_type_t::DRIVE_TYPE_RIGID);
   } else if (device_name[0] && g_sdcard_present) {
     logmsg("Warning device = \"", device_name ,"\" invalid, defaulting to CD-ROM");

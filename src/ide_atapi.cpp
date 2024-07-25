@@ -25,6 +25,10 @@
 #include "ZuluIDE.h"
 #include "ZuluIDE_config.h"
 #include "minIni.h"
+#include <zuluide/images/image_iterator.h>
+#include <status/status_controller.h>
+
+extern zuluide::status::StatusController g_StatusController;
 
 // Map from command index for command name for logging
 static const char *get_atapi_command_name(uint8_t cmd)
@@ -1320,23 +1324,56 @@ void IDEATAPIDevice::button_eject_media()
 
 void IDEATAPIDevice::eject_media()
 {
-    logmsg("Device ejecting media");
+    char filename[MAX_FILE_PATH+1];
+    m_image->get_filename(filename, sizeof(filename));
+    logmsg("Device ejecting media: ", filename);
     m_removable.ejected = true;
 }
 
 void IDEATAPIDevice::insert_media()
 {
+    zuluide::images::ImageIterator img_iterator;
+    char filename[MAX_FILE_PATH+1];
+
     if (m_devinfo.removable && m_removable.ejected)
     {
-            dbgmsg("-- Device loading media");
+        img_iterator.Reset();
+        if (!img_iterator.IsEmpty())
+        {
             if (m_image)
             {
-                m_image->load_next_image();
-                set_image(m_image);
+                m_image->get_filename(filename, sizeof(filename));
+                if (!img_iterator.MoveToFile(filename))
+                {
+                    img_iterator.MoveNext();
+                }
             }
+            else
+            {
+                img_iterator.MoveNext();
+            }
+
+            if (img_iterator.IsLast())
+            {
+                img_iterator.MoveFirst();
+            }
+            else
+            {
+                img_iterator.MoveNext();
+            }
+            g_StatusController.LoadImage(img_iterator.Get());
+
+            dbgmsg("-- Device loading media: ", img_iterator.Get().GetFilename().c_str());
+            img_iterator.Cleanup();
             //m_devinfo.media_status_events = ATAPI_MEDIA_EVENT_NEW;
             m_removable.ejected = false;
             m_atapi_state.not_ready = true;
+        }
+        else
+        {
+            // spammy
+            // dbgmsg("-- Device loading media: no images found to insert");
+        }
     }
 }
 
