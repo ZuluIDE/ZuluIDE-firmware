@@ -1327,7 +1327,7 @@ void IDEATAPIDevice::eject_media()
 {
     char filename[MAX_FILE_PATH+1];
     m_image->get_filename(filename, sizeof(filename));
-    logmsg("Device ejecting media: ", filename);
+    logmsg("Device ejecting media: \"", filename, "\"");
     m_removable.ejected = true;
 }
 
@@ -1364,7 +1364,7 @@ void IDEATAPIDevice::insert_media()
             }
             g_StatusController.LoadImage(img_iterator.Get());
 
-            dbgmsg("-- Device loading media: ", img_iterator.Get().GetFilename().c_str());
+            dbgmsg("-- Device loading media: \"", img_iterator.Get().GetFilename().c_str(), "\"");
             img_iterator.Cleanup();
             //m_devinfo.media_status_events = ATAPI_MEDIA_EVENT_NEW;
             m_removable.ejected = false;

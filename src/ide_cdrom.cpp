@@ -39,6 +39,10 @@
 #include <string.h>
 #include <strings.h>
 #include <minIni.h>
+#include <zuluide/images/image_iterator.h>
+#include <status/status_controller.h>
+
+extern zuluide::status::StatusController g_StatusController;
 
 static const uint8_t DiscInformation[] =
 {
@@ -1301,7 +1305,9 @@ uint64_t IDECDROMDevice::capacity_lba()
 
 void IDECDROMDevice::eject_media()
 {
-    logmsg("Device ejecting media");
+    char filename[MAX_FILE_PATH+1];
+    m_image->get_filename(filename, sizeof(filename));
+    logmsg("Device ejecting media: \"", filename, "\"");
     set_esn_event(esn_event_t::NoChange);
     m_removable.ejected = true;
 }
@@ -1314,16 +1320,50 @@ void IDECDROMDevice::button_eject_media()
 
 void IDECDROMDevice::insert_media()
 {
+    zuluide::images::ImageIterator img_iterator;
+    char filename[MAX_FILE_PATH+1];
+
     if (m_devinfo.removable && m_removable.ejected)
     {
-        dbgmsg("-- Device loading media");
-        if (m_image)
+        img_iterator.Reset();
+        if (!img_iterator.IsEmpty())
         {
-            m_image->load_next_image();
-            set_image(m_image);
+            if (m_image)
+            {
+                m_image->get_filename(filename, sizeof(filename));
+                if (!img_iterator.MoveToFile(filename))
+                {
+                    img_iterator.MoveNext();
+                }
+            }
+            else
+            {
+                img_iterator.MoveNext();
+            }
+
+            if (img_iterator.IsLast())
+            {
+                img_iterator.MoveFirst();
+            }
+            else
+            {
+                img_iterator.MoveNext();
+            }
+
+            g_StatusController.LoadImage(img_iterator.Get());
+
+            dbgmsg("-- Device loading media: \"", img_iterator.Get().GetFilename().c_str(), "\"");
+            img_iterator.Cleanup();
+
+            set_esn_event(esn_event_t::MNewMedia);
+            m_removable.ejected = false;
+            m_atapi_state.not_ready = true;
         }
-        set_esn_event(esn_event_t::MNewMedia);
-        m_removable.ejected = false;
+        else
+        {
+            // spammy
+            // dbgmsg("-- Device loading media: no images found to insert");
+        }
     }
 }
 

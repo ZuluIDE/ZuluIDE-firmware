@@ -410,7 +410,7 @@ void load_image(const zuluide::images::Image& toLoad)
 {
   clear_image();
 
-  logmsg("Loading image ", toLoad.GetFilename().c_str());
+  logmsg("Loading image \"", toLoad.GetFilename().c_str(), "\"");
   g_ide_imagefile.open_file(toLoad.GetFilename().c_str(), false);
   if (g_ide_device) {
     g_ide_device->set_image(&g_ide_imagefile);

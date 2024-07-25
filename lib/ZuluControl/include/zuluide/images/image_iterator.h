@@ -24,8 +24,8 @@
 #include "image.h"
 #include <memory>
 #include <SdFat.h>
+#include <ZuluIDE_config.h>
 
-#define MAX_FILE_PATH 255
 
 namespace zuluide::images {
 
