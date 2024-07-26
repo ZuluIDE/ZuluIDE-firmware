@@ -245,6 +245,44 @@ void I2CServer::Poll() {
     break;
   }
 
+  case I2C_CLIENT_IP_ADDRESS: {
+    wire->requestFrom(CLIENT_ADDR, 2);
+    uint16_t length = ReadInLength(wire);
+
+    if (length > 0) {
+      // Client is sending some data.
+      char* buffer = new char[length + 1];
+      memset(buffer, 0, length + 1);
+
+      for (int pos = 0; pos < length;) {        
+        int toRecv = pos + BUFFER_LENGTH < length ? BUFFER_LENGTH : length - pos;
+
+        wire->requestFrom(CLIENT_ADDR, toRecv);
+        while (toRecv > 0) {
+          while (wire->available() == 0) { }
+          buffer[pos++] = wire->read();
+          toRecv--;
+          logmsg("Recvd ", buffer[pos - 1]);
+        }
+      }
+
+      logmsg("Client IP address is: ", buffer);
+    }
+    
+    break;
+  }
+    
+  case I2C_CLIENT_NET_DOWN: {
+    wire->requestFrom(CLIENT_ADDR, 2);
+    if (ReadInLength(wire) != 0) {
+      logmsg("Length was not 0 for NET_DOWN request/notification.");
+    }
+
+    logmsg("Client network is down.");
+    
+    break;
+  }
+
   default: {    
     break;
   }
