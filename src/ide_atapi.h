@@ -30,6 +30,9 @@
 // Number of simultaneous transfer requests to pass to ide_phy.
 #define ATAPI_TRANSFER_REQ_COUNT 2
 
+// \todo - find a better way to link to the static backing data
+extern IDEImageFile g_ide_imagefile;
+
 // Generic ATAPI device implementation: encapsulated SCSI commands over ATA.
 // Abstract class, use one of the subclasses (IDECDROMDevice)
 class IDEATAPIDevice: public IDEDevice, public IDEImage::Callback
@@ -61,7 +64,7 @@ public:
 
     virtual void eject_media();
 
-    virtual void insert_media();
+    virtual void insert_media(IDEImage *image = nullptr);
 
     virtual void sd_card_inserted() override;
 

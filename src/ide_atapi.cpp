@@ -26,9 +26,6 @@
 #include "ZuluIDE_config.h"
 #include <minIni.h>
 #include <zuluide/images/image_iterator.h>
-#include <status/status_controller.h>
-
-extern zuluide::status::StatusController g_StatusController;
 
 // Map from command index for command name for logging
 static const char *get_atapi_command_name(uint8_t cmd)
@@ -786,7 +783,7 @@ bool IDEATAPIDevice::atapi_test_unit_ready(const uint8_t *cmd)
     if (m_atapi_state.not_ready)
     {
         m_atapi_state.not_ready = false;
-        return atapi_cmd_error(ATAPI_SENSE_NOT_READY, ATAPI_ASC_UNIT_BECOMING_READY);
+        return atapi_cmd_not_ready_error();
     }
     return atapi_cmd_ok();
 }
@@ -1331,49 +1328,55 @@ void IDEATAPIDevice::eject_media()
     m_removable.ejected = true;
 }
 
-void IDEATAPIDevice::insert_media()
+void IDEATAPIDevice::insert_media(IDEImage *image)
 {
     zuluide::images::ImageIterator img_iterator;
     char filename[MAX_FILE_PATH+1];
 
-    if (m_devinfo.removable && m_removable.ejected)
+    if (m_devinfo.removable)
     {
-        img_iterator.Reset();
-        if (!img_iterator.IsEmpty())
+        if (image != nullptr)
         {
-            if (m_image)
-            {
-                m_image->get_filename(filename, sizeof(filename));
-                if (!img_iterator.MoveToFile(filename))
-                {
-                    img_iterator.MoveNext();
-                }
-            }
-            else
-            {
-                img_iterator.MoveNext();
-            }
-
-            if (img_iterator.IsLast())
-            {
-                img_iterator.MoveFirst();
-            }
-            else
-            {
-                img_iterator.MoveNext();
-            }
-            g_StatusController.LoadImage(img_iterator.Get());
-
-            dbgmsg("-- Device loading media: \"", img_iterator.Get().GetFilename().c_str(), "\"");
-            img_iterator.Cleanup();
-            //m_devinfo.media_status_events = ATAPI_MEDIA_EVENT_NEW;
+            set_image(image);
             m_removable.ejected = false;
             m_atapi_state.not_ready = true;
         }
-        else
+        else if (m_removable.ejected)
         {
-            // spammy
-            // dbgmsg("-- Device loading media: no images found to insert");
+            img_iterator.Reset();
+            if (!img_iterator.IsEmpty())
+            {
+                if (m_image)
+                {
+                    m_image->get_filename(filename, sizeof(filename));
+                    if (!img_iterator.MoveToFile(filename))
+                    {
+                        img_iterator.MoveNext();
+                    }
+                }
+                else
+                {
+                    img_iterator.MoveNext();
+                }
+
+                if (img_iterator.IsLast())
+                {
+                    img_iterator.MoveFirst();
+                }
+                else
+                {
+                    img_iterator.MoveNext();
+                }
+                g_ide_imagefile.clear();
+                if (g_ide_imagefile.open_file(img_iterator.Get().GetFilename().c_str(), false))
+                {
+                    set_image(&g_ide_imagefile);
+                    logmsg("-- Device loading media: \"", img_iterator.Get().GetFilename().c_str(), "\"");
+                    m_removable.ejected = false;
+                    m_atapi_state.not_ready = true;
+                }
+            }
+            img_iterator.Cleanup();
         }
     }
 }
