@@ -21,38 +21,27 @@
 
 #pragma once
 
-#include <string>
+#include "image.h"
+#include <memory>
+#include <SdFat.h>
+
+#define MAX_FILE_PATH 255
 
 namespace zuluide::images {
 
-  class Image
+  class SortingIterator
   {
   public:
-    enum class ImageType {
-      cdrom,
-      zip100,
-      zip250,
-      zip750,
-      generic,  
-      unknown  
-    };
-    
-    Image(std::string filename, uint64_t sizeInBytes = 0);
-    Image(std::string filename, ImageType imageType, uint64_t sizeInBytes = 0);
-    
-    const std::string& GetFilename() const;
-    ImageType GetImageType();
-    bool operator==(const Image& other);
-    bool operator<(const Image& other);
-    const uint64_t GetFileSizeBytes() const;
-
-    std::string ToJson();
-    std::string ToJson(const char* fieldName);
-    
+    SortingIterator(ImageIterator&& source);
+    Image Get();
+    bool MoveNext();
+    bool IsEmpty();
+    int GetFileCount();
+    void Cleanup();
   private:
-    std::string filenm;
-    ImageType imgType;
-    uint64_t fileSizeBytes;
+    std::unique_ptr<Image> candidate;
+    ImageIterator &&source;
+    bool isLast;
   };
   
 }

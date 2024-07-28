@@ -109,3 +109,7 @@ std::string Image::ToJson(const char* fieldName) {
   buffer.append(ToJson());
   return buffer;
 }
+
+bool Image::operator<(const Image& other) {
+  return filenm < other.filenm;
+}
