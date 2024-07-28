@@ -41,7 +41,9 @@ bool SortingIterator::MoveNext() {
   std::unique_ptr<Image> next;
   while (source.MoveNext()) {
     Image&& current = source.Get();
-    if (!next) {
+
+    if (!next && (!candidate || *candidate < current)) {
+      // First selection of next (i.e., first time we have encountered an item larger than last iterated).
       next = std::make_unique<Image>(current);
     } else if (current < *next && (!candidate ||  *candidate < current)) {
       // Current is smaller than next, but bigger than candidate (or candidate doesn't exist b/c this is our first iteration).
@@ -52,7 +54,7 @@ bool SortingIterator::MoveNext() {
   if (next) {
     candidate = std::make_unique<Image>(*next);
     return true;
-  } else {   
+  } else {
     return false;
   }
 }
