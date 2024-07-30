@@ -64,6 +64,8 @@ public:
 
     virtual void sd_card_inserted() {;}
 
+    virtual void insert_media(IDEImage *image = nullptr) {;}
+
 protected:
     IDEImage *m_image;
 

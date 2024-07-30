@@ -54,8 +54,9 @@ static IDECDROMDevice g_ide_cdrom;
 static IDEZipDrive g_ide_zipdrive;
 static IDERemovable g_ide_removable;
 static IDERigidDevice g_ide_rigid;
-static IDEImageFile g_ide_imagefile;
+IDEImageFile g_ide_imagefile;
 static IDEDevice *g_ide_device;
+static bool loadedFirstImage = false;
 
 zuluide::status::StatusController g_StatusController;
 zuluide::control::StdDisplayController g_DisplayController(&g_StatusController);
@@ -63,7 +64,7 @@ zuluide::control::ControlInterface g_ControlInterface;
 zuluide::status::SystemStatus previous;
 void status_observer(const zuluide::status::SystemStatus& current);
 void loadFirstImage();
-
+void load_image(const zuluide::images::Image& toLoad, bool insert = true);
 
 /************************************/
 /* Status reporting by blinking led */
@@ -184,7 +185,6 @@ void save_logfile(bool always = false)
       return;
     }
 
-  
     static uint32_t prev_log_pos = 0;
     static uint32_t prev_log_len = 0;
     static uint32_t prev_log_save = 0;
@@ -248,7 +248,6 @@ drive_type_t searchForDriveType() {
       g_ide_imagefile.set_prefix(image);
       return DRIVE_TYPE_RIGID;
     }
-
   }
 
   imgIter.Cleanup();
@@ -280,7 +279,7 @@ void setupStatusController()
     g_ide_imagefile.set_drive_type(drive_type_t::DRIVE_TYPE_ZIP250);
   } else if (strncasecmp(device_name, "removable", sizeof("removable")) == 0) {
     g_ide_imagefile.set_drive_type(drive_type_t::DRIVE_TYPE_REMOVABLE);
-  } else if (strncasecmp(device_name, "hdd", sizeof("removable")) == 0) {
+  } else if (strncasecmp(device_name, "hdd", sizeof("hdd")) == 0) {
     g_ide_imagefile.set_drive_type(drive_type_t::DRIVE_TYPE_RIGID);
   } else if (device_name[0] && g_sdcard_present) {
     logmsg("Warning device = \"", device_name ,"\" invalid, defaulting to CD-ROM");
@@ -364,8 +363,11 @@ void loadFirstImage() {
   zuluide::images::ImageIterator imgIterator;
   imgIterator.Reset();
   if (!imgIterator.IsEmpty() && imgIterator.MoveNext()) {
-    logmsg("Loading first image ", imgIterator.Get().GetFilename().c_str());
+    logmsg("Loading first image ", imgIterator.Get().GetFilename().c_str()); 
     g_StatusController.LoadImage(imgIterator.Get());
+    previous = g_StatusController.GetStatus();
+    loadedFirstImage = true;
+    load_image(imgIterator.Get(), false);
   } else {
     logmsg("No image files found");
     blinkStatus(BLINK_ERROR_NO_IMAGES);
@@ -378,8 +380,6 @@ void loadFirstImage() {
 /*********************************/
 /* Main IDE handling loop        */
 /*********************************/
-
-void load_image(const zuluide::images::Image& toLoad);
 
 void clear_image() {
   // Clear any previous state
@@ -397,7 +397,7 @@ void clear_image() {
 
 void status_observer(const zuluide::status::SystemStatus& current) {
   // We need to check and see what changes have occured.
-  if (!current.LoadedImagesAreEqual(previous)) {
+  if (loadedFirstImage && !current.LoadedImagesAreEqual(previous)) {
     // The current image has changed.
     if (current.HasLoadedImage()) {
       load_image(current.GetLoadedImage());
@@ -408,14 +408,17 @@ void status_observer(const zuluide::status::SystemStatus& current) {
   previous = current;
 }
 
-void load_image(const zuluide::images::Image& toLoad)
+void load_image(const zuluide::images::Image& toLoad, bool insert)
 {
   clear_image();
 
-  logmsg("Loading image ", toLoad.GetFilename().c_str());
+  logmsg("Loading image \"", toLoad.GetFilename().c_str(), "\"");
   g_ide_imagefile.open_file(toLoad.GetFilename().c_str(), false);
   if (g_ide_device) {
-    g_ide_device->set_image(&g_ide_imagefile);
+    if (insert)
+      g_ide_device->insert_media(&g_ide_imagefile);
+    else
+      g_ide_device->set_image(&g_ide_imagefile);
   }
 
   blinkStatus(BLINK_STATUS_OK);

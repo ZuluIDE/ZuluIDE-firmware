@@ -24,7 +24,7 @@
 #include "atapi_constants.h"
 #include "ZuluIDE.h"
 #include "ZuluIDE_config.h"
-
+#include <minIni.h>
 extern uint8_t g_ide_signals;
 static uint8_t ide_disk_buffer[512];
 
@@ -72,12 +72,12 @@ static bool find_chs_capacity(uint64_t lba, uint16_t max_cylinders, uint8_t min_
 
 void IDERigidDevice::initialize(int devidx)
 {
+
+    IDEDevice::initialize(devidx);
+
     memset(&m_devinfo, 0, sizeof(m_devinfo));
     memset(&m_ata_state, 0, sizeof(m_ata_state));
     memset(&m_removable, 0, sizeof(m_removable));
-    strncpy(m_devinfo.serial_number, "123456789", sizeof(m_devinfo.serial_number));
-    strncpy(m_devinfo.model_number, "ZuluIDE Hard Drive", sizeof(m_devinfo.model_number));
-    strncpy(m_devinfo.firmware_rev, "1.0", sizeof(m_devinfo.firmware_rev));
     m_devinfo.bytes_per_sector = 512;
 
     uint64_t cap = capacity();
@@ -110,7 +110,8 @@ void IDERigidDevice::initialize(int devidx)
         " H: ",(int) m_devinfo.heads,
         " S: ", (int) m_devinfo.sectors_per_track);
     m_devinfo.writable = true;
-    IDEDevice::initialize(devidx);
+
+    set_ident_strings("ZuluIDE Hard Drive", "123456789", "1.0");
 }
 
 void IDERigidDevice::reset()
@@ -441,6 +442,7 @@ bool IDERigidDevice::cmd_init_dev_params(ide_registers_t *regs)
 bool IDERigidDevice::cmd_identify_device(ide_registers_t *regs)
 {
     uint16_t idf[256] = {0};
+
     // Apple IDE hard drive settings - model DSAA-3360
     // idf[IDE_IDENTIFY_OFFSET_GENERAL_CONFIGURATION] = 0x045A;
     // idf[IDE_IDENTIFY_OFFSET_NUM_CYLINDERS] = 0x03A1;
@@ -486,19 +488,18 @@ bool IDERigidDevice::cmd_identify_device(ide_registers_t *regs)
     idf[IDE_IDENTIFY_OFFSET_BYTES_PER_TRACK] = m_devinfo.bytes_per_sector * m_devinfo.sectors_per_track;
     idf[IDE_IDENTIFY_OFFSET_BYTES_PER_SECTOR] = m_devinfo.bytes_per_sector;
     idf[IDE_IDENTIFY_OFFSET_SECTORS_PER_TRACK] = m_devinfo.sectors_per_track;
-    copy_id_string(&idf[IDE_IDENTIFY_OFFSET_SERIAL_NUMBER], 10, m_devinfo.serial_number);
+
     // \todo set on older drives
     // idf[IDE_IDENTIFY_OFFSET_BUFFER_TYPE] = 0x0003;
     // idf[IDE_IDENTIFY_OFFSET_BUFFER_SIZE_512] = 0x00C0;
     // idf[IDE_IDENTIFY_OFFSET_ECC_LONG_CMDS] = 0x0010;
+    copy_id_string(&idf[IDE_IDENTIFY_OFFSET_SERIAL_NUMBER], 10, m_devinfo.serial_number);
     copy_id_string(&idf[IDE_IDENTIFY_OFFSET_FIRMWARE_REV], 4, m_devinfo.firmware_rev);
     copy_id_string(&idf[IDE_IDENTIFY_OFFSET_MODEL_NUMBER], 20, m_devinfo.model_number);
-    idf[IDE_IDENTIFY_OFFSET_MAX_SECTORS] = 0;// 0x8020;
+    idf[IDE_IDENTIFY_OFFSET_MAX_SECTORS] = 0x8000;// 0x8020;
 
     idf[IDE_IDENTIFY_OFFSET_CAPABILITIES_1] = (m_phy_caps.supports_iordy ? 1 << 11 : 0) |
-                                            // 1 << 10 |
-                                            (1 << 9) |
-                                            (m_phy_caps.max_udma_mode >= 0 ? 1 << 8 : 0); //IORDY may be support or disabled and LBA supported
+                                             1 << 10 ;// iordy may be disabled
     idf[IDE_IDENTIFY_OFFSET_PIO_MODE_ATA1] = (m_phy_caps.max_pio_mode << 8);
     // \todo set on older drives
     // idf[IDE_IDENTIFY_OFFSET_OLD_DMA_TIMING_MODE] = 0x0200;

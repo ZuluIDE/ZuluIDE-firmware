@@ -30,6 +30,9 @@
 // Number of simultaneous transfer requests to pass to ide_phy.
 #define ATAPI_TRANSFER_REQ_COUNT 2
 
+// \todo - find a better way to link to the static backing data
+extern IDEImageFile g_ide_imagefile;
+
 // Generic ATAPI device implementation: encapsulated SCSI commands over ATA.
 // Abstract class, use one of the subclasses (IDECDROMDevice)
 class IDEATAPIDevice: public IDEDevice, public IDEImage::Callback
@@ -61,7 +64,7 @@ public:
 
     virtual void eject_media();
 
-    virtual void insert_media();
+    virtual void insert_media(IDEImage *image = nullptr);
 
     virtual void sd_card_inserted() override;
 
@@ -83,13 +86,9 @@ protected:
         uint8_t media_status_events;
 
         // Response to INQUIRY
-        char ide_vendor[8];
-        char ide_product[16];
-        char ide_revision[4];
-
-        // Response to IDENTIFY PACKET DEVICE
-        char atapi_model[20];
-        char atapi_revision[4];
+        char atapi_vendor[8];
+        char atapi_product[16];
+        char atapi_version[4];
 
         // Profiles reported to GET CONFIGURATION
         uint16_t num_profiles;
@@ -203,4 +202,7 @@ protected:
 
     // ATAPI get_configuration responses
     virtual size_t atapi_get_configuration(uint16_t feature, uint8_t *buffer, size_t max_bytes);
+
+    // ATAPI standard inquiry string settings
+    void set_inquiry_strings(const char* default_vendor, const char* default_product, const char* default_version);
 };

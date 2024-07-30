@@ -73,6 +73,9 @@ public:
     // Called when an SD card is reinserted
     virtual void sd_card_inserted() = 0;
 
+    // For removable media devices
+    virtual void insert_media(IDEImage *image = nullptr) = 0;
+
 
 protected:
     struct {
@@ -80,10 +83,17 @@ protected:
         int max_udma_mode;
         int max_pio_mode;
         int max_blocksize;
+        // Response to IDENTIFY PACKET DEVICE/IDENTIFY DEVICE
+        char ata_model[40];
+        char ata_revision[8];
+        char ata_serial[20];
+
     } m_devconfig;
 
     // PHY capabilities limited by active device configuration
     ide_phy_capabilities_t m_phy_caps;
+
+    void set_ident_strings(const char* default_model, const char* default_serial, const char* default_revision);
 };
 
 // Initialize the protocol layer with devices
@@ -94,3 +104,4 @@ const ide_phy_config_t *ide_protocol_get_config();
 
 // Call this periodically to process events
 void ide_protocol_poll();
+

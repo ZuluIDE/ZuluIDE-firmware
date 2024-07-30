@@ -1,19 +1,19 @@
 /**
  * ZuluIDE™ - Copyright (c) 2023 Rabbit Hole Computing™
  *
- * ZuluIDE™ firmware is licensed under the GPL version 3 or any later version. 
+ * ZuluIDE™ firmware is licensed under the GPL version 3 or any later version.
  *
  * https://www.gnu.org/licenses/gpl-3.0.html
  * ----
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version. 
+ * (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details. 
+ * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
@@ -26,7 +26,7 @@
  * Major contributions by saybur <saybur@users.noreply.github.com>
  *
  * Some of the TOC structures are based on code from:
- * 
+ *
  * SCSI2SD V6 - Copyright (C) 2014 Michael McMaster <michael@codesrc.com>
  */
 
@@ -39,6 +39,10 @@
 #include <string.h>
 #include <strings.h>
 #include <minIni.h>
+#include <zuluide/images/image_iterator.h>
+#include <status/status_controller.h>
+
+extern zuluide::status::StatusController g_StatusController;
 
 static const uint8_t DiscInformation[] =
 {
@@ -273,12 +277,9 @@ void IDECDROMDevice::initialize(int devidx)
     m_devinfo.devtype = ATAPI_DEVTYPE_CDROM;
     m_devinfo.removable = true;
     m_devinfo.bytes_per_sector = 2048;
-    
-    strncpy(m_devinfo.ide_vendor, "ZuluIDE", sizeof(m_devinfo.ide_vendor));
-    strncpy(m_devinfo.ide_product, "CD-ROM", sizeof(m_devinfo.ide_product));
-    memcpy(m_devinfo.ide_revision, ZULU_FW_VERSION, sizeof(m_devinfo.ide_revision));
-    strncpy(m_devinfo.atapi_model, "ZuluIDE CD-ROM", sizeof(m_devinfo.atapi_model));
-    memcpy(m_devinfo.atapi_revision, ZULU_FW_VERSION, sizeof(m_devinfo.atapi_revision));
+
+    set_inquiry_strings("ZuluIDE", "ZuluIDE CD-ROM", "1.0");
+    set_ident_strings("ZuluIDE CD-ROM", "1234567890", "1.0");
 
     m_devinfo.num_profiles = 1;
     m_devinfo.profiles[0] = ATAPI_PROFILE_CDROM;
@@ -1304,7 +1305,9 @@ uint64_t IDECDROMDevice::capacity_lba()
 
 void IDECDROMDevice::eject_media()
 {
-    logmsg("Device ejecting media");
+    char filename[MAX_FILE_PATH+1];
+    m_image->get_filename(filename, sizeof(filename));
+    logmsg("Device ejecting media: \"", filename, "\"");
     set_esn_event(esn_event_t::NoChange);
     m_removable.ejected = true;
 }
@@ -1315,18 +1318,58 @@ void IDECDROMDevice::button_eject_media()
         set_esn_event(esn_event_t::MMediaRemoval);
 }
 
-void IDECDROMDevice::insert_media()
+void IDECDROMDevice::insert_media(IDEImage *image)
 {
-    if (m_devinfo.removable && m_removable.ejected)
+    zuluide::images::ImageIterator img_iterator;
+    char filename[MAX_FILE_PATH+1];
+    if (m_devinfo.removable) 
     {
-        dbgmsg("-- Device loading media");
-        if (m_image)
+        if (image != nullptr)
         {
-            m_image->load_next_image();
-            set_image(m_image);
+            set_image(image);
+            set_esn_event(esn_event_t::MNewMedia);
+            m_removable.ejected = false;
+            m_atapi_state.not_ready = true;
         }
-        set_esn_event(esn_event_t::MNewMedia);
-        m_removable.ejected = false;
+        else if (m_removable.ejected)
+        {
+            img_iterator.Reset();
+            if (!img_iterator.IsEmpty())
+            {
+                if (m_image)
+                {
+                    m_image->get_filename(filename, sizeof(filename));
+                    if (!img_iterator.MoveToFile(filename))
+                    {
+                        img_iterator.MoveNext();
+                    }
+                }
+                else
+                {
+                    img_iterator.MoveNext();
+                }
+
+                if (img_iterator.IsLast())
+                {
+                    img_iterator.MoveFirst();
+                }
+                else
+                {
+                    img_iterator.MoveNext();
+                }
+            
+                g_ide_imagefile.clear();
+                if (g_ide_imagefile.open_file(img_iterator.Get().GetFilename().c_str(), true))
+                {
+                    set_image(&g_ide_imagefile);
+                    logmsg("-- Device loading media: \"", img_iterator.Get().GetFilename().c_str(), "\"");
+                    set_esn_event(esn_event_t::MNewMedia);
+                    m_removable.ejected = false;
+                    m_atapi_state.not_ready = true;
+                }
+            }
+            img_iterator.Cleanup();
+        }
     }
 }
 
