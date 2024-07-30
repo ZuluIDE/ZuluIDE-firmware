@@ -24,18 +24,31 @@
 #include "image.h"
 #include <memory>
 #include <SdFat.h>
+#include <ZuluIDE_config.h>
 
-#define MAX_FILE_PATH 255
 
 namespace zuluide::images {
 
   class ImageIterator
   {
   public:
-    ImageIterator(bool rotate = false);
+    ImageIterator();
     Image Get();
+    // Find the next image
+    // return false if there is no image or there is no next image
     bool MoveNext();
+    // Find the previous image
+    // return false if there is no image or there is no next image
     bool MovePrevious();
+    // Move to the first image
+    // return false if there are no images
+    bool MoveFirst();
+    // Move to the last image
+    // return false if the are no images
+    bool MoveLast();
+    // Sets Interator to file
+    // return true if successful
+    bool MoveToFile(char *filename);
     bool IsEmpty();
     int GetFileCount();
     void Reset();
@@ -43,6 +56,7 @@ namespace zuluide::images {
     bool IsLast();
     void Cleanup();
   private:
+    bool Move(bool forward = true);
     FsFile currentFile;
     FsFile root;
     char candidate[MAX_FILE_PATH + 1];

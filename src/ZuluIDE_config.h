@@ -27,7 +27,7 @@
 #include <ZuluIDE_platform.h>
 
 // Use variables for version number
-#define FW_VER_NUM      "2024.07.03"
+#define FW_VER_NUM      "2024.07.25"
 #define FW_VER_SUFFIX   "devel"
 #define ZULU_FW_VERSION FW_VER_NUM "-" FW_VER_SUFFIX
 
@@ -38,7 +38,7 @@
 #define LICENSEFILE "zuluide.lic"
 
 // Maximum path length for files on SD card
-#define MAX_FILE_PATH 64
+#define MAX_FILE_PATH 255
 
 // Transfer buffer size in bytes, must be a power of 2
 #ifndef IDE_BUFFER_SIZE

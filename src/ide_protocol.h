@@ -73,6 +73,9 @@ public:
     // Called when an SD card is reinserted
     virtual void sd_card_inserted() = 0;
 
+    // For removable media devices
+    virtual void insert_media(IDEImage *image = nullptr) = 0;
+
 
 protected:
     struct {

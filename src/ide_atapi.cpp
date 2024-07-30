@@ -25,6 +25,7 @@
 #include "ZuluIDE.h"
 #include "ZuluIDE_config.h"
 #include <minIni.h>
+#include <zuluide/images/image_iterator.h>
 
 // Map from command index for command name for logging
 static const char *get_atapi_command_name(uint8_t cmd)
@@ -782,7 +783,7 @@ bool IDEATAPIDevice::atapi_test_unit_ready(const uint8_t *cmd)
     if (m_atapi_state.not_ready)
     {
         m_atapi_state.not_ready = false;
-        return atapi_cmd_error(ATAPI_SENSE_NOT_READY, ATAPI_ASC_UNIT_BECOMING_READY);
+        return atapi_cmd_not_ready_error();
     }
     return atapi_cmd_ok();
 }
@@ -1321,23 +1322,62 @@ void IDEATAPIDevice::button_eject_media()
 
 void IDEATAPIDevice::eject_media()
 {
-    logmsg("Device ejecting media");
+    char filename[MAX_FILE_PATH+1];
+    m_image->get_filename(filename, sizeof(filename));
+    logmsg("Device ejecting media: \"", filename, "\"");
     m_removable.ejected = true;
 }
 
-void IDEATAPIDevice::insert_media()
+void IDEATAPIDevice::insert_media(IDEImage *image)
 {
-    if (m_devinfo.removable && m_removable.ejected)
+    zuluide::images::ImageIterator img_iterator;
+    char filename[MAX_FILE_PATH+1];
+
+    if (m_devinfo.removable)
     {
-            dbgmsg("-- Device loading media");
-            if (m_image)
-            {
-                m_image->load_next_image();
-                set_image(m_image);
-            }
-            //m_devinfo.media_status_events = ATAPI_MEDIA_EVENT_NEW;
+        if (image != nullptr)
+        {
+            set_image(image);
             m_removable.ejected = false;
             m_atapi_state.not_ready = true;
+        }
+        else if (m_removable.ejected)
+        {
+            img_iterator.Reset();
+            if (!img_iterator.IsEmpty())
+            {
+                if (m_image)
+                {
+                    m_image->get_filename(filename, sizeof(filename));
+                    if (!img_iterator.MoveToFile(filename))
+                    {
+                        img_iterator.MoveNext();
+                    }
+                }
+                else
+                {
+                    img_iterator.MoveNext();
+                }
+
+                if (img_iterator.IsLast())
+                {
+                    img_iterator.MoveFirst();
+                }
+                else
+                {
+                    img_iterator.MoveNext();
+                }
+                g_ide_imagefile.clear();
+                if (g_ide_imagefile.open_file(img_iterator.Get().GetFilename().c_str(), false))
+                {
+                    set_image(&g_ide_imagefile);
+                    logmsg("-- Device loading media: \"", img_iterator.Get().GetFilename().c_str(), "\"");
+                    m_removable.ejected = false;
+                    m_atapi_state.not_ready = true;
+                }
+            }
+            img_iterator.Cleanup();
+        }
     }
 }
 
