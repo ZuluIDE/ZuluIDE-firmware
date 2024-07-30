@@ -140,6 +140,7 @@ void ide_protocol_init(IDEDevice *primary, IDEDevice *secondary)
 void ide_protocol_poll()
 {
     ide_event_t evt = ide_phy_get_events();
+    ide_registers_t regs = {};
 
     if (!g_ide_reset_after_init_done)
     {
@@ -153,7 +154,6 @@ void ide_protocol_poll()
 
         if (evt == IDE_EVENT_CMD)
         {
-            ide_registers_t regs = {};
             ide_phy_get_regs(&regs);
 
             uint8_t cmd = regs.command;
@@ -245,6 +245,14 @@ void ide_protocol_poll()
                 // \todo move to a reset or init function
                 g_exec_dev_diag_state = EXEC_DEV_DIAG_STATE_IDLE;
 
+                if (g_ide_devices[1])
+                {
+                     // Clear DEV bit in device reg within 1ms if secondary device
+                    ide_phy_get_regs(&regs);
+                    regs.device &= ~IDE_DEVICE_DEV;
+                    ide_phy_set_regs(&regs);
+                }
+
                 g_ide_signals = 0;
                 ide_phy_set_signals(0); // Release DASP and PDIAG
                 g_last_reset_time = millis();
@@ -308,11 +316,9 @@ void ide_protocol_poll()
     if (g_last_reset_event == IDE_EVENT_HWRST || g_last_reset_event == IDE_EVENT_SWRST)
     {
         uint32_t time_passed = millis() - g_last_reset_time;
-
         if (g_ide_devices[1])
         {
             // Announce our presence to primary device
-
             if (time_passed > 5 && g_ide_signals == 0)
             {
                 // Assert DASP to indicate presence
@@ -321,6 +327,14 @@ void ide_protocol_poll()
             }
             else if (time_passed > 100 && g_ide_signals == IDE_SIGNAL_DASP)
             {
+                ide_phy_get_regs(&regs);
+                g_ide_devices[1]->fill_device_signature(&regs);
+                regs.status &= ~(IDE_STATUS_ERR | IDE_STATUS_CORR | IDE_STATUS_DATAREQ);
+                if (g_ide_devices[1]->is_packet_device())
+                    regs.status &= ~(IDE_STATUS_SERVICE | IDE_STATUS_DEVFAULT | IDE_STATUS_DEVRDY | IDE_STATUS_BSY);
+                regs.device_control = 0; // Should just reset IDE_DEVCTRL_SRST, but IDE_CMD_PACKET fails if it isn't cleared
+                ide_phy_set_regs(&regs);
+
                 // Assert PDIAG to indicate passed diagnostics
                 g_ide_signals = IDE_SIGNAL_DASP | IDE_SIGNAL_PDIAG;
                 ide_phy_set_signals(g_ide_signals);
@@ -331,6 +345,7 @@ void ide_protocol_poll()
                 g_ide_signals = IDE_SIGNAL_PDIAG;
                 ide_phy_set_signals(g_ide_signals);
                 g_last_reset_event = IDE_EVENT_NONE;
+
             }
         }
         else if (g_last_reset_event == IDE_EVENT_HWRST)
@@ -415,19 +430,26 @@ void ide_protocol_poll()
 void IDEDevice::set_ident_strings(const char* default_model, const char* default_serial, const char* default_revision)
 {
     char input_str[41];
-    uint8_t input_len;
-
-    memset(input_str, ' ', 40);
+    uint16_t input_len;
+    int32_t  start_offset = 0;
+    memset(m_devconfig.ata_model, ' ', 40);
     input_len = ini_gets("IDE", "ide_model", default_model, input_str, 41, CONFIGFILE);
-    memcpy(m_devconfig.ata_model, input_str, input_len);
+    start_offset = 40 - input_len;
+    if (start_offset < 0)  memcpy(m_devconfig.ata_model, input_str, 40);
+    else memcpy(m_devconfig.ata_model + start_offset, input_str, input_len);
 
-    memset(input_str, ' ', 20);
+    memset(m_devconfig.ata_serial, ' ', 20);
     input_len = ini_gets("IDE","ide_serial", default_serial, input_str, 21, CONFIGFILE);
-    memcpy(m_devconfig.ata_serial, input_str, input_len);
+    start_offset = 20 - input_len;
+    if (start_offset < 0)  memcpy(m_devconfig.ata_serial, input_str, 20);
+    else memcpy(m_devconfig.ata_serial + start_offset, input_str, input_len);
 
-    memset(input_str, ' ', 8);
+    memset(m_devconfig.ata_revision, ' ', 8);
     input_len = ini_gets("IDE","ide_revision", default_revision, input_str, 9, CONFIGFILE);
-    memcpy(m_devconfig.ata_revision, input_str, input_len);
+    start_offset = 8 - input_len;
+    if (start_offset < 0)  memcpy(m_devconfig.ata_revision, input_str, 8);
+    else memcpy(m_devconfig.ata_revision + start_offset, input_str, input_len);
+
 }
 
 void IDEDevice::initialize(int devidx)
