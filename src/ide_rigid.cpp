@@ -480,7 +480,6 @@ bool IDERigidDevice::cmd_identify_device(ide_registers_t *regs)
     uint64_t lba = capacity_lba();
 
     idf[IDE_IDENTIFY_OFFSET_GENERAL_CONFIGURATION] = (m_devinfo.removable ? 0x80 : 0x40); // Device type
-    // \todo Calc these from LBA or maybe visa versa
     idf[IDE_IDENTIFY_OFFSET_NUM_CYLINDERS] = m_devinfo.cylinders;
     idf[IDE_IDENTIFY_OFFSET_NUM_HEADS] = m_devinfo.heads;
     idf[IDE_IDENTIFY_OFFSET_BYTES_PER_TRACK] = m_devinfo.bytes_per_sector * m_devinfo.sectors_per_track;
@@ -491,9 +490,9 @@ bool IDERigidDevice::cmd_identify_device(ide_registers_t *regs)
     // idf[IDE_IDENTIFY_OFFSET_BUFFER_TYPE] = 0x0003;
     // idf[IDE_IDENTIFY_OFFSET_BUFFER_SIZE_512] = 0x00C0;
     // idf[IDE_IDENTIFY_OFFSET_ECC_LONG_CMDS] = 0x0010;
-    copy_id_string(&idf[IDE_IDENTIFY_OFFSET_SERIAL_NUMBER], 10, m_devinfo.serial_number);
-    copy_id_string(&idf[IDE_IDENTIFY_OFFSET_FIRMWARE_REV], 4, m_devinfo.firmware_rev);
-    copy_id_string(&idf[IDE_IDENTIFY_OFFSET_MODEL_NUMBER], 20, m_devinfo.model_number);
+    copy_id_string(&idf[IDE_IDENTIFY_OFFSET_SERIAL_NUMBER], 10, m_devconfig.ata_serial);
+    copy_id_string(&idf[IDE_IDENTIFY_OFFSET_FIRMWARE_REV], 4, m_devconfig.ata_revision);
+    copy_id_string(&idf[IDE_IDENTIFY_OFFSET_MODEL_NUMBER], 20, m_devconfig.ata_model);
     idf[IDE_IDENTIFY_OFFSET_MAX_SECTORS] = 0x8000;// 0x8020;
 
     idf[IDE_IDENTIFY_OFFSET_CAPABILITIES_1] = (m_phy_caps.supports_iordy ? 1 << 11 : 0) |
@@ -501,8 +500,9 @@ bool IDERigidDevice::cmd_identify_device(ide_registers_t *regs)
     idf[IDE_IDENTIFY_OFFSET_PIO_MODE_ATA1] = (m_phy_caps.max_pio_mode << 8);
     // \todo set on older drives
     // idf[IDE_IDENTIFY_OFFSET_OLD_DMA_TIMING_MODE] = 0x0200;
-    idf[IDE_IDENTIFY_OFFSET_MODE_INFO_VALID] |= 0x04; // UDMA support word valid
-    idf[IDE_IDENTIFY_OFFSET_MODE_INFO_VALID] |= 0x02; // PIO support word valid
+    idf[IDE_IDENTIFY_OFFSET_MODE_INFO_VALID] =  0x01;
+    idf[IDE_IDENTIFY_OFFSET_MODE_INFO_VALID] |= (m_phy_caps.max_udma_mode >= 0) ? 0x04 : 0x00; // UDMA support word valid
+    idf[IDE_IDENTIFY_OFFSET_MODE_INFO_VALID] |= ((m_phy_caps.max_pio_mode >= 3)) ? 0x02 : 0x00; // PIO support word valid
     // \todo set on older drives
     idf[IDE_IDENTIFY_OFFSET_CURRENT_CYLINDERS] = m_devinfo.current_cylinders;
     idf[IDE_IDENTIFY_OFFSET_CURRENT_HEADS] = m_devinfo.current_heads;
@@ -560,7 +560,6 @@ bool IDERigidDevice::cmd_identify_device(ide_registers_t *regs)
 
     ide_phy_start_write(sizeof(idf));
     ide_phy_write_block((uint8_t*)idf, sizeof(idf));
-
 
     uint32_t start = millis();
     while (!ide_phy_is_write_finished())

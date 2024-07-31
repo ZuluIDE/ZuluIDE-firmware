@@ -437,18 +437,24 @@ void IDEDevice::set_ident_strings(const char* default_model, const char* default
 
     memset(m_devconfig.ata_model, ' ', 40);
     input_len = ini_gets("IDE", "ide_model", default_model, input_str, 41, CONFIGFILE);
-    if (input_len > 40)  memcpy(m_devconfig.ata_model, input_str, 40);
-    else memcpy(m_devconfig.ata_model, input_str, input_len);
+    if (input_len > 40)
+        memcpy(m_devconfig.ata_model, input_str, 40);
+    else 
+        memcpy(m_devconfig.ata_model, input_str, input_len);
 
     memset(m_devconfig.ata_serial, ' ', 20);
     input_len = ini_gets("IDE","ide_serial", default_serial, input_str, 21, CONFIGFILE);
-    if (input_len > 20)  memcpy(m_devconfig.ata_serial, input_str, 20);
-    else memcpy(m_devconfig.ata_serial, input_str, input_len);
+    if (input_len > 20)
+        memcpy(m_devconfig.ata_serial, input_str, 20);
+    else
+        memcpy(m_devconfig.ata_serial, input_str, input_len);
 
     memset(m_devconfig.ata_revision, ' ', 8);
     input_len = ini_gets("IDE","ide_revision", default_revision, input_str, 9, CONFIGFILE);
-    if (input_len > 8)  memcpy(m_devconfig.ata_revision, input_str, 8);
-    else memcpy(m_devconfig.ata_revision, input_str, input_len);
+    if (input_len > 8)
+        memcpy(m_devconfig.ata_revision, input_str, 8);
+    else
+        memcpy(m_devconfig.ata_revision, input_str, input_len);
 }
 
 void IDEDevice::initialize(int devidx)
