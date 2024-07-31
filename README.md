@@ -31,6 +31,11 @@ Cycling Images
 --------------
 Currently the only way to cycle to the next image for a removable device is the eject the medium via the operating system. This will load the next valid file in alphabetic order.
 
+USB Mass Storage
+----------------
+Non-simultaneous access to the contents of an inserted SD card can be enabled via the ```enable_usb_mass_storage``` ini file directive. 
+See the [USB Mass Storage](https://github.com/ZuluIDE/ZuluIDE-firmware/wiki/USB-Mass-Storage-&-ZuluIDE) wiki page for further details and limitations.
+
 Log files and error indications
 -------------------------------
 Log messages are stored in `zululog.txt`, which is cleared on every boot.
