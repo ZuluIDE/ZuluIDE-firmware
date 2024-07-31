@@ -40,12 +40,10 @@ static const char *get_atapi_command_name(uint8_t cmd)
     }
 }
 
-
-
 static bool find_chs_capacity(uint64_t lba, uint16_t max_cylinders, uint8_t min_heads, uint16_t &c, uint8_t &h, uint8_t &s)
 {
     bool found_chs = false;
-    uint16_t cylinders;
+    uint32_t cylinders;
     for (uint8_t heads = 16 ; heads >= min_heads; heads--)
     {
         if (lba % heads != 0)
@@ -58,7 +56,7 @@ static bool find_chs_capacity(uint64_t lba, uint16_t max_cylinders, uint8_t min_
                 if (cylinders > max_cylinders)
                     continue;
                 found_chs = true;
-                c = cylinders;
+                c = (uint16_t) cylinders;
                 h = heads;
                 s = sectors;
                 break;
@@ -106,7 +104,7 @@ void IDERigidDevice::initialize(int devidx)
     m_devinfo.current_cylinders = m_devinfo.cylinders;
     m_devinfo.current_heads = m_devinfo.heads;
     m_devinfo.current_sectors = m_devinfo.sectors_per_track;
-    dbgmsg("Derived Cylinders/Heads/Sectors from ", (int) (capacity() / 1000000), "MB is C: ", (int) m_devinfo.cylinders,
+    dbgmsg("Derived Cylinders/Heads/Sectors from ", (int) (capacity() / 1000000), "MB (total sectors = ", (int)lba,") is C: ", (int) m_devinfo.cylinders,
         " H: ",(int) m_devinfo.heads,
         " S: ", (int) m_devinfo.sectors_per_track);
     m_devinfo.writable = true;
