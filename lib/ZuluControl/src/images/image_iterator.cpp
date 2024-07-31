@@ -291,7 +291,7 @@ static bool is_valid_filename(const char *name)
   const char *extension = strrchr(name, '.');
   if (extension) {
       const char *ignore_exts[] = {
-        ".cue", ".txt", ".rtf", ".md", ".nfo", ".pdf", ".doc",
+        ".cue", ".txt", ".rtf", ".md", ".nfo", ".pdf", ".doc", ".ini",
         NULL
       };
       const char *archive_exts[] = {
