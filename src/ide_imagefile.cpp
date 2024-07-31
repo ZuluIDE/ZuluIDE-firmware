@@ -110,66 +110,6 @@ bool IDEImageFile::get_filename(char *buf, size_t buflen)
     }
 }
 
-static bool is_valid_filename(const char *name)
-{
-    if (strcasecmp(name, "ice5lp1k_top_bitmap.bin") == 0)
-    {
-        // Ignore FPGA bitstream
-        return false;
-    }
-
-    if (!isalnum(name[0]))
-    {
-        // Skip names beginning with special character
-        return false;
-    }
-
-    if (name[0] && tolower(name[0] == 'z') &&
-        name[1] && tolower(name[1] == 'u') &&
-        name[2] && tolower(name[2] == 'l') &&
-        name[3] && tolower(name[3] == 'u')
-    )
-    {
-        // Ignore all files that start with "zulu"
-        return false;
-    }
-
-    // Check file extension
-    const char *extension = strrchr(name, '.');
-    if (extension)
-    {
-        const char *ignore_exts[] = {
-            ".cue", ".txt", ".rtf", ".md", ".nfo", ".pdf", ".doc",
-            NULL
-        };
-        const char *archive_exts[] = {
-            ".tar", ".tgz", ".gz", ".bz2", ".tbz2", ".xz", ".zst", ".z",
-            ".zip", ".zipx", ".rar", ".lzh", ".lha", ".lzo", ".lz4", ".arj",
-            ".dmg", ".hqx", ".cpt", ".7z", ".s7z",
-            NULL
-        };
-
-        for (int i = 0; ignore_exts[i]; i++)
-        {
-            if (strcasecmp(extension, ignore_exts[i]) == 0)
-            {
-                // ignore these without log message
-                return false;
-            }
-        }
-        for (int i = 0; archive_exts[i]; i++)
-        {
-            if (strcasecmp(extension, archive_exts[i]) == 0)
-            {
-                logmsg("-- Ignoring compressed file ", name);
-                return false;
-            }
-        }
-    }
-
-    return true;
-}
-
 void IDEImageFile::set_drive_type(drive_type_t type)
 {
     m_drive_type = type;
