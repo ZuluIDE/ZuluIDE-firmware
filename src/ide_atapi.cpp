@@ -74,12 +74,12 @@ bool IDEATAPIDevice::handle_command(ide_registers_t *regs)
     {
         // Commands superseded by the ATAPI packet interface
         case IDE_CMD_IDENTIFY_DEVICE:
-        case IDE_CMD_EXECUTE_DEVICE_DIAGNOSTIC:
         case IDE_CMD_DEVICE_RESET:
         case IDE_CMD_READ_SECTORS:
         case IDE_CMD_READ_SECTORS_EXT:
             return set_device_signature(IDE_ERROR_ABORT, false);
-
+        case IDE_CMD_EXECUTE_DEVICE_DIAGNOSTIC:
+            return set_device_signature(0, false);
         // Supported IDE commands
         case IDE_CMD_NOP: return cmd_nop(regs);
         case IDE_CMD_SET_FEATURES: return cmd_set_features(regs);
@@ -1216,7 +1216,7 @@ bool IDEATAPIDevice::doWrite(uint32_t lba, uint32_t transfer_len)
 }
 
 // Called by IDEImage to request reception of more data from IDE bus
-ssize_t IDEATAPIDevice::write_callback(uint8_t *data, size_t blocksize, size_t num_blocks)
+ssize_t IDEATAPIDevice::write_callback(uint8_t *data, size_t blocksize, size_t num_blocks, bool first_xfer, bool last_xfer)
 {
     if (atapi_recv_data(data, blocksize, num_blocks))
     {

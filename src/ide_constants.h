@@ -1,19 +1,19 @@
 /**
  * ZuluIDE™ - Copyright (c) 2023 Rabbit Hole Computing™
  *
- * ZuluIDE™ firmware is licensed under the GPL version 3 or any later version. 
+ * ZuluIDE™ firmware is licensed under the GPL version 3 or any later version.
  *
  * https://www.gnu.org/licenses/gpl-3.0.html
  * ----
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version. 
+ * (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details. 
+ * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
@@ -30,6 +30,7 @@
 #define IDE_STATUS_DEVRDY   0x40
 #define IDE_STATUS_DEVFAULT 0x20
 #define IDE_STATUS_SERVICE  0x10
+#define IDE_STATUS_DSC      0x10
 #define IDE_STATUS_DATAREQ  0x08
 #define IDE_STATUS_CORR     0x04
 #define IDE_STATUS_IDX      0x02
@@ -51,6 +52,7 @@
 #define IDE_DEVCTRL_HOB     0x80
 
 // Device bits register bits
+#define IDE_DEVICE_LBA  0x40;
 #define IDE_DEVICE_DEV  0x10;
 
 // IDE command set defined as X-macro
@@ -59,6 +61,7 @@
 X(IDE_CMD_NOP                                       , 0x00) \
 X(IDE_CMD_CFA_REQUEST_EXTENDED_ERROR                , 0x03) \
 X(IDE_CMD_DEVICE_RESET                              , 0x08) \
+X(IDE_CMD_RECALIBRATE                               , 0x10) \
 X(IDE_CMD_READ_SECTORS                              , 0x20) \
 X(IDE_CMD_READ_SECTORS_EXT                          , 0x24) \
 X(IDE_CMD_READ_DMA_EXT                              , 0x25) \
@@ -81,6 +84,7 @@ X(IDE_CMD_CFA_TRANSLATE_SECTOR                      , 0x87) \
 X(IDE_CMD_EXECUTE_DEVICE_DIAGNOSTIC                 , 0x90) \
 X(IDE_CMD_INIT_DEV_PARAMS                           , 0x91) \
 X(IDE_CMD_DOWNLOAD_MICROCODE                        , 0x92) \
+X(IDE_CMD_IDLE_97H                                  , 0x97) \
 X(IDE_CMD_PACKET                                    , 0xA0) \
 X(IDE_CMD_IDENTIFY_PACKET_DEVICE                    , 0xA1) \
 X(IDE_CMD_SERVICE                                   , 0xA2) \
@@ -102,7 +106,7 @@ X(IDE_CMD_MEDIA_UNLOCK                              , 0xDF) \
 X(IDE_CMD_STANDBY_IMMEDIATE                         , 0xE0) \
 X(IDE_CMD_IDLE_IMMEDIATE                            , 0xE1) \
 X(IDE_CMD_STANDBY                                   , 0xE2) \
-X(IDE_CMD_IDLE                                      , 0xE3) \
+X(IDE_CMD_IDLE_E3H                                  , 0xE3) \
 X(IDE_CMD_READ_BUFFER                               , 0xE4) \
 X(IDE_CMD_CHECK_POWER_MODE                          , 0xE5) \
 X(IDE_CMD_SLEEP                                     , 0xE6) \
@@ -124,7 +128,7 @@ X(IDE_CMD_SET_MAX_ADDRESS                           , 0xF9)
 enum ide_cmd_t {
 #define IDE_ENUM_ENTRY(name, code) name = code,
 IDE_COMMAND_LIST(IDE_ENUM_ENTRY)
-#undef IDE_ENUM_ENTRY 
+#undef IDE_ENUM_ENTRY
 };
 
 // IDE_CMD_IDENTIFY_DEVICE response format
@@ -151,7 +155,7 @@ IDE_COMMAND_LIST(IDE_ENUM_ENTRY)
 #define IDE_IDENTIFY_OFFSET_CURRENT_HEADS            55
 #define IDE_IDENTIFY_OFFSET_CURRENT_SECTORS_PER_TRACK       56
 #define IDE_IDENTIFY_OFFSET_CURRENT_CAPACITY_IN_SECTORS_LOW 57
-#define IDE_IDENTIFY_OFFSET_CURRENT_CAPACITY_IN_SECTORS_HI  58 
+#define IDE_IDENTIFY_OFFSET_CURRENT_CAPACITY_IN_SECTORS_HI  58
 #define IDE_IDENTIFY_OFFSET_MULTI_SECTOR_VALID       59
 #define IDE_IDENTIFY_OFFSET_TOTAL_SECTORS            60
 #define IDE_IDENTIFY_OFFSET_MODEINFO_SINGLEWORD      62
@@ -209,3 +213,9 @@ IDE_COMMAND_LIST(IDE_ENUM_ENTRY)
 #define IDE_SET_FEATURE_ENABLE_REVERT_TO_POWERON    0xCC
 #define IDE_SET_FEATURE_DISABLE_RELEASE_IRQ         0xDD
 #define IDE_SET_FEATURE_DISABLE_SERVICE_IRQ         0xDE
+
+// Cylinder Head Sector
+#define IDE_CHS_528MB_LIMIT_BYTES 528482304
+// ATA-3 Spec Annex B Table B.1 max cylinders 16,383
+#define IDE_CHS_8GB_WITH_GAP_LIMIT_BYTES 8455200768
+#define IDE_CHS_8GB_WITH_LIMIT_BYTES 8455716864

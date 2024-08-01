@@ -44,7 +44,7 @@ public:
         // blocksize:   Block size passed to read() call
         // num_blocks:  Maximum number of blocks that can be written to data.
         // returns:     Number of blocks written to 'data' or negative on error
-        virtual ssize_t write_callback(uint8_t *data, size_t blocksize, size_t num_blocks) = 0;
+        virtual ssize_t write_callback(uint8_t *data, size_t blocksize, size_t num_blocks, bool first_xfer, bool last_xfer) = 0;
     };
 
     // Return filename or false if not file-backed

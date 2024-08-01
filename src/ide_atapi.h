@@ -194,7 +194,7 @@ protected:
 
     // Write handlers
     virtual bool doWrite(uint32_t lba, uint32_t transfer_len);
-    virtual ssize_t write_callback(uint8_t *data, size_t blocksize, size_t num_blocks);
+    virtual ssize_t write_callback(uint8_t *data, size_t blocksize, size_t num_blocks, bool first_xfer, bool last_xfer);
 
     // ATAPI mode pages
     virtual size_t atapi_get_mode_page(uint8_t page_ctrl, uint8_t page_idx, uint8_t *buffer, size_t max_bytes);

@@ -44,6 +44,8 @@ public:
 
     virtual void handle_event(ide_event_t event);
 
+    virtual bool disables_iordy() override { return true; }
+
     virtual bool is_packet_device() { return false; }
 
     virtual bool is_medium_present() {return has_image();}
@@ -76,6 +78,10 @@ protected:
         // uint8_t media_status_events;
         uint8_t sectors_per_track;
         uint8_t heads;
+        uint16_t cylinders;
+        uint8_t current_sectors;
+        uint8_t current_heads;
+        uint16_t current_cylinders;
     } m_devinfo;
 
     enum ata_data_state_t {
@@ -113,10 +119,12 @@ protected:
     virtual bool cmd_set_features(ide_registers_t *regs);
     virtual bool cmd_read(ide_registers_t *regs, bool dma_transfer);
     virtual bool cmd_write(ide_registers_t *regs, bool dma_transfer);
+    virtual bool cmd_read_buffer(ide_registers_t *regs);
+    virtual bool cmd_write_buffer(ide_registers_t *regs);
     virtual bool cmd_init_dev_params(ide_registers_t *regs);
     virtual bool cmd_identify_device(ide_registers_t *regs);
-
-
+    virtual bool cmd_recalibrate(ide_registers_t *regs);
+    virtual bool cmd_idle(ide_registers_t *regs);
 
     // Helper methods
     // convert lba to cylinder, head, sector values
@@ -129,7 +137,7 @@ protected:
     // Wait for any previously started transfers to finish
     bool ata_send_wait_finish();
     // Receive one or multiple data blocks synchronously
-    bool ata_recv_data(uint8_t *data, size_t blocksize, size_t num_blocks = 1);
+    bool ata_recv_data(uint8_t *data, size_t blocksize, size_t num_blocks = 1, bool first_xfer = true, bool last_xfer = true);
     // Receive single data block
     bool ata_recv_data_block(uint8_t *data, uint16_t blocksize);
 
@@ -148,7 +156,7 @@ protected:
     virtual ssize_t read_callback(const uint8_t *data, size_t blocksize, size_t num_blocks);
 
     // Write handlers
-    virtual ssize_t write_callback(uint8_t *data, size_t blocksize, size_t num_blocks);
+    virtual ssize_t write_callback(uint8_t *data, size_t blocksize, size_t num_blocks, bool first_xfer, bool last_xfer);
 };
 
 
