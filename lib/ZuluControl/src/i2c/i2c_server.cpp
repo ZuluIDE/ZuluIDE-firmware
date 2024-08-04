@@ -170,7 +170,6 @@ void I2CServer::Poll() {
           while (wire->available() == 0) { }
           buffer[pos++] = wire->read();
           toRecv--;
-          logmsg("Recvd ", buffer[pos - 1]);
         }
       }
 
@@ -262,7 +261,6 @@ void I2CServer::Poll() {
           while (wire->available() == 0) { }
           buffer[pos++] = wire->read();
           toRecv--;
-          logmsg("Recvd ", buffer[pos - 1]);
         }
       }
 
