@@ -42,6 +42,8 @@ public:
 
     virtual void button_eject_media() override;
 
+    virtual bool disables_iordy() override { return true; }
+
     virtual void insert_media(IDEImage *image = nullptr) override;
     
     // esn - event status notification
