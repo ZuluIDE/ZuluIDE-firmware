@@ -67,6 +67,7 @@ namespace zuluide {
     void displayEject();
     void displaySelect(bool isRefresh);
     void displayInfo(bool isRefresh);
+    bool checkAndUpdateScrolling();
     uint8_t cdrom_loaded[16*4] =
       {
 	0x0,0xf,0xe0,0x0,
