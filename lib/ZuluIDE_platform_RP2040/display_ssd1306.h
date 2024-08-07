@@ -52,6 +52,7 @@ namespace zuluide {
     uint16_t lineCount;
     uint16_t centerBase;
     absolute_time_t nextRefresh;
+    absolute_time_t startScrollingAfter;
     uint16_t imageNameWidthPixels;
     uint16_t imageNameOffsetPixels;
     /***

@@ -33,6 +33,10 @@ using namespace zuluide::status;
 #define SCROLL_INTERVAL_MS 60
 #endif
 
+#ifndef SCROLL_START_DELAY_MS
+#define SCROLL_START_DELAY_MS 1000
+#endif
+
 #define IMAGE_NAME_SPACING 5
 
 static const char* toString(const zuluide::control::MenuState::Entry value);
@@ -42,7 +46,7 @@ static uint16_t centerText(const std::string& text, Adafruit_SSD1306& graph);
 static void truncate(std::string& toProcess);
 static std::string makeImageSizeStr(uint64_t size);
 
-DisplaySSD1306::DisplaySSD1306() : nextRefresh(at_the_end_of_time), scrollText(true)
+DisplaySSD1306::DisplaySSD1306() : nextRefresh(at_the_end_of_time), startScrollingAfter(at_the_end_of_time), scrollText(true)
 {
 }
 
@@ -75,6 +79,11 @@ void DisplaySSD1306::init(TwoWire* wire) {
 }
 
 void DisplaySSD1306::HandleUpdate(const SystemStatus& current) {
+  if (!currentSysStatus || !currentSysStatus->LoadedImagesAreEqual(current)) {
+    // If this is the first or if we have a new image, don't start scrolling immediately.
+    startScrollingAfter = make_timeout_time_ms(SCROLL_START_DELAY_MS);
+  }
+  
   currentSysStatus = std::make_unique<SystemStatus>(current);
   updateDisplay();
 }
@@ -153,11 +162,6 @@ void DisplaySSD1306::displayStatus(bool isRefresh) {
 
 	// Print the text
 	graph.print(filename);
-      }
-
-      imageNameOffsetPixels++;
-      if (imageNameOffsetPixels >= imageNameWidthPixels + IMAGE_NAME_SPACING) {
-	imageNameOffsetPixels = 0;
       }
     } else if (offset < currentSysStatus->GetLoadedImage().GetFilename().length()) {
       graph.print(filename + offset);
@@ -327,11 +331,6 @@ void DisplaySSD1306::displaySelect(bool isRefresh) {
 	// Print the text
 	graph.print(img.GetFilename().c_str());
       }
-
-      imageNameOffsetPixels++;
-      if (imageNameOffsetPixels >= imageNameWidthPixels + IMAGE_NAME_SPACING) {
-	imageNameOffsetPixels = 0;
-      }
     } else {
       graph.setCursor(centerText(img.GetFilename(), graph), centerBase);
 
@@ -399,11 +398,6 @@ void DisplaySSD1306::displayInfo(bool isRefresh) {
       // Print the text
       graph.print(firmwareVersion);
     }
-
-    imageNameOffsetPixels++;
-    if (imageNameOffsetPixels >= imageNameWidthPixels + IMAGE_NAME_SPACING) {
-      imageNameOffsetPixels = 0;
-    }
   } else {
     graph.setCursor(centerText(firmwareVersion, graph), centerBase + h);
 
@@ -428,6 +422,19 @@ void DisplaySSD1306::Refresh() {
   if (currentDispState && currentSysStatus) {
     switch (currentDispState->GetCurrentMode()) {
     case zuluide::control::Mode::Status: {
+      if (absolute_time_diff_us (get_absolute_time(), startScrollingAfter) > 0) {
+	// If we are not scrolling, make sure the offset is cleared.
+	imageNameOffsetPixels = 0;	
+	return;
+      }
+
+      // Update the offset prior to calling display.
+      imageNameOffsetPixels++;
+      if (imageNameOffsetPixels >= imageNameWidthPixels + IMAGE_NAME_SPACING) {
+	// The text scrolled too far, reset.
+	imageNameOffsetPixels = 0;
+      }
+      
       displayStatus(true);
       break;
     }
@@ -437,12 +444,39 @@ void DisplaySSD1306::Refresh() {
     case zuluide::control::Mode::Eject:
       displayEject();
       break;
-    case zuluide::control::Mode::Select:
+    case zuluide::control::Mode::Select: {            
+      if (absolute_time_diff_us (get_absolute_time(), startScrollingAfter) > 0) {
+	// If we are not scrolling, make sure the offset is cleared.
+	imageNameOffsetPixels = 0;	
+	return;
+      }
+      
+      // Update the offset prior to calling display.
+      imageNameOffsetPixels++;
+      if (imageNameOffsetPixels >= imageNameWidthPixels + IMAGE_NAME_SPACING) {
+	// The text scrolled too far, reset.
+	imageNameOffsetPixels = 0;
+      }
+      
       displaySelect(true);
       break;
+    }
     case zuluide::control::Mode::NewImage:
       break;
     case zuluide::control::Mode::Info: {
+      if (absolute_time_diff_us (get_absolute_time(), startScrollingAfter) > 0) {
+	// If we are not scrolling, make sure the offset is cleared.
+	imageNameOffsetPixels = 0;	
+	return;
+      }
+
+      // Update the offset prior to calling display.
+      imageNameOffsetPixels++;
+      if (imageNameOffsetPixels >= imageNameWidthPixels + IMAGE_NAME_SPACING) {
+	// The text scrolled too far, reset.
+	imageNameOffsetPixels = 0;
+      }
+
       displayInfo(true);
       break;
     }
