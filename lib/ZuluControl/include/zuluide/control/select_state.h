@@ -42,5 +42,5 @@ namespace zuluide::control {
     std::unique_ptr<zuluide::images::Image> currentImage;
     bool isShowingBack;
   };
-  
+
 }

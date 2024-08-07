@@ -42,7 +42,7 @@ namespace zuluide::images {
     
     const std::string& GetFilename() const;
     ImageType GetImageType();
-    bool operator==(const Image& other);
+    bool operator==(const Image& other) const;
     const uint64_t GetFileSizeBytes() const;
 
     std::string ToJson();

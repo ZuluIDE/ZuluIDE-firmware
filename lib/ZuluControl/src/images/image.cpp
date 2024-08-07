@@ -41,7 +41,7 @@ Image::ImageType Image::GetImageType() {
   return imgType;
 }
 
-bool Image::operator==(const Image& other) {
+bool Image::operator==(const Image& other) const {
   return false;
 }
 
@@ -66,7 +66,7 @@ static const char* toString(Image::ImageType type) {
   case Image::ImageType::cdrom: {
     return "cdrom";
   }
-    
+
   case Image::ImageType::zip100: {
     return "zip100";
   }
