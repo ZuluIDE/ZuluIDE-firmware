@@ -23,7 +23,7 @@ Image files
 - Currently `.iso` image files, as well as `.bin/.cue` files, are supported for the CD-ROM drive. The images are  used alphabetically. 
 - For Zip drives and removable drives the extension is optional but also any extension is valid, except for `.iso`, `.bin/.cue`, and any extension on the [ignored list](#ignored-list). The images are used in alphabetic order.
 - If a prefix to specify the drive is used, all other files that wish to be inserted and ejected into the drive must have the same prefix. The files are used alphabetically.
- - If ZuluIDE has defaulted to a CD-ROM drive, the first image that it finds on the SD card will be used a CD. 
+ - If ZuluIDE has defaulted to a CD-ROM drive, the first image that it finds on the SD card will be used as a CD. This filename is logged to zululog.txt
 
 Any file on the [ignored list](#ignored-list) will not be used as an device image.
 
