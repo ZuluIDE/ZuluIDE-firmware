@@ -53,7 +53,7 @@ struct ide_phy_config_t {
     bool enable_dev1_zeros; // Answer to register reads for device 1 with zeros
     bool atapi_dev0; // Automatically read command for ATAPI PACKET on device 0
     bool atapi_dev1; // Automatically read command for ATAPI PACKET on device 1
-    bool disable_iordy; // Disable IORDY in PIO mode 
+    bool enable_dsc; // Enable returning status Disk Seek Complete when returning Disk Ready
 };
 
 // Reset the IDE phy
@@ -134,3 +134,6 @@ struct ide_phy_capabilities_t
 };
 
 const ide_phy_capabilities_t *ide_phy_get_capabilities();
+
+// Disable or enable IORDY signal
+void ide_phy_disable_iordy(bool disable);

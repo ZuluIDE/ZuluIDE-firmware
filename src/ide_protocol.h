@@ -63,7 +63,10 @@ public:
     virtual bool is_packet_device() { return false; }
 
     // Returns true if this device does not use the IORdy signal
-    virtual bool disables_iordy() { return false; }
+    virtual bool disables_iordy() { return true; }
+
+    // Returns true if this device uses disk seek complete when returning Disk Ready
+    virtual bool enables_dsc() { return true; }
 
     virtual bool set_device_signature(uint8_t error, bool was_reset) = 0;
 

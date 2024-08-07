@@ -101,7 +101,7 @@
 //                               2: Enable answering device 1 with zeros (ATAPI)
 //                               3: Enable ATAPI PACKET handling for device 0
 //                               4: Enable ATAPI PACKET handling for device 1
-//                               5: Disable IORDY to emulate devices that don't use it
+//                               5: Enable disk seek complete (dsc) when returning device ready
 //
 //     0x81:    Write IDE registers, payload:
 //                 Byte 0:   IDE STATUS
@@ -134,7 +134,6 @@
 //     0x8B:   Configure data buffer for read from IDE bus using UltraDMA, payload:
 //                 Byte 0:   UDMA mode (currently must be 0)
 //                 Byte 1-2: Block length minus 1 (words)
-//
 //     0x90:   Write IDE diagnostic signals, payload:
 //                 Byte 0:  Bit 0: OUT_DASP    drive present / active, 1 to drive signal low
 //                              1: OUT_PDIAG   passed diagnostics, 1 to drive signal low
@@ -150,6 +149,10 @@
 //                                 6:  Clear "IDE command register has been written"
 //                                 7:  Clear "Any IDE register has been written"
 //
+//     0x93:   Set IORDY
+//                  Byte 0:
+//                            Bit 0: 1 disable IORDY, 0 does nothing
+//                            Bit 1: 1 enable  IORDY, 0 does nothing
 //     0xFE:   Provide FPGA license code
 //                 Byte 0-31: License code
 
@@ -195,6 +198,7 @@ void fpga_dump_ide_regs();
 #define FPGA_CMD_WRITE_IDE_SIGNALS      0x90
 #define FPGA_CMD_ASSERT_IRQ             0x91
 #define FPGA_CMD_CLR_IRQ_FLAGS          0x92
+#define FPGA_CMD_IORDY_SETTING          0x93
 #define FPGA_CMD_LICENSE_AUTH           0xFE
 
 #define FPGA_STATUS_DATA_DIR            0x01
@@ -205,3 +209,6 @@ void fpga_dump_ide_regs();
 #define FPGA_STATUS_IDE_SRST            0x20
 #define FPGA_STATUS_IDE_CMD             0x40
 #define FPGA_STATUS_IDE_WR              0x80
+
+#define FPGA_IORDY_DISABLE              0x01
+#define FPGA_IORDY_ENABLE               0x02

@@ -42,7 +42,9 @@ public:
 
     virtual void button_eject_media() override;
 
-    virtual bool disables_iordy() override { return true; }
+    virtual bool disables_iordy() override { return false; };
+
+    virtual bool enables_dsc() override { return false; };
 
     virtual void insert_media(IDEImage *image = nullptr) override;
     

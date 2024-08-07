@@ -92,9 +92,9 @@ static void do_phy_reset()
                                     && !g_drive1_detected;
     g_ide_config.atapi_dev0 = (g_ide_devices[0] != NULL) && (g_ide_devices[0]->is_packet_device());
     g_ide_config.atapi_dev1 = (g_ide_devices[1] != NULL) && (g_ide_devices[1]->is_packet_device());
-    // \todo if the code base support two devices, make `disable_iordy` a per device setting
-    g_ide_config.disable_iordy = ((g_ide_devices[0] != NULL) && (g_ide_devices[0]->disables_iordy()))
-                                 || ((g_ide_devices[1] != NULL) && (g_ide_devices[1]->disables_iordy()));
+    // \todo if the code base support two devices, make `enables_dsc` a per device setting
+    g_ide_config.enable_dsc = ((g_ide_devices[0] != NULL) && (g_ide_devices[0]->enables_dsc()))
+                                 || ((g_ide_devices[1] != NULL) && (g_ide_devices[1]->enables_dsc()));
 
     if (g_ide_config.enable_dev0 && !g_ide_config.enable_dev1)
     {
@@ -480,4 +480,7 @@ void IDEDevice::initialize(int devidx)
     m_phy_caps.max_udma_mode = std::min(m_phy_caps.max_udma_mode, m_devconfig.max_udma_mode);
     m_phy_caps.max_pio_mode = std::min(m_phy_caps.max_pio_mode, m_devconfig.max_pio_mode);
     m_phy_caps.max_blocksize = std::min<int>(m_phy_caps.max_blocksize, m_devconfig.max_blocksize);
+
+    bool disable_iordy = ini_getbool("IDE", "disable_iordy", disables_iordy(), CONFIGFILE);
+    ide_phy_disable_iordy(disable_iordy);
 }
