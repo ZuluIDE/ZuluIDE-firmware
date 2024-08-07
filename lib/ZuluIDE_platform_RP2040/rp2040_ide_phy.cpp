@@ -87,7 +87,6 @@ void ide_phy_reset(const ide_phy_config_t* config)
     if (config->enable_dev1_zeros) cfg |= 0x04;
     if (config->atapi_dev0)        cfg |= 0x08;
     if (config->atapi_dev1)        cfg |= 0x10;
-    if (config->enable_dsc)        cfg |= 0x20;
     fpga_wrcmd(FPGA_CMD_SET_IDE_PHY_CFG, &cfg, 1);
 }
 
@@ -449,9 +448,14 @@ const ide_phy_capabilities_t *ide_phy_get_capabilities()
     return &g_ide_phy_capabilities;
 }
 
-// Disable or enable IORDY signal
 void ide_phy_disable_iordy(bool disable)
 {
-    uint8_t iordy_setting = disable ? 0x01 : 0x02;
-    fpga_wrcmd(FPGA_CMD_IORDY_SETTING, &iordy_setting, 1);
+    uint8_t iordy_setting = disable ? FPGA_PHY_IORDY_DISABLE : FPGA_PHY_IORDY_ENABLE;
+    fpga_wrcmd(FPGA_CMD_PHY_SETTING, &iordy_setting, 1);
+}
+
+void ide_phy_enable_dsc(bool enable)
+{
+    uint8_t dsc_setting = enable ? FPGA_PHY_DSC_ENABLE : FPGA_PHY_DSC_DISABLE;
+    fpga_wrcmd(FPGA_CMD_PHY_SETTING, &dsc_setting, 1);
 }

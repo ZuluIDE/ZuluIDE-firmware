@@ -44,7 +44,7 @@ public:
 
     virtual bool disables_iordy() override { return false; };
 
-    virtual bool enables_dsc() override { return false; };
+    virtual bool enables_dsc() override { return true; };
 
     virtual void insert_media(IDEImage *image = nullptr) override;
     

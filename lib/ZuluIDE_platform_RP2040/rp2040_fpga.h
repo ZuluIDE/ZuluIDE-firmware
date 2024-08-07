@@ -149,10 +149,13 @@
 //                                 6:  Clear "IDE command register has been written"
 //                                 7:  Clear "Any IDE register has been written"
 //
-//     0x93:   Set IORDY
-//                  Byte 0:
+//     0x93:   Set/Reset Phy settings
+//                  Byte 0: IORDY, Status register DSC
 //                            Bit 0: 1 disable IORDY, 0 does nothing
 //                            Bit 1: 1 enable  IORDY, 0 does nothing
+//                            Bit 2: 1 enable DSC, 0 does nothing
+//                            Bit 3: 1 disable DSC, 0 does nothing
+//
 //     0xFE:   Provide FPGA license code
 //                 Byte 0-31: License code
 
@@ -198,7 +201,7 @@ void fpga_dump_ide_regs();
 #define FPGA_CMD_WRITE_IDE_SIGNALS      0x90
 #define FPGA_CMD_ASSERT_IRQ             0x91
 #define FPGA_CMD_CLR_IRQ_FLAGS          0x92
-#define FPGA_CMD_IORDY_SETTING          0x93
+#define FPGA_CMD_PHY_SETTING            0x93
 #define FPGA_CMD_LICENSE_AUTH           0xFE
 
 #define FPGA_STATUS_DATA_DIR            0x01
@@ -210,5 +213,7 @@ void fpga_dump_ide_regs();
 #define FPGA_STATUS_IDE_CMD             0x40
 #define FPGA_STATUS_IDE_WR              0x80
 
-#define FPGA_IORDY_DISABLE              0x01
-#define FPGA_IORDY_ENABLE               0x02
+#define FPGA_PHY_IORDY_DISABLE          0x01
+#define FPGA_PHY_IORDY_ENABLE           0x02
+#define FPGA_PHY_DSC_ENABLE             0x03
+#define FPGA_PHY_DSC_DISABLE            0x04
