@@ -1,19 +1,19 @@
 /**
  * ZuluIDE™ - Copyright (c) 2023 Rabbit Hole Computing™
  *
- * ZuluIDE™ firmware is licensed under the GPL version 3 or any later version. 
+ * ZuluIDE™ firmware is licensed under the GPL version 3 or any later version.
  *
  * https://www.gnu.org/licenses/gpl-3.0.html
  * ----
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version. 
+ * (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details. 
+ * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
@@ -56,7 +56,7 @@ static IDEDevice *g_ide_devices[2];
 static ide_event_t g_last_reset_event;
 static uint32_t g_last_reset_time;
 static bool g_drive1_detected;
-static uint8_t g_ide_signals;
+uint8_t g_ide_signals;
 static uint32_t g_last_event_time;
 static ide_event_t g_last_event;
 static ide_registers_t g_prev_ide_regs;
@@ -93,8 +93,8 @@ static void do_phy_reset()
     g_ide_config.atapi_dev0 = (g_ide_devices[0] != NULL) && (g_ide_devices[0]->is_packet_device());
     g_ide_config.atapi_dev1 = (g_ide_devices[1] != NULL) && (g_ide_devices[1]->is_packet_device());
     // \todo if the code base support two devices, make `disable_iordy` a per device setting
-    g_ide_config.disable_iordy = (g_ide_devices[0] != NULL) && (g_ide_devices[0]->disables_iordy())
-                                 || (g_ide_devices[1] != NULL) && (g_ide_devices[1]->disables_iordy());
+    g_ide_config.disable_iordy = ((g_ide_devices[0] != NULL) && (g_ide_devices[0]->disables_iordy()))
+                                 || ((g_ide_devices[1] != NULL) && (g_ide_devices[1]->disables_iordy()));
 
     if (g_ide_config.enable_dev0 && !g_ide_config.enable_dev1)
     {
@@ -140,20 +140,20 @@ void ide_protocol_init(IDEDevice *primary, IDEDevice *secondary)
 void ide_protocol_poll()
 {
     ide_event_t evt = ide_phy_get_events();
+    ide_registers_t regs = {};
 
     if (!g_ide_reset_after_init_done)
     {
         evt = IDE_EVENT_HWRST;
         g_ide_reset_after_init_done = true;
     }
-    
+
     if (evt != IDE_EVENT_NONE)
     {
         LED_ON();
 
         if (evt == IDE_EVENT_CMD)
         {
-            ide_registers_t regs = {};
             ide_phy_get_regs(&regs);
 
             uint8_t cmd = regs.command;
@@ -211,7 +211,7 @@ void ide_protocol_poll()
                 logmsg("-- Command handler failed for ", get_ide_command_name(cmd));
                 regs.error = IDE_ERROR_ABORT;
                 ide_phy_set_regs(&regs);
-                ide_phy_assert_irq(IDE_STATUS_DEVRDY | IDE_STATUS_ERR);
+                ide_phy_assert_irq(IDE_STATUS_DEVRDY | IDE_STATUS_DSC | IDE_STATUS_ERR);
             }
             // \todo figure out if possibly reading the status from the FPGA is causing
             // `ide_phy_is_command_interrupted` to crash the board on certain IDE controllers
@@ -245,6 +245,14 @@ void ide_protocol_poll()
                 // \todo move to a reset or init function
                 g_exec_dev_diag_state = EXEC_DEV_DIAG_STATE_IDLE;
 
+                if (g_ide_devices[1])
+                {
+                     // Clear DEV bit in device reg within 1ms if secondary device
+                    ide_phy_get_regs(&regs);
+                    regs.device &= ~IDE_DEVICE_DEV;
+                    ide_phy_set_regs(&regs);
+                }
+
                 g_ide_signals = 0;
                 ide_phy_set_signals(0); // Release DASP and PDIAG
                 g_last_reset_time = millis();
@@ -256,6 +264,8 @@ void ide_protocol_poll()
                     // keep result from latest HWRST.
                     g_drive1_detected = false;
                 }
+                if (g_ide_devices[0]) g_ide_devices[0]->reset();
+                if (g_ide_devices[1]) g_ide_devices[1]->reset();
             }
 
             if (g_ide_devices[0]) g_ide_devices[0]->handle_event(evt);
@@ -306,11 +316,9 @@ void ide_protocol_poll()
     if (g_last_reset_event == IDE_EVENT_HWRST || g_last_reset_event == IDE_EVENT_SWRST)
     {
         uint32_t time_passed = millis() - g_last_reset_time;
-
         if (g_ide_devices[1])
         {
             // Announce our presence to primary device
-
             if (time_passed > 5 && g_ide_signals == 0)
             {
                 // Assert DASP to indicate presence
@@ -319,6 +327,14 @@ void ide_protocol_poll()
             }
             else if (time_passed > 100 && g_ide_signals == IDE_SIGNAL_DASP)
             {
+                ide_phy_get_regs(&regs);
+                g_ide_devices[1]->fill_device_signature(&regs);
+                regs.status &= ~(IDE_STATUS_ERR | IDE_STATUS_CORR | IDE_STATUS_DATAREQ);
+                if (g_ide_devices[1]->is_packet_device())
+                    regs.status &= ~(IDE_STATUS_SERVICE | IDE_STATUS_DEVFAULT | IDE_STATUS_DEVRDY | IDE_STATUS_BSY);
+                regs.device_control = 0; // Should just reset IDE_DEVCTRL_SRST, but IDE_CMD_PACKET fails if it isn't cleared
+                ide_phy_set_regs(&regs);
+
                 // Assert PDIAG to indicate passed diagnostics
                 g_ide_signals = IDE_SIGNAL_DASP | IDE_SIGNAL_PDIAG;
                 ide_phy_set_signals(g_ide_signals);
@@ -329,6 +345,7 @@ void ide_protocol_poll()
                 g_ide_signals = IDE_SIGNAL_PDIAG;
                 ide_phy_set_signals(g_ide_signals);
                 g_last_reset_event = IDE_EVENT_NONE;
+
             }
         }
         else if (g_last_reset_event == IDE_EVENT_HWRST)
@@ -405,9 +422,39 @@ void ide_protocol_poll()
 
             regs.status &= ~IDE_STATUS_BSY;
             ide_phy_set_regs(&regs);
-            ide_phy_assert_irq(IDE_STATUS_DEVRDY | regs.status);
+            if (g_ide_devices[0]->is_packet_device())
+                ide_phy_assert_irq(IDE_STATUS_DEVRDY | regs.status);
+            else
+                ide_phy_assert_irq(IDE_STATUS_DEVRDY | IDE_STATUS_DSC | regs.status);
         }
     }
+}
+
+void IDEDevice::set_ident_strings(const char* default_model, const char* default_serial, const char* default_revision)
+{
+    char input_str[41];
+    uint16_t input_len;
+
+    memset(m_devconfig.ata_model, ' ', 40);
+    input_len = ini_gets("IDE", "ide_model", default_model, input_str, 41, CONFIGFILE);
+    if (input_len > 40)
+        memcpy(m_devconfig.ata_model, input_str, 40);
+    else 
+        memcpy(m_devconfig.ata_model, input_str, input_len);
+
+    memset(m_devconfig.ata_serial, ' ', 20);
+    input_len = ini_gets("IDE","ide_serial", default_serial, input_str, 21, CONFIGFILE);
+    if (input_len > 20)
+        memcpy(m_devconfig.ata_serial, input_str, 20);
+    else
+        memcpy(m_devconfig.ata_serial, input_str, input_len);
+
+    memset(m_devconfig.ata_revision, ' ', 8);
+    input_len = ini_gets("IDE","ide_revision", default_revision, input_str, 9, CONFIGFILE);
+    if (input_len > 8)
+        memcpy(m_devconfig.ata_revision, input_str, 8);
+    else
+        memcpy(m_devconfig.ata_revision, input_str, input_len);
 }
 
 void IDEDevice::initialize(int devidx)
@@ -420,7 +467,6 @@ void IDEDevice::initialize(int devidx)
     m_devconfig.max_pio_mode = ini_getl("IDE", "max_pio", 3, CONFIGFILE);
     m_devconfig.max_udma_mode = ini_getl("IDE", "max_udma", 0, CONFIGFILE);
     m_devconfig.max_blocksize = ini_getl("IDE", "max_blocksize", m_phy_caps.max_blocksize, CONFIGFILE);
-
     logmsg("Device ", devidx, " configuration:");
     logmsg("-- Max PIO mode: ", m_devconfig.max_pio_mode, " (phy max ", m_phy_caps.max_pio_mode, ")");
     logmsg("-- Max UDMA mode: ", m_devconfig.max_udma_mode, " (phy max ", m_phy_caps.max_udma_mode, ")");

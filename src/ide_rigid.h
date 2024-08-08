@@ -36,17 +36,21 @@ class IDERigidDevice: public IDEDevice, public IDEImage::Callback
 public:
     virtual void initialize(int devidx) override;
 
-    virtual void set_image(IDEImage *image);
+    virtual void reset() override;
 
-    virtual void poll();
+    virtual void set_image(IDEImage *image);
 
     virtual bool handle_command(ide_registers_t *regs);
 
     virtual void handle_event(ide_event_t event);
 
+    virtual bool disables_iordy() override { return true; }
+
     virtual bool is_packet_device() { return false; }
 
-    virtual bool is_medium_present() { return m_image != nullptr; }
+    virtual bool is_medium_present() {return has_image();}
+
+    virtual bool has_image() { return m_image != nullptr; }
 
     virtual uint64_t capacity() { return (m_image ? m_image->capacity() : 0); }
 
@@ -55,6 +59,13 @@ public:
     virtual bool set_device_signature(uint8_t error, bool was_reset) override;
 
     virtual void fill_device_signature(ide_registers_t *regs) override;
+
+    virtual void eject_button_poll(bool immediate) {;}
+
+    virtual void sd_card_inserted() {;}
+
+    virtual void insert_media(IDEImage *image = nullptr) {;}
+
 protected:
     IDEImage *m_image;
 
@@ -67,10 +78,10 @@ protected:
         // uint8_t media_status_events;
         uint8_t sectors_per_track;
         uint8_t heads;
-        char serial_number[20+1];
-        char firmware_rev[8+1];
-        char model_number[40+1];
-
+        uint16_t cylinders;
+        uint8_t current_sectors;
+        uint8_t current_heads;
+        uint16_t current_cylinders;
     } m_devinfo;
 
     enum ata_data_state_t {
@@ -108,10 +119,12 @@ protected:
     virtual bool cmd_set_features(ide_registers_t *regs);
     virtual bool cmd_read(ide_registers_t *regs, bool dma_transfer);
     virtual bool cmd_write(ide_registers_t *regs, bool dma_transfer);
+    virtual bool cmd_read_buffer(ide_registers_t *regs);
+    virtual bool cmd_write_buffer(ide_registers_t *regs);
     virtual bool cmd_init_dev_params(ide_registers_t *regs);
     virtual bool cmd_identify_device(ide_registers_t *regs);
-
-
+    virtual bool cmd_recalibrate(ide_registers_t *regs);
+    virtual bool cmd_idle(ide_registers_t *regs);
 
     // Helper methods
     // convert lba to cylinder, head, sector values
@@ -124,7 +137,7 @@ protected:
     // Wait for any previously started transfers to finish
     bool ata_send_wait_finish();
     // Receive one or multiple data blocks synchronously
-    bool ata_recv_data(uint8_t *data, size_t blocksize, size_t num_blocks = 1);
+    bool ata_recv_data(uint8_t *data, size_t blocksize, size_t num_blocks = 1, bool first_xfer = true, bool last_xfer = true);
     // Receive single data block
     bool ata_recv_data_block(uint8_t *data, uint16_t blocksize);
 
@@ -143,7 +156,7 @@ protected:
     virtual ssize_t read_callback(const uint8_t *data, size_t blocksize, size_t num_blocks);
 
     // Write handlers
-    virtual ssize_t write_callback(uint8_t *data, size_t blocksize, size_t num_blocks);
+    virtual ssize_t write_callback(uint8_t *data, size_t blocksize, size_t num_blocks, bool first_xfer, bool last_xfer);
 };
 
 

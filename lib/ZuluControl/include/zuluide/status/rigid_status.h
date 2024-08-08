@@ -21,26 +21,39 @@
 
 #pragma once
 
+#include "device_status.h"
 #include <memory>
 
-namespace zuluide::control {
+namespace zuluide::status {
 
-  class SelectState {
+  class  RigidStatus : public IDeviceStatus
+  {
   public:
-    SelectState (int imageNameOffset = 0);
-    SelectState (const SelectState& src);
-    int GetImageNameOffset () const;
-    void SetImageNameOffset(int value);
-    SelectState& operator=(const SelectState& src);
-    void SetCurrentImage(std::unique_ptr<zuluide::images::Image> image);
-    const zuluide::images::Image& GetCurrentImage() const;
-    bool HasCurrentImage() const;
-    bool IsShowingBack() const;
-    void SetIsShowingBack(bool value);
+    enum class Status {
+      /***
+       * An image is attached and valid. 
+       */ 
+      ImagePresent, 
+      /***
+       * An image is attached, but is invalid.
+       */
+      InvalidImage,
+      /***
+       * No image is attached.
+       */
+      NoImage,
+      /***
+       * An image is attached, writable, and valid.
+       */
+      WriteableImage
+    };
+            
+    RigidStatus(Status stat);
+    Status GetStatus();
+    std::unique_ptr<IDeviceStatus> Clone();
+    drive_type_t GetDriveType();
   private:
-    int imageNameOffset;
-    std::unique_ptr<zuluide::images::Image> currentImage;
-    bool isShowingBack;
+    Status status;
   };
-
+    
 }

@@ -32,7 +32,7 @@ void SelectController::Reset(const SelectState& newState) {
 }
 
 SelectController::SelectController(StdDisplayController* cntrlr, zuluide::status::DeviceControlSafe* statCtrlr) :
-  controller(cntrlr), statusController(statCtrlr), imgIterator(true) {  
+  controller(cntrlr), statusController(statCtrlr), imgIterator() {
 }
 
 void SelectController::IncrementImageNameOffset() {
@@ -64,17 +64,26 @@ void SelectController::SelectImage() {
   }
   
   controller->SetMode(Mode::Status);
+  imgIterator.Cleanup();
 }
 
 void SelectController::ChangeToMenu() {
   controller->SetMode(Mode::Menu);
+  imgIterator.Cleanup();
 }
 
 void SelectController::GetNextImageEntry() {
+  logmsg("GetNextImageEntry Core ", (int)get_core_num());
   if (imgIterator.IsLast() && !state.IsShowingBack()) {
     // We are currently on the last item, show the back.
     state.SetIsShowingBack(true);
     state.SetCurrentImage(nullptr);
+  } else if (imgIterator.IsLast() && state.IsShowingBack() && imgIterator.MoveFirst()) {
+    state.SetCurrentImage(std::make_unique<Image>(imgIterator.Get()));
+    state.SetIsShowingBack(false);
+  } else if (imgIterator.IsFirst() && state.IsShowingBack()) {
+    state.SetCurrentImage(std::make_unique<Image>(imgIterator.Get()));
+    state.SetIsShowingBack(false);
   } else if (imgIterator.MoveNext()) {
     state.SetCurrentImage(std::make_unique<Image>(imgIterator.Get()));
     state.SetIsShowingBack(false);
@@ -91,7 +100,13 @@ void SelectController::GetPreviousImageEntry() {
     // We are currently on the last item, show the back.
     state.SetIsShowingBack(true);
     state.SetCurrentImage(nullptr);
-  } else if (imgIterator.MoveNext()) {
+  } else if (imgIterator.IsFirst() && state.IsShowingBack() && imgIterator.MoveLast()) {
+    state.SetCurrentImage(std::make_unique<Image>(imgIterator.Get()));
+    state.SetIsShowingBack(false);
+  } else if (imgIterator.IsLast() && state.IsShowingBack()) {
+    state.SetCurrentImage(std::make_unique<Image>(imgIterator.Get()));
+    state.SetIsShowingBack(false);
+  } else if (imgIterator.MovePrevious()) {
     state.SetCurrentImage(std::make_unique<Image>(imgIterator.Get()));
     state.SetIsShowingBack(false);
   } else {

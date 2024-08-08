@@ -32,6 +32,8 @@
 #include <zuluide/control/input_interface.h>
 #include <zuluide/control/display_state.h>
 #include <zuluide/status/system_status.h>
+#include <zuluide/status/device_control_safe.h>
+
 #include <pico/util/queue.h>
 
 /* These are used in debug output and default SCSI strings */
@@ -73,6 +75,15 @@ void platform_write_led_override(bool state);
 // Disable the status LED
 void platform_disable_led(void);
 
+void platform_init_eject_button(uint8_t eject_button);
+
+// Returns the state of any platform-specific buttons.
+// The returned value should be a mask for buttons 1-8 in bits 0-7 respectively,
+// where '1' is a button pressed and '0' is a button released.
+// Debouncing logic is left up to the specific implementation.
+// This function should return without significantly delay.
+uint8_t platform_get_buttons();
+
 // Query IDE device id 0/1 requested on hardware DIP switches.
 // If platform has no DIP switches, returns 0.
 int platform_get_device_id(void);
@@ -90,16 +101,41 @@ void platform_poll();
 typedef void (*sd_callback_t)(uint32_t bytes_complete);
 void platform_set_sd_callback(sd_callback_t func, const uint8_t *buffer);
 
+/**
+   Attempts to determine whether the hardware UI or the web service is attached to the device.
+ */
 bool platform_check_for_controller();
 
+/**
+   Sets the status controller, the component tracking the state of the system.
+ */
 void platform_set_status_controller(zuluide::ObservableSafe<zuluide::status::SystemStatus>& statusController);
 
+/**
+   Sets the display controller, the component tracking the state of the user interface.
+ */
 void platform_set_display_controller(zuluide::Observable<zuluide::control::DisplayState>& displayController);
 
-/***
-    Sets the input receiver.
+/**
+   Sets the controller that is used by the UI to change the system state.
+ */
+void platform_set_device_control(zuluide::status::DeviceControlSafe* deviceControl);
+
+/**
+   This mutex is used to prevent saving the log file to the SD card while reading the file system.
+   A more robust file access method is needed, but this is fixing the problem for now, even though
+   it is rather ham-handed.
+ */
+mutex_t* platform_get_log_mutex();
+
+/**
+   Sets the input receiver, which handles receiving input from the hardware UI and performs updates to the UI as appropriate.
  */
 void platform_set_input_interface(zuluide::control::InputReceiver* inputReceiver);
+
+/**
+   Used to poll the input hardware.
+ */
 void platform_poll_input();
 
 // FPGA bitstream is protected by a license key stored in RP2040 flash,

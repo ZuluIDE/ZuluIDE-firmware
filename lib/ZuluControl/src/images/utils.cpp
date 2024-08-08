@@ -19,28 +19,26 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
 **/
 
-#pragma once
+#include <zuluide/images/utils.h>
 
-#include <memory>
+namespace zuluide::images {
 
-namespace zuluide::control {
+  bool LoadImageByFileName(const char* toLoad, Image* dest, ImageIterator& iterator) {
+    while (iterator.MoveNext()) {
+      auto current = iterator.Get();
+      if (current.GetFilename() == toLoad) {
+        *dest = current;
+        return true;
+      }
+    }
 
-  class SelectState {
-  public:
-    SelectState (int imageNameOffset = 0);
-    SelectState (const SelectState& src);
-    int GetImageNameOffset () const;
-    void SetImageNameOffset(int value);
-    SelectState& operator=(const SelectState& src);
-    void SetCurrentImage(std::unique_ptr<zuluide::images::Image> image);
-    const zuluide::images::Image& GetCurrentImage() const;
-    bool HasCurrentImage() const;
-    bool IsShowingBack() const;
-    void SetIsShowingBack(bool value);
-  private:
-    int imageNameOffset;
-    std::unique_ptr<zuluide::images::Image> currentImage;
-    bool isShowingBack;
-  };
+    return false;
+  }
+
+  bool LoadImageByFileName(const char* toLoad, Image* dest) {
+    ImageIterator iterator;
+    iterator.Reset();
+    return LoadImageByFileName(toLoad, dest, iterator);
+  }
 
 }

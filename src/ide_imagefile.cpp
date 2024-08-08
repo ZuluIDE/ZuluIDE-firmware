@@ -1,19 +1,19 @@
 /**
  * ZuluIDE™ - Copyright (c) 2023 Rabbit Hole Computing™
  *
- * ZuluIDE™ firmware is licensed under the GPL version 3 or any later version. 
+ * ZuluIDE™ firmware is licensed under the GPL version 3 or any later version.
  *
  * https://www.gnu.org/licenses/gpl-3.0.html
  * ----
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version. 
+ * (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details. 
+ * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
@@ -35,12 +35,21 @@ IDEImageFile::IDEImageFile(): IDEImageFile(nullptr, 0)
 }
 
 IDEImageFile::IDEImageFile(uint8_t *buffer, size_t buffer_size):
-    m_blockdev(nullptr), m_contiguous(false), m_first_sector(0), m_capacity(0),
-    m_read_only(false), m_buffer(buffer), m_buffer_size(buffer_size), m_drive_type(DRIVE_TYPE_VIA_PREFIX)
+    m_buffer(buffer), m_buffer_size(buffer_size), m_drive_type(DRIVE_TYPE_VIA_PREFIX)
 {
+    clear();
     memset(m_prefix, 0, sizeof(m_prefix));
 }
 
+void IDEImageFile::clear()
+{
+    m_blockdev = nullptr;
+    m_contiguous = false;
+    m_first_sector = 0;
+    m_capacity = 0;
+    m_read_only = false;
+
+}
 
 bool IDEImageFile::open_file(const char *filename, bool read_only)
 {
@@ -64,7 +73,7 @@ bool IDEImageFile::open_file(FsVolume *volume, const char *filename, bool read_o
         m_capacity = 0;
         return false;
     }
-    
+
     m_capacity = m_file.size();
 
     uint32_t begin = 0, end = 0;
@@ -101,269 +110,6 @@ bool IDEImageFile::get_filename(char *buf, size_t buflen)
     }
 }
 
-static bool is_valid_filename(const char *name)
-{
-    if (strcasecmp(name, "ice5lp1k_top_bitmap.bin") == 0)
-    {
-        // Ignore FPGA bitstream
-        return false;
-    }
-
-    if (!isalnum(name[0]))
-    {
-        // Skip names beginning with special character
-        return false;
-    }
-
-    if (name[0] && tolower(name[0] == 'z') &&
-        name[1] && tolower(name[1] == 'u') &&
-        name[2] && tolower(name[2] == 'l') &&
-        name[3] && tolower(name[3] == 'u')
-    )
-    {
-        // Ignore all files that start with "zulu"
-        return false;
-    }
-
-    // Check file extension
-    const char *extension = strrchr(name, '.');
-    if (extension)
-    {
-        const char *ignore_exts[] = {
-            ".cue", ".txt", ".rtf", ".md", ".nfo", ".pdf", ".doc",
-            NULL
-        };
-        const char *archive_exts[] = {
-            ".tar", ".tgz", ".gz", ".bz2", ".tbz2", ".xz", ".zst", ".z",
-            ".zip", ".zipx", ".rar", ".lzh", ".lha", ".lzo", ".lz4", ".arj",
-            ".dmg", ".hqx", ".cpt", ".7z", ".s7z",
-            NULL
-        };
-
-        for (int i = 0; ignore_exts[i]; i++)
-        {
-            if (strcasecmp(extension, ignore_exts[i]) == 0)
-            {
-                // ignore these without log message
-                return false;
-            }
-        }
-        for (int i = 0; archive_exts[i]; i++)
-        {
-            if (strcasecmp(extension, archive_exts[i]) == 0)
-            {
-                logmsg("-- Ignoring compressed file ", name);
-                return false;
-            }
-        }
-    }
-
-    return true;
-}
-
-bool IDEImageFile::load_next_image()
-{
-    char prev_image[MAX_FILE_PATH];
-    char image_file[MAX_FILE_PATH];
-    
-    if (get_filename(prev_image, MAX_FILE_PATH))
-    {
-        close();
-        if (find_next_image("/", prev_image, image_file, MAX_FILE_PATH))
-        {
-            open_file(SD.vol(), image_file);
-            return true;
-        }
-    }
-    return false;
-}
-// Find the next image file in alphabetical order.
-// If prev_image is NULL, returns the first image file.
-bool IDEImageFile::find_next_image(const char *directory, const char *prev_image, char *result, size_t buflen)
-{
-
-    if (get_drive_type() == DRIVE_TYPE_VIA_PREFIX || get_prefix()[0] != '\0')
-    {
-        if(find_next_prefix_image(directory, prev_image, result, buflen))
-        {
-            return true;
-        }
-    }
-
-    FsFile root;
-    FsFile file;
-    bool first_search = prev_image == NULL;
-
-    if (!root.open(directory))
-    {
-        logmsg("Could not open directory: ", directory);
-        return false;
-    }
-
-    result[0] = '\0';
-
-    while (file.openNext(&root, O_RDONLY))
-    {
-        if (file.isDirectory()) continue;
-
-        char candidate[MAX_FILE_PATH];
-        file.getName(candidate, sizeof(candidate));
-
-        if (!is_valid_filename(candidate))
-        {
-            continue;
-        }
-
-        if (prev_image && strcasecmp(candidate, prev_image) <= 0)
-        {
-            // Alphabetically before the previous image
-            continue;
-        }
-
-        if (result[0] && strcasecmp(candidate, result) > 0)
-        {
-            // Alphabetically later than current result
-            continue;
-        }
-
-        // Copy as the best result
-        file.getName(result, buflen);
-    }
-    file.close();
-    root.close();
-    if (!first_search && result[0] == '\0')
-    {
-        // wrap search
-        find_next_image(directory, NULL, result, buflen);
-    }
-
-    return result[0] != '\0';
-}
-
-bool IDEImageFile::find_next_prefix_image(const char *directory, const char *prev_image, char *result, size_t buflen)
-{
-    FsFile root;
-    FsFile file;
-    char candidate[MAX_FILE_PATH];
-    char match[MAX_FILE_PATH] = {};
-    bool first_search = prev_image == NULL;
-
-    if (!root.open(directory))
-    {
-        logmsg("Could not open directory: ", directory);
-        return false;
-    }
-
-    while (file.openNext(&root, O_RDONLY))
-    {
-        if (file.isDirectory()) continue;
-
-        file.getName(candidate, sizeof(candidate));
-
-        if (!is_valid_filename(candidate))
-        {
-            continue;
-        }
-
-        bool valid_imagefile = true;
-        bool more_than_one_prefix = false;
-        if (strlen(candidate) >= 4)
-        {
-            char prefix[5] = {0};
-            find_prefix(prefix, candidate);
-            if (strcasecmp(prefix, "cdrm") == 0)
-            {
-                if (get_prefix()[0] == '\0')
-                {
-                    set_prefix(prefix);
-                    set_drive_type(DRIVE_TYPE_CDROM);
-                }
-                else more_than_one_prefix = true;
-            }
-            else if (strcasecmp(prefix, "zipd") == 0
-                    || strcasecmp(prefix, "z100") == 0
-            )
-            {
-                if (get_prefix()[0] == '\0')
-                {
-                    set_prefix("z100");
-                    set_drive_type(DRIVE_TYPE_ZIP100);
-                }
-                else more_than_one_prefix = true;
-            }
-            
-            else if (strcasecmp(prefix, "z250") == 0)
-            {
-                if (get_prefix()[0] == '\0')
-                {
-                    set_prefix(prefix);
-                    set_drive_type(DRIVE_TYPE_ZIP250);
-                }
-                else more_than_one_prefix = true;
-            }
-            else if (strcasecmp(prefix, "remv") == 0)
-            {
-                if (get_prefix()[0] == '\0')
-                {
-                    set_prefix(prefix);
-                    set_drive_type(DRIVE_TYPE_REMOVABLE);
-                }
-                else more_than_one_prefix = true;
-            }
-            else if (strcasecmp(prefix, "hddr") == 0)
-            {
-                if (get_prefix()[0] == '\0')
-                {
-                    set_prefix(prefix);
-                    set_drive_type(DRIVE_TYPE_RIGID);
-                }
-                else more_than_one_prefix = true;
-            }
-            else
-            {
-                valid_imagefile = false;
-            }
-
-            if (valid_imagefile && more_than_one_prefix && strcasecmp(prefix, get_prefix()))
-            {
-                logmsg("More than one drive type prefix found, using [", get_prefix(), "], ignoring file: ", candidate);
-                continue;
-            }
-        }
-        else
-        {
-            valid_imagefile = false;
-        }
-
-        if (!valid_imagefile)
-        {
-            continue;
-        }
-
-        if (first_search)
-        {
-            if (match[0] == '\0' || strcasecmp(candidate, match) <= 0)
-                strcpy(match, candidate);
-        }
-        else
-        {
-            if (strcasecmp(candidate, prev_image) <= 0)
-                continue;
-            else  if (match[0] == '\0' || (strcasecmp(candidate, prev_image) > 0 && strcasecmp(candidate, match) < 0))
-                strcpy(match, candidate);
-        }
-    }
-    file.close();
-    root.close();
-    if (match[0] != '\0')
-    {
-        strcpy(result, match);
-        return true;
-    }
-    return false;
-
-}
-
 void IDEImageFile::set_drive_type(drive_type_t type)
 {
     m_drive_type = type;
@@ -385,13 +131,6 @@ const char* const IDEImageFile::get_prefix()
     return m_prefix;
 }
 
-void IDEImageFile::find_prefix(char *prefix, const char* file_name)
-{
-    for (int i=0; i < 4; i++)
-    {
-        prefix[i] = tolower(file_name[i]);
-    }
-}               
 
 uint64_t IDEImageFile::capacity()
 {
@@ -520,6 +259,7 @@ bool IDEImageFile::write(uint64_t startpos, size_t blocksize, size_t num_blocks,
     sd_cb_state.blocks_available = 0;
     sd_cb_state.bufsize_blocks = m_buffer_size / blocksize;
 
+    bool first_run = true;
     while (sd_cb_state.blocks_done < num_blocks && !sd_cb_state.error)
     {
         platform_poll();
@@ -528,7 +268,7 @@ bool IDEImageFile::write(uint64_t startpos, size_t blocksize, size_t num_blocks,
         sd_write_callback(0);
 
         // Check if there is data to be written to SD card
-        if (sd_cb_state.blocks_done < sd_cb_state.blocks_available)
+        if (sd_cb_state.blocks_done < sd_cb_state.num_blocks)
         {
             // Check how many contiguous blocks are available to process.
             size_t start_idx = sd_cb_state.blocks_done % sd_cb_state.bufsize_blocks;
@@ -536,7 +276,7 @@ bool IDEImageFile::write(uint64_t startpos, size_t blocksize, size_t num_blocks,
                 sd_cb_state.blocks_available - sd_cb_state.blocks_done,
                 sd_cb_state.bufsize_blocks - start_idx
             });
-            
+
             // Write data to SD card and process callbacks
             uint8_t *buf = m_buffer + blocksize * start_idx;
             platform_set_sd_callback(&IDEImageFile::sd_write_callback, buf);
@@ -547,7 +287,9 @@ bool IDEImageFile::write(uint64_t startpos, size_t blocksize, size_t num_blocks,
             if (status != blocksize * max_write)
                 sd_cb_state.error = true;
             else
+            {
                 sd_cb_state.blocks_done += max_write;
+            }
         }
     }
 
@@ -578,8 +320,10 @@ void IDEImageFile::sd_write_callback(uint32_t bytes_complete)
         if (max_read > 0)
         {
             // Receive data from callback
+            bool last_xfer = sd_cb_state.num_blocks == sd_cb_state.blocks_done + max_read;
+            bool first_xfer = sd_cb_state.blocks_done == 0;
             uint8_t *data_start = sd_cb_state.buffer + start_idx * sd_cb_state.blocksize;
-            ssize_t status = sd_cb_state.callback->write_callback(data_start, sd_cb_state.blocksize, max_read);
+            ssize_t status = sd_cb_state.callback->write_callback(data_start, sd_cb_state.blocksize, max_read, first_xfer, last_xfer);
             if (status < 0)
                 sd_cb_state.error = true;
             else

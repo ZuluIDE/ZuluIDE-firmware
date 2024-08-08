@@ -281,6 +281,54 @@ bool ide_phy_is_write_finished()
     }
 }
 
+void ide_phy_start_read_buffer(uint32_t blocklen)
+{
+    // dbgmsg("ide_phy_start_read(", (int)blocklen, ", ", udma_mode, ")");
+    g_ide_phy.crc_errors = 0;
+    g_ide_phy.block_crc1 = g_ide_phy.block_crc0 = 0;
+    uint16_t last_word_idx = (blocklen + 1) / 2 - 1;
+
+        // Transfer in PIO mode
+    fpga_wrcmd(FPGA_CMD_START_READ, (const uint8_t*)&last_word_idx, 2);
+    g_ide_phy.udma_mode = -1;
+    ide_registers_t regs;
+    ide_phy_get_regs(&regs);
+    regs.status = IDE_STATUS_DEVRDY | IDE_STATUS_DSC | IDE_STATUS_DATAREQ;
+    ide_phy_set_regs(&regs);
+
+    g_ide_phy.transfer_running = true;
+}
+
+void ide_phy_start_ata_read(uint32_t blocklen, int udma_mode)
+{
+    // dbgmsg("ide_phy_start_read(", (int)blocklen, ", ", udma_mode, ")");
+    g_ide_phy.crc_errors = 0;
+    g_ide_phy.block_crc1 = g_ide_phy.block_crc0 = 0;
+    
+    uint16_t last_word_idx = (blocklen + 1) / 2 - 1;
+    ide_registers_t regs;
+    ide_phy_get_regs(&regs);
+    if (udma_mode < 0)
+    {
+        // Transfer in PIO mode
+        fpga_wrcmd(FPGA_CMD_ATA_START_READ, (const uint8_t*)&last_word_idx, 2);
+        g_ide_phy.udma_mode = -1;
+        regs.status = IDE_STATUS_DEVRDY | IDE_STATUS_DSC | IDE_STATUS_DATAREQ;
+        ide_phy_set_regs(&regs);
+    }
+    else
+    {
+        // Transfer in UDMA mode
+        uint8_t arg[3] = {(uint8_t)udma_mode,
+                          (uint8_t)(last_word_idx),
+                          (uint8_t)((last_word_idx) >> 8)};
+        fpga_wrcmd(FPGA_CMD_START_ATA_UDMA_READ, arg, 3);
+        g_ide_phy.udma_mode = udma_mode;
+    }
+
+    g_ide_phy.transfer_running = true;
+}
+
 void ide_phy_start_read(uint32_t blocklen, int udma_mode)
 {
     // dbgmsg("ide_phy_start_read(", (int)blocklen, ", ", udma_mode, ")");
@@ -332,6 +380,34 @@ void ide_phy_read_block(uint8_t *buf, uint32_t blocklen, bool continue_transfer)
         {
             logmsg("WARNING: UltraDMA receive from IDE CRC mismatch, calculated ", our_crc, ", host sent ", host_crc);
             g_ide_phy.crc_errors++;
+        }
+    }
+}
+
+void ide_phy_ata_read_block(uint8_t *buf, uint32_t blocklen, bool continue_transfer)
+{
+    // dbgmsg("ide_phy_ata_read_block, cont = ", (int)continue_transfer);
+    uint8_t cmd = continue_transfer ? FPGA_CMD_ATA_READ_CONT : FPGA_CMD_ATA_READ;
+    uint32_t our_crc = 0xDEADBEEF;
+    fpga_rdcmd(cmd, buf, blocklen, &our_crc);
+    // dbgmsg("ide_phy_read_block(", bytearray(buf, blocklen), ")");
+    if (g_ide_phy.udma_mode >= 0 && our_crc != 0xDEADBEEF)
+    {
+        uint16_t host_crc = 0;
+        fpga_rdcmd(FPGA_CMD_READ_UDMA_CRC, (uint8_t*)&host_crc, 2);
+        if (our_crc != host_crc)
+        {
+            if (continue_transfer)
+            {
+                logmsg("WARNING: UltraDMA receive from IDE CRC mismatch, calculated ", our_crc, ", host sent ", host_crc);
+                g_ide_phy.crc_errors++;
+            }
+            else
+            {
+                // Host may send extra words after device request end of transfer. The host uses the values for the host
+                // CRC. ZuluIDE does not read these extra words so the device CRC may be different.
+                dbgmsg("Ignoring UltraDMA CRC from host ", host_crc, " does not match, ", our_crc, " on last transfer.");
+            }
         }
     }
 }

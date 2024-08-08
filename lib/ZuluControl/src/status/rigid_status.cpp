@@ -19,28 +19,25 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
 **/
 
-#pragma once
+#include <zuluide/status/rigid_status.h>
 
-#include <memory>
+using namespace zuluide::status;
 
-namespace zuluide::control {
+RigidStatus::RigidStatus(Status stat)
+  : status(stat)
+{
+}
 
-  class SelectState {
-  public:
-    SelectState (int imageNameOffset = 0);
-    SelectState (const SelectState& src);
-    int GetImageNameOffset () const;
-    void SetImageNameOffset(int value);
-    SelectState& operator=(const SelectState& src);
-    void SetCurrentImage(std::unique_ptr<zuluide::images::Image> image);
-    const zuluide::images::Image& GetCurrentImage() const;
-    bool HasCurrentImage() const;
-    bool IsShowingBack() const;
-    void SetIsShowingBack(bool value);
-  private:
-    int imageNameOffset;
-    std::unique_ptr<zuluide::images::Image> currentImage;
-    bool isShowingBack;
-  };
+RigidStatus::Status RigidStatus::GetStatus()
+{
+  return this->status;
+}
 
+std::unique_ptr<IDeviceStatus> RigidStatus::Clone()
+{
+  return std::make_unique<RigidStatus>(status);
+}
+
+drive_type_t RigidStatus::GetDriveType() {
+  return drive_type_t::DRIVE_TYPE_RIGID;
 }

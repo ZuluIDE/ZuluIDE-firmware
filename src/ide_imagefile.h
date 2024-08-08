@@ -1,19 +1,19 @@
 /**
  * ZuluIDE™ - Copyright (c) 2023 Rabbit Hole Computing™
  *
- * ZuluIDE™ firmware is licensed under the GPL version 3 or any later version. 
+ * ZuluIDE™ firmware is licensed under the GPL version 3 or any later version.
  *
  * https://www.gnu.org/licenses/gpl-3.0.html
  * ----
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version. 
+ * (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details. 
+ * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
@@ -44,7 +44,7 @@ public:
         // blocksize:   Block size passed to read() call
         // num_blocks:  Maximum number of blocks that can be written to data.
         // returns:     Number of blocks written to 'data' or negative on error
-        virtual ssize_t write_callback(uint8_t *data, size_t blocksize, size_t num_blocks) = 0;
+        virtual ssize_t write_callback(uint8_t *data, size_t blocksize, size_t num_blocks, bool first_xfer, bool last_xfer) = 0;
     };
 
     // Return filename or false if not file-backed
@@ -52,7 +52,7 @@ public:
 
     // Return image size in bytes
     virtual uint64_t capacity() = 0;
-    
+
     // Is the image file writable?
     virtual bool writable() = 0;
 
@@ -77,10 +77,6 @@ public:
     // The callback function is passed data pointer and number of blocks requested.
     // It will return the number of blocks available at data.
     virtual bool write(uint64_t startpos, size_t blocksize, size_t num_blocks, Callback *callback) = 0;
-    
-    // Load next image
-    // returns false if it failed to load
-    virtual bool load_next_image() = 0;
 
     // \todo This should really be moved to IDEDevice somehow
     virtual void set_drive_type(drive_type_t type) = 0;
@@ -96,6 +92,8 @@ public:
     IDEImageFile();
     IDEImageFile(uint8_t *buffer, size_t buffer_size);
 
+    void clear();
+
     bool open_file(FsVolume *volume, const char *filename, bool read_only = false);
     bool open_file(const char* filename, bool read_only = false);
     void close();
@@ -107,11 +105,6 @@ public:
     virtual bool writable();
     virtual bool read(uint64_t startpos, size_t blocksize, size_t num_blocks, Callback *callback);
     virtual bool write(uint64_t startpos, size_t blocksize, size_t num_blocks, Callback *callback);
-    virtual bool load_next_image();
-
-    // Find next image in alphabetical order. If prev_image is NULL, find the first image
-    virtual bool find_next_image(const char *directory, const char *prev_image, char *result, size_t buflen);
-    virtual bool find_next_prefix_image(const char *directory, const char *prev_image, char *result, size_t buflen);
 
     // Set drive type for filtering purposes
     virtual void set_drive_type(drive_type_t type);
@@ -120,7 +113,6 @@ public:
     // Set the prefix string of the filename, to match next file to insert after ejection
     virtual void set_prefix(const char* prefix);
     virtual const char* const get_prefix();
-    virtual void find_prefix(char* prefix, const char* file_name); 
 
 protected:
     FsFile m_file;

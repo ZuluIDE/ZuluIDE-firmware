@@ -1,19 +1,19 @@
 /**
  * ZuluIDE™ - Copyright (c) 2023 Rabbit Hole Computing™
  *
- * ZuluIDE™ firmware is licensed under the GPL version 3 or any later version. 
+ * ZuluIDE™ firmware is licensed under the GPL version 3 or any later version.
  *
  * https://www.gnu.org/licenses/gpl-3.0.html
  * ----
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version. 
+ * (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details. 
+ * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
@@ -26,7 +26,7 @@
  * Major contributions by saybur <saybur@users.noreply.github.com>
  *
  * Some of the TOC structures are based on code from:
- * 
+ *
  * SCSI2SD V6 - Copyright (C) 2014 Michael McMaster <michael@codesrc.com>
  */
 
@@ -39,6 +39,10 @@
 #include <string.h>
 #include <strings.h>
 #include <minIni.h>
+#include <zuluide/images/image_iterator.h>
+#include <status/status_controller.h>
+
+extern zuluide::status::StatusController g_StatusController;
 
 static const uint8_t DiscInformation[] =
 {
@@ -273,19 +277,21 @@ void IDECDROMDevice::initialize(int devidx)
     m_devinfo.devtype = ATAPI_DEVTYPE_CDROM;
     m_devinfo.removable = true;
     m_devinfo.bytes_per_sector = 2048;
-    
-    strncpy(m_devinfo.ide_vendor, "ZuluIDE", sizeof(m_devinfo.ide_vendor));
-    strncpy(m_devinfo.ide_product, "CD-ROM", sizeof(m_devinfo.ide_product));
-    memcpy(m_devinfo.ide_revision, ZULU_FW_VERSION, sizeof(m_devinfo.ide_revision));
-    strncpy(m_devinfo.atapi_model, "ZuluIDE CD-ROM", sizeof(m_devinfo.atapi_model));
-    memcpy(m_devinfo.atapi_revision, ZULU_FW_VERSION, sizeof(m_devinfo.atapi_revision));
+
+    set_inquiry_strings("ZuluIDE", "ZuluIDE CD-ROM", "1.0");
+    set_ident_strings("ZuluIDE CD-ROM", "1234567890", "1.0");
 
     m_devinfo.num_profiles = 1;
     m_devinfo.profiles[0] = ATAPI_PROFILE_CDROM;
     m_devinfo.current_profile = ATAPI_PROFILE_CDROM;
 
-    m_removable.reinsert_media_after_eject = ini_getbool("IDE", "reinsert_media_after_eject", true, CONFIGFILE);
-    m_removable.reinsert_media_on_inquiry = ini_getbool("IDE", "reinsert_media_on_inquiry", true, CONFIGFILE);
+    set_esn_event(esn_event_t::NoChange);
+}
+
+void IDECDROMDevice::reset() 
+{
+    IDEATAPIDevice::reset();
+    set_esn_event(esn_event_t::NoChange);
 }
 
 void IDECDROMDevice::set_image(IDEImage *image)
@@ -341,10 +347,13 @@ void IDECDROMDevice::set_image(IDEImage *image)
     else
     {
         m_devinfo.medium_type = ATAPI_MEDIUM_NONE;
+        // Notify host of media change
+        m_atapi_state.unit_attention = true;
+        m_atapi_state.sense_key = ATAPI_SENSE_NOT_READY;
+        m_atapi_state.sense_asc = ATAPI_ASC_NO_MEDIUM;
+
     }
 
-    // Notify host of media change
-    m_atapi_state.unit_attention = true;
 
     if (!image)
     {
@@ -368,10 +377,18 @@ bool IDECDROMDevice::handle_atapi_command(const uint8_t *cmd)
         case ATAPI_CMD_READ_HEADER:             return atapi_read_header(cmd);
         case ATAPI_CMD_READ_CD:                 return atapi_read_cd(cmd);
         case ATAPI_CMD_READ_CD_MSF:             return atapi_read_cd_msf(cmd);
+        case ATAPI_CMD_GET_EVENT_STATUS_NOTIFICATION: return atapi_get_event_status_notification(cmd);
 
         default:
             return IDEATAPIDevice::handle_atapi_command(cmd);
     }
+}
+
+bool IDECDROMDevice::atapi_cmd_not_ready_error()
+{
+    if (m_removable.ejected)
+        return atapi_cmd_error(ATAPI_SENSE_NOT_READY, ATAPI_ASC_NO_MEDIUM_TRAY_OPEN);
+    return atapi_cmd_error(ATAPI_SENSE_NOT_READY, ATAPI_ASC_NO_MEDIUM);
 }
 
 bool IDECDROMDevice::atapi_set_cd_speed(const uint8_t *cmd)
@@ -384,7 +401,8 @@ bool IDECDROMDevice::atapi_set_cd_speed(const uint8_t *cmd)
 
 bool IDECDROMDevice::atapi_read_disc_information(const uint8_t *cmd)
 {
-    if (!m_image) return atapi_cmd_error(ATAPI_SENSE_NOT_READY, ATAPI_ASC_NO_MEDIUM);
+    if (!is_medium_present()) return atapi_cmd_not_ready_error();
+    if (m_atapi_state.not_ready) return atapi_cmd_error(ATAPI_SENSE_NOT_READY, ATAPI_ASC_UNIT_BECOMING_READY);
 
     uint16_t allocationLength = parse_be16(&cmd[7]);
 
@@ -411,7 +429,8 @@ bool IDECDROMDevice::atapi_read_disc_information(const uint8_t *cmd)
 
 bool IDECDROMDevice::atapi_read_track_information(const uint8_t *cmd)
 {
-    if (!m_image) return atapi_cmd_error(ATAPI_SENSE_NOT_READY, ATAPI_ASC_NO_MEDIUM);
+    if (!is_medium_present()) return atapi_cmd_not_ready_error();
+    if (m_atapi_state.not_ready) return atapi_cmd_error(ATAPI_SENSE_NOT_READY, ATAPI_ASC_UNIT_BECOMING_READY);
 
     bool track = (cmd[1] & 0x01);
     uint32_t lba = parse_be32(&cmd[2]);
@@ -485,7 +504,8 @@ bool IDECDROMDevice::atapi_read_track_information(const uint8_t *cmd)
 
 bool IDECDROMDevice::atapi_read_sub_channel(const uint8_t * cmd)
 {
-    if (!m_image) return atapi_cmd_error(ATAPI_SENSE_NOT_READY, ATAPI_ASC_NO_MEDIUM);
+    if (!is_medium_present()) return atapi_cmd_not_ready_error();
+    if (m_atapi_state.not_ready) return atapi_cmd_error(ATAPI_SENSE_NOT_READY, ATAPI_ASC_UNIT_BECOMING_READY);
 
     bool time = (cmd[1] & 0x02);
     bool subq = (cmd[2] & 0x40);
@@ -498,7 +518,8 @@ bool IDECDROMDevice::atapi_read_sub_channel(const uint8_t * cmd)
 
 bool IDECDROMDevice::atapi_read_toc(const uint8_t *cmd)
 {
-    if (!m_image) return atapi_cmd_error(ATAPI_SENSE_NOT_READY, ATAPI_ASC_NO_MEDIUM);
+    if (!is_medium_present()) return atapi_cmd_not_ready_error();
+    if (m_atapi_state.not_ready) return atapi_cmd_error(ATAPI_SENSE_NOT_READY, ATAPI_ASC_UNIT_BECOMING_READY);
 
     bool MSF = (cmd[1] & 0x02);
     uint8_t track = cmd[6];
@@ -543,7 +564,8 @@ bool IDECDROMDevice::atapi_read_toc(const uint8_t *cmd)
 // Given 2048-byte block sizes this effectively is 1:1 with the provided LBA.
 bool IDECDROMDevice::atapi_read_header(const uint8_t *cmd)
 {
-    if (!m_image) return atapi_cmd_error(ATAPI_SENSE_NOT_READY, ATAPI_ASC_NO_MEDIUM);
+    if (!is_medium_present()) return atapi_cmd_not_ready_error();
+    if (m_atapi_state.not_ready) return atapi_cmd_error(ATAPI_SENSE_NOT_READY, ATAPI_ASC_UNIT_BECOMING_READY);
 
     bool MSF = (cmd[1] & 0x02);
     uint32_t lba = 0; // IGNORED for now
@@ -577,7 +599,8 @@ bool IDECDROMDevice::atapi_read_header(const uint8_t *cmd)
 
 bool IDECDROMDevice::atapi_read_cd(const uint8_t *cmd)
 {
-    if (!m_image) return atapi_cmd_error(ATAPI_SENSE_NOT_READY, ATAPI_ASC_NO_MEDIUM);
+    if (!is_medium_present()) return atapi_cmd_not_ready_error();
+    if (m_atapi_state.not_ready) return atapi_cmd_error(ATAPI_SENSE_NOT_READY, ATAPI_ASC_UNIT_BECOMING_READY);
 
     uint8_t sector_type = (cmd[1] >> 2) & 7;
     uint32_t lba = parse_be32(&cmd[2]);
@@ -590,7 +613,8 @@ bool IDECDROMDevice::atapi_read_cd(const uint8_t *cmd)
 
 bool IDECDROMDevice::atapi_read_cd_msf(const uint8_t *cmd)
 {
-    if (!m_image) return atapi_cmd_error(ATAPI_SENSE_NOT_READY, ATAPI_ASC_NO_MEDIUM);
+    if (!is_medium_present()) return atapi_cmd_not_ready_error();
+    if (m_atapi_state.not_ready) return atapi_cmd_error(ATAPI_SENSE_NOT_READY, ATAPI_ASC_UNIT_BECOMING_READY);
 
     uint8_t sector_type = (cmd[1] >> 2) & 7;
     uint32_t start = MSF2LBA(cmd[3], cmd[4], cmd[5], false);
@@ -598,6 +622,114 @@ bool IDECDROMDevice::atapi_read_cd_msf(const uint8_t *cmd)
     uint8_t main_channel = cmd[9];
     uint8_t sub_channel = cmd[10];
     return doReadCD(start, end - start, sector_type, main_channel, sub_channel, false);
+}
+
+bool IDECDROMDevice::atapi_get_event_status_notification(const uint8_t *cmd)
+{
+    uint8_t *buf = m_buffer.bytes;
+    if (!(cmd[1] & 1))
+    {
+        // Async. notification is not supported
+        return atapi_cmd_error(ATAPI_SENSE_ILLEGAL_REQ, ATAPI_ASC_INVALID_FIELD);
+    }
+    // Operation change class request
+    else if ((cmd[4] & 0x02) && (m_esn.event != esn_event_t::NoChange && m_esn.current_event == esn_event_t::NoChange))
+    {
+        buf[0] = 0;
+        buf[1] = 6; // EventDataLength
+        buf[2] = 0x01;   // Operational Change request/notification
+        buf[3] = 0x12; // Supported events
+        buf[4] = 0x02; // Operational state has changed
+        buf[5] = 0x00; // Power status
+        buf[6] = 0x00; // Start slot
+        buf[7] = 0x01; // End slot 
+        esn_next_event();
+    }
+    // Media class request
+    else if (cmd[4] & 0x10)
+    {
+        if (m_esn.request == IDECDROMDevice::esn_class_request_t::Media && 
+            (   
+                m_esn.event == esn_event_t::MNewMedia
+                || m_esn.event == esn_event_t::MEjectRequest
+                || m_esn.event == esn_event_t::MMediaRemoval
+            ))
+        {
+            // If the Event Status Notification was Operational Change request
+            // was never issued, proceed to the next event
+            if (m_esn.current_event == esn_event_t::NoChange)
+                esn_next_event();
+
+            if (m_esn.current_event == esn_event_t::MNewMedia || m_esn.current_event == esn_event_t::MEjectRequest)
+            {
+                // Report media status events
+                buf[0] = 0;
+                buf[1] = 6; // EventDataLength
+                buf[2] = m_esn.request; // Media status events
+                buf[3] = 0x12; // Supported events
+                if (m_esn.current_event == esn_event_t::MEjectRequest) 
+                    buf[4] = 0x01; // Eject Request
+                else if (m_esn.current_event == esn_event_t::MNewMedia)
+                    buf[4] = 0x02; // New Media
+                else
+                    return atapi_cmd_error(ATAPI_SENSE_ILLEGAL_REQ, ATAPI_ASC_INVALID_CMD);
+                buf[5] = 0x02; // Media Present
+                buf[6] = 0; // Start slot
+                buf[7] = 0; // End slot
+                esn_next_event();
+            }
+            else if (m_esn.current_event == esn_event_t::MMediaRemoval)
+            {
+                // Report media status event Media Removal
+                buf[0] = 0;
+                buf[1] = 6; // EventDataLength
+                buf[2] = m_esn.request; // Media status events
+                buf[3] = 0x12; // Supported events
+                buf[4] = 0x03; // Media Removal
+                buf[5] = 0x02; // Media Present
+                buf[6] = 0; // Start slot
+                buf[7] = 0; // End slot
+                esn_next_event();
+                eject_media();
+            }
+        }
+        // output media no change
+        else 
+        {
+            // Report media status events
+            buf[0] = 0;
+            buf[1] = 6; // EventDataLength
+            buf[2] = IDECDROMDevice::esn_class_request_t::Media; // Media status events
+            buf[3] = 0x12; // Supported events
+            buf[4] = 0x00; // No Change
+            if (m_removable.ejected)
+                buf[5] = 0x00;
+            else
+                buf[5] = 0x02; // Media Present
+            buf[6] = 0; // Start slot
+            buf[7] = 0; // End slot
+            set_esn_event(esn_event_t::NoChange);
+        }
+    }
+    else
+    {
+        // No events to report
+        buf[0] = 0;
+        buf[1] = 0x06; // EventDataLength
+        buf[2] = 0x01; // Operational Change request/notification
+        buf[3] = 0x12; // Supported events
+        buf[4] = 0x00; // No change to operational state
+        buf[5] = 0x00; // Logical unit ready for operation
+        buf[6] = 0x00; // Start slot
+        buf[7] = 0x00; // End slot
+        set_esn_event(esn_event_t::NoChange);
+    }
+
+    if (!atapi_send_data(m_buffer.bytes, 8))
+    {
+        return atapi_cmd_error(ATAPI_SENSE_ABORTED_CMD, 0);
+    }
+    return atapi_cmd_ok();
 }
 
 bool IDECDROMDevice::doReadTOC(bool MSF, uint8_t track, uint16_t allocationLength)
@@ -1168,6 +1300,123 @@ uint64_t IDECDROMDevice::capacity_lba()
     CUETrackInfo first, last;
     getFirstLastTrackInfo(first, last);
     return (uint64_t)getLeadOutLBA(&last);
+}
+
+
+void IDECDROMDevice::eject_media()
+{
+    char filename[MAX_FILE_PATH+1];
+    m_image->get_filename(filename, sizeof(filename));
+    logmsg("Device ejecting media: \"", filename, "\"");
+    set_esn_event(esn_event_t::NoChange);
+    m_removable.ejected = true;
+}
+
+void IDECDROMDevice::button_eject_media()
+{
+    if (!m_removable.prevent_removable)
+        set_esn_event(esn_event_t::MMediaRemoval);
+}
+
+void IDECDROMDevice::insert_media(IDEImage *image)
+{
+    zuluide::images::ImageIterator img_iterator;
+    char filename[MAX_FILE_PATH+1];
+    if (m_devinfo.removable) 
+    {
+        if (image != nullptr)
+        {
+            set_image(image);
+            set_esn_event(esn_event_t::MNewMedia);
+            m_removable.ejected = false;
+            m_atapi_state.not_ready = true;
+        }
+        else if (m_removable.ejected)
+        {
+            img_iterator.Reset();
+            if (!img_iterator.IsEmpty())
+            {
+                if (m_image)
+                {
+                    m_image->get_filename(filename, sizeof(filename));
+                    if (!img_iterator.MoveToFile(filename))
+                    {
+                        img_iterator.MoveNext();
+                    }
+                }
+                else
+                {
+                    img_iterator.MoveNext();
+                }
+
+                if (img_iterator.IsLast())
+                {
+                    img_iterator.MoveFirst();
+                }
+                else
+                {
+                    img_iterator.MoveNext();
+                }
+            
+                g_ide_imagefile.clear();
+                if (g_ide_imagefile.open_file(img_iterator.Get().GetFilename().c_str(), true))
+                {
+                    set_image(&g_ide_imagefile);
+                    logmsg("-- Device loading media: \"", img_iterator.Get().GetFilename().c_str(), "\"");
+                    set_esn_event(esn_event_t::MNewMedia);
+                    m_removable.ejected = false;
+                    m_atapi_state.not_ready = true;
+                }
+            }
+            img_iterator.Cleanup();
+        }
+    }
+}
+
+void IDECDROMDevice::set_esn_event(esn_event_t event)
+{
+    if (event == esn_event_t::MEjectRequest || event == esn_event_t::MNewMedia || event == esn_event_t::MMediaRemoval)
+    {
+        m_esn.event = event;
+        m_esn.request = esn_class_request_t::Media;
+        m_esn.current_event = esn_event_t::NoChange;
+    }
+    else
+    {
+        m_esn.event = esn_event_t::NoChange;
+        m_esn.request = esn_class_request_t::OperationChange;
+        m_esn.current_event = esn_event_t::NoChange;
+    }
+}
+
+void IDECDROMDevice::esn_next_event()
+{
+    switch (m_esn.event)
+    {
+        case esn_event_t::MNewMedia :
+        case esn_event_t::MEjectRequest :
+            if (m_esn.current_event == esn_event_t::NoChange)
+            {
+                m_esn.current_event = m_esn.event;
+                return;
+            }
+            break;
+        case esn_event_t::MMediaRemoval :
+            if (m_esn.current_event == esn_event_t::NoChange)
+            {
+                m_esn.current_event = esn_event_t::MEjectRequest;
+                return;
+            }
+            if (m_esn.current_event == esn_event_t::MEjectRequest)
+            {
+                m_esn.current_event =  m_esn.event;
+                return;
+            }
+            break;
+        default:
+            break;
+    }
+    set_esn_event(esn_event_t::NoChange);
 }
 
 uint32_t IDECDROMDevice::getLeadOutLBA(const CUETrackInfo* lasttrack)

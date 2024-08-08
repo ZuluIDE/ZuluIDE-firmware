@@ -44,6 +44,8 @@
 #include "ZuluIDE_platform_gpio.h"
 #include "display_ssd1306.h"
 #include "rotary_control.h"
+#include <zuluide/i2c/i2c_server.h>
+#include <minIni.h>
 
 const char *g_platform_name = PLATFORM_NAME;
 static uint32_t g_flash_chip_size = 0;
@@ -56,6 +58,9 @@ static zuluide::control::RotaryControl g_rotary_input;
 static TwoWire g_wire(i2c1, GPIO_I2C_SDA, GPIO_I2C_SCL);
 static zuluide::DisplaySSD1306 display;
 static queue_t g_status_update_queue;
+static uint8_t g_eject_buttons = 0;
+static zuluide::i2c::I2CServer g_I2cServer;
+static mutex_t logMutex;
 
 //void mbed_error_hook(const mbed_error_ctx * error_context);
 
@@ -88,6 +93,7 @@ void platform_init()
     gpio_conf(DIP_DBGLOG,       GPIO_FUNC_SIO, false, false, false, false, false);
 
     delay(10); // 10 ms delay to let pull-ups do their work
+    mutex_init(&logMutex);
 
     bool dbglog = !gpio_get(DIP_DBGLOG);
     g_dip_cable_sel = !gpio_get(DIP_CABLESEL);
@@ -176,7 +182,11 @@ void platform_late_init()
 bool platform_check_for_controller()
 {
   g_rotary_input.SetI2c(&g_wire);
-  return g_rotary_input.CheckForDevice();
+  bool hasHardwareUI = g_rotary_input.CheckForDevice();
+  bool hasI2CServer = g_I2cServer.CheckForDevice();
+  logmsg(hasHardwareUI ? "Hardware UI found." : "Hardware UI not found.");
+  logmsg(hasI2CServer ? "I2C server Found" : "I2C server not found");
+  return hasHardwareUI || hasI2CServer;
 }
 
 void platform_set_status_controller(zuluide::ObservableSafe<zuluide::status::SystemStatus>& statusController) {
@@ -192,8 +202,29 @@ void platform_set_display_controller(zuluide::Observable<zuluide::control::Displ
 }
 
 void platform_set_input_interface(zuluide::control::InputReceiver* inputReceiver) {
+  logmsg("Inialized platform controller with input receiver.");
   g_rotary_input.SetReciever(inputReceiver);
   g_rotary_input.StartSendingEvents();
+}
+
+void platform_set_device_control(zuluide::status::DeviceControlSafe* deviceControl) {
+  logmsg("Initialized platform with device control.");
+  char iniBuffer[100];
+  memset(&iniBuffer, 0, 100);
+  if (ini_gets("UI", "wifissid", "", iniBuffer, sizeof(iniBuffer), CONFIGFILE) > 0) {
+    auto ssid = std::string(iniBuffer);
+    g_I2cServer.SetSSID(ssid);
+    logmsg("Set SSID from INI file to ", ssid.c_str());
+  }
+
+  memset(&iniBuffer, 0, 100);
+  if (ini_gets("UI", "wifipassword", "", iniBuffer, sizeof(iniBuffer), CONFIGFILE) > 0) {
+    auto wifiPass = std::string(iniBuffer);
+    g_I2cServer.SetPassword(wifiPass);
+    logmsg("Set PASSWORD from INI file.");
+  }
+  
+  g_I2cServer.Init(&g_wire, deviceControl);
 }
 
 void platform_poll_input() {
@@ -223,6 +254,47 @@ void platform_disable_led(void)
 {   
     g_led_disabled = true;
     logmsg("Disabling status LED");
+}
+
+void platform_init_eject_button(uint8_t eject_button)
+{
+    if (eject_button & 1)
+    {
+        gpio_conf(GPIO_EJECT_BTN_1_PIN, GPIO_FUNC_SIO, true, false, false, true, false);
+        g_eject_buttons |= 1;
+    }
+
+    if (eject_button & 2)
+    {
+        gpio_conf(GPIO_EJECT_BTN_2_PIN, GPIO_FUNC_SIO, true, false, false, true, false);
+        g_eject_buttons |= 2;
+    }
+}
+
+uint8_t platform_get_buttons()
+{
+    uint8_t buttons = 0;
+
+    if ((g_eject_buttons & 1) && (!gpio_get(GPIO_EJECT_BTN_1_PIN))) 
+        buttons |= 1;
+    if ((g_eject_buttons & 2) && !gpio_get(GPIO_EJECT_BTN_2_PIN)) 
+        buttons |= 2;
+
+    // Simple debouncing logic: handle button releases after 100 ms delay.
+    static uint32_t debounce;
+    static uint8_t buttons_debounced = 0;
+
+    if (buttons != 0)
+    {
+        buttons_debounced = buttons;
+        debounce = millis();
+    }
+    else if ((uint32_t)(millis() - debounce) > 100)
+    {
+        buttons_debounced = 0;
+    }
+
+    return buttons_debounced;
 }
 
 int platform_get_device_id(void)
@@ -815,14 +887,12 @@ const void * btldr_vectors[2] = {&__StackTop, (void*)&btldr_reset_handler};
 /********************************/
 void zuluide_setup(void)
 {
-  if (!g_rotary_input.GetDeviceExists())
+  if (!platform_check_for_controller())
   {
     rp2040.idleOtherCore();
     multicore_reset_core1();
-    dbgmsg("No Zulu Control board found, disabling 2nd core");
+    dbgmsg("No Zulu Control board or I2C server found, disabling 2nd core");
   }
-  else
-     logmsg("Zulu Control board found");
 }
 
 void zuluide_setup1(void)
@@ -837,9 +907,18 @@ void zuluide_main_loop1(void)
     // Look for device status updates.
     zuluide::status::SystemStatus *currentStatus;
     if (queue_try_remove(&g_status_update_queue, &currentStatus)) {
+      // Notify the hardware UI of updates.
       display.HandleUpdate(*currentStatus);
+      
+      // Notify the I2C server of updates.
+      g_I2cServer.HandleUpdate(*currentStatus);
       delete(currentStatus);
+    } else {
+      // Only need to check refresh if there wasn't an update.
+      display.Refresh();
     }
+
+    g_I2cServer.Poll();
 }
 
 
@@ -853,4 +932,8 @@ extern "C"
     {
         zuluide_main_loop1();
     }
+}
+
+mutex_t* platform_get_log_mutex() {
+  return &logMutex;
 }

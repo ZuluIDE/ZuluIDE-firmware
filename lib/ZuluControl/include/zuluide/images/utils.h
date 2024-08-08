@@ -19,28 +19,10 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
 **/
 
-#pragma once
+#include "image.h"
+#include "image_iterator.h"
 
-#include <memory>
-
-namespace zuluide::control {
-
-  class SelectState {
-  public:
-    SelectState (int imageNameOffset = 0);
-    SelectState (const SelectState& src);
-    int GetImageNameOffset () const;
-    void SetImageNameOffset(int value);
-    SelectState& operator=(const SelectState& src);
-    void SetCurrentImage(std::unique_ptr<zuluide::images::Image> image);
-    const zuluide::images::Image& GetCurrentImage() const;
-    bool HasCurrentImage() const;
-    bool IsShowingBack() const;
-    void SetIsShowingBack(bool value);
-  private:
-    int imageNameOffset;
-    std::unique_ptr<zuluide::images::Image> currentImage;
-    bool isShowingBack;
-  };
-
+namespace zuluide::images {
+  bool LoadImageByFileName(const char* toLoad, Image* dest, ImageIterator& iterator);
+  bool LoadImageByFileName(const char* toLoad, Image* dest);
 }
