@@ -59,6 +59,7 @@ namespace zuluide {
 	Indicates whether to scroll the text automatically or to use the manual rotary encoder scrolling.
      */
     bool scrollText;
+    bool reverseScroll;
     std::unique_ptr<zuluide::control::DisplayState> currentDispState;
     std::unique_ptr<SystemStatus> currentSysStatus;
     void updateDisplay();
@@ -67,7 +68,7 @@ namespace zuluide {
     void displayEject();
     void displaySelect(bool isRefresh);
     void displayInfo(bool isRefresh);
-    bool checkAndUpdateScrolling();
+    bool checkAndUpdateScrolling(bool isFullWidth);
     uint8_t cdrom_loaded[16*4] =
       {
 	0x0,0xf,0xe0,0x0,

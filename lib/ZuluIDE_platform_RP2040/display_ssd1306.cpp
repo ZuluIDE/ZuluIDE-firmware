@@ -46,7 +46,7 @@ static uint16_t centerText(const std::string& text, Adafruit_SSD1306& graph);
 static void truncate(std::string& toProcess);
 static std::string makeImageSizeStr(uint64_t size);
 
-DisplaySSD1306::DisplaySSD1306() : nextRefresh(at_the_end_of_time), startScrollingAfter(at_the_end_of_time), scrollText(true)
+DisplaySSD1306::DisplaySSD1306() : nextRefresh(at_the_end_of_time), startScrollingAfter(at_the_end_of_time), scrollText(true), reverseScroll(false)
 {
 }
 
@@ -83,6 +83,8 @@ void DisplaySSD1306::HandleUpdate(const SystemStatus& current) {
     // If this is the first or if we have a new image, don't start scrolling immediately.
     startScrollingAfter = make_timeout_time_ms(SCROLL_START_DELAY_MS);
     scrollText = false;
+    reverseScroll = false;
+    imageNameOffsetPixels = 0;
   }
 
   currentSysStatus = std::make_unique<SystemStatus>(current);
@@ -96,6 +98,8 @@ void DisplaySSD1306::HandleUpdate(const zuluide::control::DisplayState& current)
       ) {
     startScrollingAfter = make_timeout_time_ms(SCROLL_START_DELAY_MS);
     scrollText = false;
+    reverseScroll = false;
+    imageNameOffsetPixels = 0;
   }
 
   currentDispState = std::make_unique<zuluide::control::DisplayState>(current);
@@ -162,15 +166,6 @@ void DisplaySSD1306::displayStatus(bool isRefresh) {
 
       // Print the text
       graph.print(filename);
-
-      // Calculate tail location for wrap-around.
-      auto tail = 32 - imageNameOffsetPixels + imageNameWidthPixels + IMAGE_NAME_SPACING;
-      if (tail < 128) {
-	graph.setCursor(tail, centerBase);
-
-	// Print the text
-	graph.print(filename);
-      }
     } else if (offset < currentSysStatus->GetLoadedImage().GetFilename().length()) {
       graph.print(filename + offset);
     } else {
@@ -329,15 +324,6 @@ void DisplaySSD1306::displaySelect(bool isRefresh) {
 
       // Print the text
       graph.print(img.GetFilename().c_str());
-
-      // Calculate tail location for wrap-around.
-      auto tail = 0 - imageNameOffsetPixels + imageNameWidthPixels + IMAGE_NAME_SPACING;
-      if (tail < 128) {
-	graph.setCursor(tail, centerBase);
-
-	// Print the text
-	graph.print(img.GetFilename().c_str());
-      }
     } else {
       graph.setCursor(centerText(img.GetFilename(), graph), centerBase);
 
@@ -396,15 +382,6 @@ void DisplaySSD1306::displayInfo(bool isRefresh) {
 
     // Print the text
     graph.print(firmwareVersion);
-
-    // Calculate tail location for wrap-around.
-    auto tail = 0 - imageNameOffsetPixels + imageNameWidthPixels + IMAGE_NAME_SPACING;
-    if (tail < 128) {
-      graph.setCursor(tail, centerBase + h);
-
-      // Print the text
-      graph.print(firmwareVersion);
-    }
   } else {
     graph.setCursor(centerText(firmwareVersion, graph), centerBase + h);
 
@@ -419,19 +396,29 @@ void DisplaySSD1306::displayInfo(bool isRefresh) {
   graph.display();
 }
 
-bool DisplaySSD1306::checkAndUpdateScrolling() {
-  if (!scrollText && absolute_time_diff_us (get_absolute_time(), startScrollingAfter) > 0) {
-    // If we are not scrolling, make sure the offset is cleared.
-    imageNameOffsetPixels = 0;
+bool DisplaySSD1306::checkAndUpdateScrolling(bool isFullWidth) {
+  if ((!scrollText && absolute_time_diff_us (get_absolute_time(), startScrollingAfter) > 0) || (imageNameWidthPixels <= 132-32)) {
     return false;
   }
 
   // Update the offset prior to calling display.
   scrollText = true;
-  imageNameOffsetPixels++;
-  if (imageNameOffsetPixels >= imageNameWidthPixels + IMAGE_NAME_SPACING) {
+  if (reverseScroll) {
+    imageNameOffsetPixels--;
+    if (imageNameOffsetPixels == 0) {
+      scrollText = false;
+      reverseScroll = false;
+      startScrollingAfter = make_timeout_time_ms(SCROLL_START_DELAY_MS);
+    }
+  } else {
+    imageNameOffsetPixels++;
+    if (imageNameOffsetPixels > imageNameWidthPixels - (isFullWidth ? 128 : 96)) {
     // The text scrolled too far, reset.
-    imageNameOffsetPixels = 0;
+      reverseScroll = true;
+      scrollText = false;
+      startScrollingAfter = make_timeout_time_ms(SCROLL_START_DELAY_MS);
+      return false;
+    }
   }
 
   return true;
@@ -448,7 +435,7 @@ void DisplaySSD1306::Refresh() {
     switch (currentDispState->GetCurrentMode()) {
     case zuluide::control::Mode::Status: {
 
-      if (checkAndUpdateScrolling()) {
+      if (checkAndUpdateScrolling(false)) {
 	displayStatus(true);
       }
 
@@ -461,7 +448,7 @@ void DisplaySSD1306::Refresh() {
       displayEject();
       break;
     case zuluide::control::Mode::Select: {
-      if (checkAndUpdateScrolling()) {
+      if (checkAndUpdateScrolling(true)) {
 	displaySelect(true);
       }
 
@@ -470,7 +457,7 @@ void DisplaySSD1306::Refresh() {
     case zuluide::control::Mode::NewImage:
       break;
     case zuluide::control::Mode::Info: {
-      if (checkAndUpdateScrolling()) {
+      if (checkAndUpdateScrolling(true)) {
 	displayInfo(true);
       }
 
