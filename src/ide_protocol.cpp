@@ -478,9 +478,15 @@ void IDEDevice::initialize(int devidx)
     m_phy_caps.max_pio_mode = std::min(m_phy_caps.max_pio_mode, m_devconfig.max_pio_mode);
     m_phy_caps.max_blocksize = std::min<int>(m_phy_caps.max_blocksize, m_devconfig.max_blocksize);
 
-    bool disable_iordy = ini_getbool("IDE", "disable_iordy", disables_iordy(), CONFIGFILE);
-    ide_phy_disable_iordy(disable_iordy);
+    bool enable_iordy_at_boot = ini_getbool("IDE", "enable_iordy_at_boot", enables_iordy_at_boot(), CONFIGFILE);
+    ide_phy_disable_iordy(!enable_iordy_at_boot);
 
     bool enable_dsc = ini_getbool("IDE", "enable_dsc", enables_dsc(), CONFIGFILE);
     ide_phy_enable_dsc(enable_dsc);
+}
+
+void IDEDevice::reset()
+{
+    bool enable_iordy_at_boot = ini_getbool("IDE", "enable_iordy_at_boot", enables_iordy_at_boot(), CONFIGFILE);
+    ide_phy_disable_iordy(!enable_iordy_at_boot);
 }

@@ -114,6 +114,7 @@ void IDERigidDevice::initialize(int devidx)
 
 void IDERigidDevice::reset()
 {
+    IDEDevice::reset();
     m_devinfo.current_cylinders = m_devinfo.cylinders;
     m_devinfo.current_heads = m_devinfo.heads;
     m_devinfo.current_sectors = m_devinfo.sectors_per_track;

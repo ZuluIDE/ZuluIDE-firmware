@@ -77,6 +77,8 @@ public:
 protected:
     IDEImage *m_image;
 
+    bool m_iordy_after_ident;
+
     // Device type info is filled in by subclass
     struct {
         uint8_t devtype;

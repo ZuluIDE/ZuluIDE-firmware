@@ -38,8 +38,6 @@ public:
 
     virtual bool handle_command(ide_registers_t *regs) override;
 
-    virtual bool disables_iordy() override { return true; }
-
     virtual void button_eject_media() override;
 
 protected:

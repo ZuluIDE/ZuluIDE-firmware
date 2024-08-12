@@ -36,7 +36,7 @@ public:
     virtual void initialize(int devidx);
 
     // Resets member variables after IDE/ATA reset
-    virtual void reset() = 0;
+    virtual void reset();
 
     // Set image backing file to access
     virtual void set_image(IDEImage *image) = 0;
@@ -62,8 +62,9 @@ public:
     // Returns true if this device implements the ATAPI packet command set
     virtual bool is_packet_device() { return false; }
 
-    // Returns true if this device does not use the IORdy signal
-    virtual bool disables_iordy() { return true; }
+    // Returns true if this device does not use the IORdy signal at start up
+    // Will turn IORdy on if PIO mode 3 is set
+    virtual bool enables_iordy_at_boot() { return false; }
 
     // Returns true if this device uses disk seek complete when returning Disk Ready
     virtual bool enables_dsc() { return true; }

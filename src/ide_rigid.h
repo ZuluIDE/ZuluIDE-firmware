@@ -44,8 +44,6 @@ public:
 
     virtual void handle_event(ide_event_t event);
 
-    virtual bool disables_iordy() override { return true; }
-
     virtual bool is_packet_device() { return false; }
 
     virtual bool is_medium_present() {return has_image();}

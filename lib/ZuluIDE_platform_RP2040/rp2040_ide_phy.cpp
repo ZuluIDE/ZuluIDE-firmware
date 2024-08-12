@@ -339,7 +339,7 @@ void ide_phy_start_read(uint32_t blocklen, int udma_mode)
         // Transfer in PIO mode
         fpga_wrcmd(FPGA_CMD_START_READ, (const uint8_t*)&last_word_idx, 2);
         g_ide_phy.udma_mode = -1;
-        ide_phy_assert_irq(IDE_STATUS_DEVRDY | IDE_STATUS_DATAREQ);
+        ide_phy_assert_irq(IDE_STATUS_DEVRDY | IDE_STATUS_DSC | IDE_STATUS_DATAREQ);
     }
     else
     {

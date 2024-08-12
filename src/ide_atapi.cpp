@@ -50,14 +50,18 @@ void IDEATAPIDevice::initialize(int devidx)
     if (m_removable.ignore_prevent_removal)
         logmsg("Ignoring host from preventing removal of media");
     memset(&m_atapi_state, 0, sizeof(m_atapi_state));
+    m_iordy_after_ident = ini_getbool("IDE", "iordy_after_ident", false, CONFIGFILE);
     IDEDevice::initialize(devidx);
 }
 
 void IDEATAPIDevice::reset()
 {
+    IDEDevice::reset();
     m_removable.ejected = false;
     m_removable.prevent_persistent = false;
     m_removable.prevent_removable = false;
+    if (m_iordy_after_ident)
+        ide_phy_disable_iordy(true);
 }
 
 void IDEATAPIDevice::set_image(IDEImage *image)
@@ -74,12 +78,12 @@ bool IDEATAPIDevice::handle_command(ide_registers_t *regs)
     {
         // Commands superseded by the ATAPI packet interface
         case IDE_CMD_IDENTIFY_DEVICE:
-        case IDE_CMD_DEVICE_RESET:
         case IDE_CMD_READ_SECTORS:
         case IDE_CMD_READ_SECTORS_EXT:
             return set_device_signature(IDE_ERROR_ABORT, false);
         case IDE_CMD_EXECUTE_DEVICE_DIAGNOSTIC:
-            return set_device_signature(0, false);
+        case IDE_CMD_DEVICE_RESET:
+            return set_device_signature(0x01, false);
         // Supported IDE commands
         case IDE_CMD_NOP: return cmd_nop(regs);
         case IDE_CMD_SET_FEATURES: return cmd_set_features(regs);
@@ -128,11 +132,24 @@ bool IDEATAPIDevice::cmd_set_features(ide_registers_t *regs)
         if (mode_major == 0)
         {
             m_atapi_state.udma_mode = -1;
-            logmsg("-- Set PIO default transfer mode");
+            if (mode_minor == 1)
+            {
+                ide_phy_disable_iordy(true);
+                logmsg("-- Set PIO default transfer mode and disable IORDY");
+            }
+            else
+            {
+                ide_phy_disable_iordy(false);
+                logmsg("-- Set PIO default transfer mode");
+            }
         }
         else if (mode_major == 1 && mode_minor <= m_phy_caps.max_pio_mode)
         {
             m_atapi_state.udma_mode = -1;
+            if (mode_minor >= 3)
+            {
+                ide_phy_disable_iordy(false);
+            }
             logmsg("-- Set PIO transfer mode ", (int)mode_minor);
         }
         else if (mode_major == 8 && mode_minor <= m_phy_caps.max_udma_mode)
@@ -225,8 +242,9 @@ bool IDEATAPIDevice::cmd_identify_packet_device(ide_registers_t *regs)
     }
 
     // Supported PIO modes
-    if (m_phy_caps.supports_iordy) idf[IDE_IDENTIFY_OFFSET_CAPABILITIES_1] |= (1 << 11);
-    idf[IDE_IDENTIFY_OFFSET_PIO_MODE_ATA1] = (m_phy_caps.max_pio_mode << 8);
+    if (m_phy_caps.supports_iordy) idf[IDE_IDENTIFY_OFFSET_CAPABILITIES_1] |= (1 << 10) | (1 << 11) ; // iordy may be disabled and supported
+
+    idf[IDE_IDENTIFY_OFFSET_PIO_MODE_ATA1] = (m_phy_caps.max_pio_mode > 2 ) ? 2 << 8 : (m_phy_caps.max_pio_mode << 8);
     idf[IDE_IDENTIFY_OFFSET_MODE_INFO_VALID] |= 0x02; // PIO support word valid
     idf[IDE_IDENTIFY_OFFSET_MODEINFO_PIO] = (m_phy_caps.max_pio_mode >= 3) ? 1 : 0; // PIO3 supported?
     idf[IDE_IDENTIFY_OFFSET_PIO_CYCLETIME_MIN] = m_phy_caps.min_pio_cycletime_no_iordy; // Without IORDY
@@ -237,8 +255,10 @@ bool IDEATAPIDevice::cmd_identify_packet_device(ide_registers_t *regs)
     if (m_phy_caps.max_udma_mode >= 0)
     {
         idf[IDE_IDENTIFY_OFFSET_CAPABILITIES_1] |= (1 << 8);
+        idf[IDE_IDENTIFY_OFFSET_MODEINFO_DMADIR] = 0x0001;
         idf[IDE_IDENTIFY_OFFSET_MODEINFO_ULTRADMA] = 0x0001;
-        if (m_atapi_state.udma_mode == 0) idf[IDE_IDENTIFY_OFFSET_MODEINFO_ULTRADMA] |= (1 << 8);
+        if (m_atapi_state.udma_mode == 0)
+            idf[IDE_IDENTIFY_OFFSET_MODEINFO_ULTRADMA] |= (1 << 8);
     }
 
     // Calculate checksum
@@ -267,7 +287,9 @@ bool IDEATAPIDevice::cmd_identify_packet_device(ide_registers_t *regs)
 
     regs->error = 0;
     ide_phy_set_regs(regs);
-    ide_phy_assert_irq(IDE_STATUS_DEVRDY);
+    ide_phy_assert_irq(IDE_STATUS_DEVRDY | IDE_STATUS_DSC);
+    if (m_iordy_after_ident)
+        ide_phy_disable_iordy(false);
     return true;
 }
 
