@@ -78,6 +78,7 @@ bool IDEATAPIDevice::handle_command(ide_registers_t *regs)
         case IDE_CMD_READ_SECTORS_EXT:
             return set_device_signature(IDE_ERROR_ABORT, false);
         case IDE_CMD_EXECUTE_DEVICE_DIAGNOSTIC:
+            return set_device_signature(IDE_ERROR_EXEC_DEV_DIAG_DEV0_PASS, false);
         // Supported IDE commands
         case IDE_CMD_NOP: return cmd_nop(regs);
         case IDE_CMD_SET_FEATURES: return cmd_set_features(regs);
