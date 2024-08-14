@@ -217,3 +217,4 @@ void fpga_dump_ide_regs();
 #define FPGA_PHY_IORDY_ENABLE           0x02
 #define FPGA_PHY_DSC_ENABLE             0x04
 #define FPGA_PHY_DSC_DISABLE            0x08
+#define FPGA_PHY_DEV_RESET_EN_IORDY     0x10

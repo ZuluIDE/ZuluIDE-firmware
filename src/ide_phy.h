@@ -139,3 +139,6 @@ void ide_phy_disable_iordy(bool disable);
 
 // Enable or disable DSC when Device ready is asserted in the ATA status register
 void ide_phy_enable_dsc(bool enable);
+
+// Enable IORDY signal after a device reset
+void ide_phy_finish_device_reset();

@@ -450,6 +450,7 @@ const ide_phy_capabilities_t *ide_phy_get_capabilities()
 
 void ide_phy_disable_iordy(bool disable)
 {
+    dbgmsg(disable ? "Disabling" : "Enabling", " IORDY signaling");
     uint8_t iordy_setting = disable ? FPGA_PHY_IORDY_DISABLE : FPGA_PHY_IORDY_ENABLE;
     fpga_wrcmd(FPGA_CMD_PHY_SETTING, &iordy_setting, 1);
 }
@@ -458,4 +459,10 @@ void ide_phy_enable_dsc(bool enable)
 {
     uint8_t dsc_setting = enable ? FPGA_PHY_DSC_ENABLE : FPGA_PHY_DSC_DISABLE;
     fpga_wrcmd(FPGA_CMD_PHY_SETTING, &dsc_setting, 1);
+}
+
+void ide_phy_finish_device_reset()
+{
+    uint8_t dev_reset_enable_iordy = FPGA_PHY_DEV_RESET_EN_IORDY;
+    fpga_wrcmd(FPGA_CMD_PHY_SETTING, &dev_reset_enable_iordy, 1);
 }
