@@ -74,17 +74,16 @@ bool IDEATAPIDevice::handle_command(ide_registers_t *regs)
     {
         // Commands superseded by the ATAPI packet interface
         case IDE_CMD_IDENTIFY_DEVICE:
-        case IDE_CMD_DEVICE_RESET:
         case IDE_CMD_READ_SECTORS:
         case IDE_CMD_READ_SECTORS_EXT:
             return set_device_signature(IDE_ERROR_ABORT, false);
         case IDE_CMD_EXECUTE_DEVICE_DIAGNOSTIC:
-            return set_device_signature(0, false);
         // Supported IDE commands
         case IDE_CMD_NOP: return cmd_nop(regs);
         case IDE_CMD_SET_FEATURES: return cmd_set_features(regs);
         case IDE_CMD_IDENTIFY_PACKET_DEVICE: return cmd_identify_packet_device(regs);
         case IDE_CMD_PACKET: return cmd_packet(regs);
+        case IDE_CMD_DEVICE_RESET: return cmd_device_reset(regs);
         default: return false;
     }
 }
@@ -329,6 +328,16 @@ bool IDEATAPIDevice::cmd_packet(ide_registers_t *regs)
     return handle_atapi_command(cmdbuf);
 }
 
+bool IDEATAPIDevice::cmd_device_reset(ide_registers_t *regs)
+{
+    regs->device &= IDE_DEVICE_DEV; // clear all bits except dev
+    regs->error &= ~IDE_ERROR_EXEC_DEV_DIAG_DEV1_FAIL; // clear bit 7
+    fill_device_signature(regs);
+    regs->status &= IDE_STATUS_IDX; // clear bits BSY, 6,5,4,2,0
+    ide_phy_set_regs(regs);
+    return true;
+}
+
 // Set the packet device signature values to PHY registers
 // See T13/1410D revision 3a section 9.12 Signature and persistence
 bool IDEATAPIDevice::set_device_signature(uint8_t error, bool was_reset)
@@ -353,7 +362,11 @@ bool IDEATAPIDevice::set_device_signature(uint8_t error, bool was_reset)
     if (!was_reset)
     {
         // Command complete
-        ide_phy_assert_irq(IDE_STATUS_DEVRDY);
+        if (error == IDE_ERROR_ABORT)
+            ide_phy_assert_irq(IDE_STATUS_DEVRDY | IDE_STATUS_ERR);
+        else 
+            ide_phy_assert_irq(IDE_STATUS_DEVRDY);
+
     }
 
     return true;
