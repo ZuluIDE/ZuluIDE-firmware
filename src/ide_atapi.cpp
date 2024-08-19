@@ -354,10 +354,7 @@ bool IDEATAPIDevice::set_device_signature(uint8_t error, bool was_reset)
         regs.error = 1; // Diagnostics ok
         regs.status = 0;
     }
-    else
-    {
-        regs.status = IDE_STATUS_BSY;
-    }
+
     ide_phy_set_regs(&regs);
 
     if (!was_reset)
