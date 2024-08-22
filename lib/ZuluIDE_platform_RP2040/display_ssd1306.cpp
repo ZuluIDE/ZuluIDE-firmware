@@ -37,7 +37,8 @@ using namespace zuluide::status;
 #define SCROLL_START_DELAY_MS 1000
 #endif
 
-#define IMAGE_NAME_SPACING 5
+#define WIDTH 128
+#define HEIGHT 32
 
 static const char* toString(const zuluide::control::MenuState::Entry value);
 static const char* toString(const zuluide::control::EjectState::Entry value);
@@ -52,7 +53,7 @@ DisplaySSD1306::DisplaySSD1306() : nextRefresh(at_the_end_of_time), startScrolli
 
 void DisplaySSD1306::init(TwoWire* wire) {
   m_wire = wire;
-  graph = Adafruit_SSD1306(128, 32, m_wire, -1, 400000, 100000);
+  graph = Adafruit_SSD1306(WIDTH, HEIGHT, m_wire, -1, 400000, 100000);
   m_i2c_addr = SS1306_ADDR;
 
   if(graph.begin(SSD1306_SWITCHCAPVCC, m_i2c_addr, false, false)) {
@@ -61,9 +62,9 @@ void DisplaySSD1306::init(TwoWire* wire) {
     graph.getTextBounds("W", 0 ,0, &x, &y, &w, &h);
     if(h > 0 && w > 0) {
       lineHeight = h;
-      lineCount = 32 / h;
-      lineLength = 128 / w;
-      centerBase = (32 - h) / 2;
+      lineCount = HEIGHT / h;
+      lineLength = WIDTH / w;
+      centerBase = (HEIGHT - h) / 2;
     }
     logmsg("lineHeight: ", lineHeight, " lineCount: ", lineCount);
     graph.setTextWrap(false);
@@ -147,7 +148,7 @@ void DisplaySSD1306::updateDisplay() {
 void DisplaySSD1306::displayStatus(bool isRefresh) {
   graph.clearDisplay();
   graph.setTextColor(WHITE, BLACK);
-  graph.setCursor(32, centerBase);
+  graph.setCursor(0, centerBase);
   if (currentSysStatus->HasLoadedImage()) {
     int offset = currentDispState->GetStatusState().GetImageNameOffset();
     const char* filename = currentSysStatus->GetLoadedImage().GetFilename().c_str();
@@ -156,11 +157,10 @@ void DisplaySSD1306::displayStatus(bool isRefresh) {
       int16_t x=0, y=0;
       uint16_t h=0;
       graph.getTextBounds(filename, 0 ,0, &x, &y, &imageNameWidthPixels, &h);
-      imageNameWidthPixels += IMAGE_NAME_SPACING;
     }
 
     if (scrollText) {
-      auto left = 32 - imageNameOffsetPixels;
+      auto left = 0 - imageNameOffsetPixels;
       // Move the cursor.
       graph.setCursor(left, centerBase);
 
@@ -172,18 +172,18 @@ void DisplaySSD1306::displayStatus(bool isRefresh) {
       graph.print(filename + (strlen(filename) - 1));
     }
 
-    // Draw the icon.
-    auto dev_icon = currentSysStatus->GetDeviceType() == drive_type_t::DRIVE_TYPE_ZIP100 ? zipdrive_loaded : cdrom_loaded;
-
-    graph.drawBitmap(0, 0, dev_icon, 18, 9, WHITE);
-
     auto size = currentSysStatus->GetLoadedImage().GetFileSizeBytes();
     if (size != 0) {
       auto sizeStr = makeImageSizeStr(size);
       auto toShow = sizeStr.c_str();
-      graph.setCursor(32, centerBase + lineHeight);
+
+      graph.setCursor(centerText(toShow, graph), 0);
       graph.print(toShow);
     }
+
+    // Draw the icon.
+    auto dev_icon = currentSysStatus->GetDeviceType() == drive_type_t::DRIVE_TYPE_ZIP100 ? zipdrive_loaded : cdrom_loaded;
+    graph.drawBitmap(0, 0, dev_icon, 18, 9, WHITE);
   } else if (!currentSysStatus->IsCardPresent()) {
     auto dev_icon = currentSysStatus->GetDeviceType() == drive_type_t::DRIVE_TYPE_ZIP100 ? zipdrive_empty : cdrom_empty;
     graph.drawBitmap(0, 0, dev_icon, 18, 9, WHITE);
@@ -200,7 +200,7 @@ void DisplaySSD1306::displayStatus(bool isRefresh) {
   uint16_t h=0, w=0;
   const char* text = currentSysStatus->IsPrimary() ? "pri" : "sec";
   graph.getTextBounds(text, 0 ,0, &x, &y, &w, &h);
-  graph.setCursor(128 - w, 0);
+  graph.setCursor(WIDTH - w, 0);
   graph.print(text);
 
   graph.display();
@@ -216,7 +216,7 @@ void DisplaySSD1306::displayMenu() {
   uint16_t h=0, w=0;
 
   graph.getTextBounds("-- Menu --", 0 ,0, &x, &y, &w, &h);
-  graph.setCursor((128 - w) / 2, 0);
+  graph.setCursor((WIDTH - w) / 2, 0);
   graph.print("-- Menu --");
 
   const char* selectMenuText = toString(zuluide::control::MenuState::Entry::Select);
@@ -224,7 +224,7 @@ void DisplaySSD1306::displayMenu() {
     graph.setTextColor(BLACK, WHITE);
   }
   graph.getTextBounds(selectMenuText, 0 ,0, &x, &y, &w, &h);
-  graph.setCursor(32 - w / 2, 8 + MENU_OFFSET);
+  graph.setCursor(HEIGHT - w / 2, 8 + MENU_OFFSET);
   graph.print(selectMenuText);
   graph.setTextColor(WHITE, BLACK);
 
@@ -244,7 +244,7 @@ void DisplaySSD1306::displayMenu() {
   }
 
   graph.getTextBounds(selectMenuText, 0 ,0, &x, &y, &w, &h);
-  graph.setCursor(32 - w / 2, 24 + MENU_OFFSET);
+  graph.setCursor(HEIGHT - w / 2, 24 + MENU_OFFSET);
   graph.print(selectMenuText);
   graph.setTextColor(WHITE, BLACK);
 
@@ -268,7 +268,7 @@ void DisplaySSD1306::displayEject() {
   int16_t x=0, y=0;
   uint16_t h=0, w=0;
   graph.getTextBounds("-- Confirm Eject --", 0 ,0, &x, &y, &w, &h);
-  graph.setCursor((128 - w) / 2, 0);
+  graph.setCursor((WIDTH - w) / 2, 0);
   graph.print("-- Confirm Eject --");
 
   const char* selectMenuText = " Yes ";
@@ -276,7 +276,7 @@ void DisplaySSD1306::displayEject() {
     graph.setTextColor(BLACK, WHITE);
   }
   graph.getTextBounds(selectMenuText, 0 ,0, &x, &y, &w, &h);
-  graph.setCursor(32 - w / 2, 16 + MENU_OFFSET);
+  graph.setCursor(HEIGHT - w / 2, 16 + MENU_OFFSET);
   graph.print(selectMenuText);
   graph.setTextColor(WHITE, BLACK);
 
@@ -299,7 +299,7 @@ void DisplaySSD1306::displaySelect(bool isRefresh) {
   int16_t x=0, y=0;
   uint16_t h=0, w=0;
   graph.getTextBounds(SELECT_IMAGE_MENU_TEXT, 0 ,0, &x, &y, &w, &h);
-  graph.setCursor((128 - w) / 2, 0);
+  graph.setCursor((WIDTH - w) / 2, 0);
   graph.print(SELECT_IMAGE_MENU_TEXT);
 
   const char* toShow;
@@ -311,7 +311,6 @@ void DisplaySSD1306::displaySelect(bool isRefresh) {
       int16_t x=0, y=0;
       uint16_t h=0;
       graph.getTextBounds(img.GetFilename().c_str(), 0 ,0, &x, &y, &imageNameWidthPixels, &h);
-      imageNameWidthPixels += IMAGE_NAME_SPACING;
     }
 
     if (scrollText) {
@@ -356,7 +355,7 @@ void DisplaySSD1306::displayInfo(bool isRefresh) {
   int16_t x=0, y=0;
   uint16_t h=0, w=0;
   graph.getTextBounds(INFO_MENU_TEXT, 0 ,0, &x, &y, &w, &h);
-  graph.setCursor((128 - w) / 2, 0);
+  graph.setCursor((WIDTH - w) / 2, 0);
   graph.print(INFO_MENU_TEXT);
 
   graph.setCursor(centerText(ZULUIDE_TITLE, graph), centerBase);
@@ -368,7 +367,6 @@ void DisplaySSD1306::displayInfo(bool isRefresh) {
     int16_t x=0, y=0;
     uint16_t h=0;
     graph.getTextBounds(firmwareVersion, 0 ,0, &x, &y, &imageNameWidthPixels, &h);
-    imageNameWidthPixels += IMAGE_NAME_SPACING;
     imageNameOffsetPixels = 0;
   }
 
@@ -393,8 +391,8 @@ void DisplaySSD1306::displayInfo(bool isRefresh) {
   graph.display();
 }
 
-bool DisplaySSD1306::checkAndUpdateScrolling(bool isFullWidth) {
-  if ((!scrollText && absolute_time_diff_us (get_absolute_time(), startScrollingAfter) > 0) || (imageNameWidthPixels <= 132-32)) {
+bool DisplaySSD1306::checkAndUpdateScrolling() {
+  if ((!scrollText && absolute_time_diff_us (get_absolute_time(), startScrollingAfter) > 0) || (imageNameWidthPixels <= WIDTH)) {
     return false;
   }
 
@@ -409,8 +407,8 @@ bool DisplaySSD1306::checkAndUpdateScrolling(bool isFullWidth) {
     }
   } else {
     imageNameOffsetPixels++;
-    if (imageNameOffsetPixels > imageNameWidthPixels - (isFullWidth ? 128 : 96)) {
-    // The text scrolled too far, reset.
+    if (imageNameOffsetPixels > imageNameWidthPixels - WIDTH) {
+      // The text scrolled too far, reset.
       reverseScroll = true;
       scrollText = false;
       startScrollingAfter = make_timeout_time_ms(SCROLL_START_DELAY_MS);
@@ -432,7 +430,7 @@ void DisplaySSD1306::Refresh() {
     switch (currentDispState->GetCurrentMode()) {
     case zuluide::control::Mode::Status: {
 
-      if (checkAndUpdateScrolling(false)) {
+      if (checkAndUpdateScrolling()) {
 	displayStatus(true);
       }
 
@@ -445,7 +443,7 @@ void DisplaySSD1306::Refresh() {
       displayEject();
       break;
     case zuluide::control::Mode::Select: {
-      if (checkAndUpdateScrolling(true)) {
+      if (checkAndUpdateScrolling()) {
 	displaySelect(true);
       }
 
@@ -454,7 +452,7 @@ void DisplaySSD1306::Refresh() {
     case zuluide::control::Mode::NewImage:
       break;
     case zuluide::control::Mode::Info: {
-      if (checkAndUpdateScrolling(true)) {
+      if (checkAndUpdateScrolling()) {
 	displayInfo(true);
       }
 
@@ -469,12 +467,12 @@ static uint16_t centerText(const char* text, Adafruit_SSD1306& graph) {
   uint16_t h=0, w=0;
   graph.getTextBounds(text, 0 ,0, &x, &y, &w, &h);
 
-  if (w > 128) {
+  if (w > WIDTH) {
     // Ensure we do not return a negative number.
-    w = 128;
+    w = WIDTH;
   }
 
-  return (128 - w) / 2;
+  return (WIDTH - w) / 2;
 }
 
 static uint16_t centerText(const std::string& text, Adafruit_SSD1306& graph) {
