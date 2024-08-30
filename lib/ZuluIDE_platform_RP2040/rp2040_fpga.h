@@ -102,6 +102,7 @@
 //                               3: Enable ATAPI PACKET handling for device 0
 //                               4: Enable ATAPI PACKET handling for device 1
 //                               5: Disable IORDY to emulate devices that don't use it
+//                               6: Enable INTRQ between packet ata cmd and before atapi cmd
 //
 //     0x81:    Write IDE registers, payload:
 //                 Byte 0:   IDE STATUS

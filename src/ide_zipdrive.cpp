@@ -108,11 +108,11 @@ bool IDEZipDrive::cmd_set_features(ide_registers_t *regs)
     {
         if (regs->error == 0)
         {
-            ide_phy_assert_irq(IDE_STATUS_DEVRDY);
+            ide_phy_assert_irq(IDE_STATUS_DEVRDY | IDE_STATUS_DSC);
         }
         else
         {
-            ide_phy_assert_irq(IDE_STATUS_DEVRDY | IDE_STATUS_ERR);
+            ide_phy_assert_irq(IDE_STATUS_DEVRDY | IDE_STATUS_DSC | IDE_STATUS_ERR);
         }
         return true;
     }
@@ -248,7 +248,7 @@ bool IDEZipDrive::cmd_identify_packet_device(ide_registers_t *regs)
         }
     }
 
-    ide_phy_assert_irq(IDE_STATUS_DEVRDY);
+    ide_phy_assert_irq(IDE_STATUS_DEVRDY | IDE_STATUS_DSC);
 
     return true;
 }
@@ -258,7 +258,7 @@ bool IDEZipDrive::cmd_get_media_status(ide_registers_t *regs)
     if (!m_media_status_notification)
     {
         // media status notification disabled
-        ide_phy_assert_irq(IDE_STATUS_DEVRDY);
+        ide_phy_assert_irq(IDE_STATUS_DEVRDY | IDE_STATUS_DSC);
         return true;
     }
     else
@@ -273,11 +273,11 @@ bool IDEZipDrive::cmd_get_media_status(ide_registers_t *regs)
     }
     if (regs->error == 0)
     {
-        ide_phy_assert_irq(IDE_STATUS_DEVRDY);
+        ide_phy_assert_irq(IDE_STATUS_DEVRDY | IDE_STATUS_DSC);
     }
     else
     {
-        ide_phy_assert_irq(IDE_STATUS_DEVRDY | IDE_STATUS_ERR);
+        ide_phy_assert_irq(IDE_STATUS_DEVRDY | IDE_STATUS_DSC | IDE_STATUS_ERR);
     }
     return true;
 }
