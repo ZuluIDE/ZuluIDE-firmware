@@ -25,6 +25,7 @@
 
 #include "ide_atapi.h"
 #include <CUEParser.h>
+#include <xdvd.h>
 
 // Event Status Notification handling
 class IDECDROMDevice: public IDEATAPIDevice
@@ -76,12 +77,14 @@ protected:
     virtual bool atapi_read_cd(const uint8_t *cmd);
     virtual bool atapi_read_cd_msf(const uint8_t *cmd);
     virtual bool atapi_get_event_status_notification(const uint8_t *cmd) override;
+    virtual bool atapi_read_disc_structure(const uint8_t *cmd);
 
     bool doReadTOC(bool MSF, uint8_t track, uint16_t allocationLength);
     bool doReadSessionInfo(bool MSF, uint16_t allocationLength);
     bool doReadFullTOC(uint8_t session, uint16_t allocationLength, bool useBCD);
     bool doReadSubChannel(bool time, bool subq, uint8_t parameter, uint8_t track_number, uint16_t allocation_length);
-
+    
+    int read_dvd_disc_structure(int format, const uint8_t *cmd, uint8_t *buf);
 
     void cdromGetAudioPlaybackStatus(uint8_t *status, uint32_t *current_lba, bool current_only);
 
@@ -97,6 +100,14 @@ protected:
         uint32_t start_lba;
         uint32_t sectors_done;
     } m_cd_read_format;
+
+    struct 
+    {
+         uint8_t xdvd_challenges_encrypted[XDVD_STRUCTURE_LEN];
+         uint8_t xdvd_challenges_decrypted[XDVD_STRUCTURE_LEN];
+         XBOX_DVD_SECURITY xdvd_security;
+    } m_dvd_structure;
+    
 
     // Read handling and sector format translation if needed
     virtual bool doRead(uint32_t lba, uint32_t transfer_len) override;

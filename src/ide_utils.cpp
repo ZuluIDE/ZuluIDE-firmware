@@ -61,3 +61,14 @@ void write_be32(uint8_t *dst, uint32_t value)
     dst[2] = (value >> 8) & 0xFF;
     dst[3] = (value) & 0xFF;
 }
+
+uint32_t cpu_to_be32(uint32_t value)
+{
+    uint8_t dst[0];
+    dst[0] = (value >> 24) & 0xFF;
+    dst[1] = (value >> 16) & 0xFF;
+    dst[2] = (value >> 8) & 0xFF;
+    dst[3] = (value) & 0xFF;
+    uint32_t result = (uint32_t) dst[0];
+    return result;
+}

@@ -1,5 +1,5 @@
 /**
- * ZuluIDE™ - Copyright (c) 2023 Rabbit Hole Computing™
+ * ZuluIDE™ - Copyright (c) 2024 Rabbit Hole Computing™
  *
  * ZuluIDE™ firmware is licensed under the GPL version 3 or any later version. 
  *
@@ -19,24 +19,24 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
 **/
 
-// Utilities for IDE and ATAPI command implementations
-
+// this file contains code necessary to get QEMU components to compile under ZuluIDE
 #pragma once
 
-#include <stdint.h>
+#define QEMU_PACKED __attribute__((packed))
+#define QEMU_BUILD_BUG_MSG(a, b) // do nothing
 
-#ifdef __cplusplus
-extern "C" {  
-#endif  
-// Utilities for parsing and writing command arguments (big-endian)
-uint16_t parse_be16(const uint8_t *src);
-uint32_t parse_be24(const uint8_t *src);
-uint32_t parse_be32(const uint8_t *src);
-void write_be16(uint8_t *dst, uint16_t value);
-void write_be24(uint8_t *dst, uint32_t value);
-void write_be32(uint8_t *dst, uint32_t value);
+#define IDE_DMA_BUF_SECTORS 256
 
-uint32_t cpu_to_be32(uint32_t value);
-#ifdef __cplusplus
-}  
-#endif  
+#define BDRV_SECTOR_BITS   9
+#define BDRV_SECTOR_SIZE   (1ULL << BDRV_SECTOR_BITS)
+
+struct 
+{
+    struct
+    {
+        struct
+        {
+            char * dvd_security_path;
+        } files;
+    } sys;
+} g_config;

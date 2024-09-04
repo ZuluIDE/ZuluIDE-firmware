@@ -1,6 +1,10 @@
 /**
  * ZuluIDE™ - Copyright (c) 2023 Rabbit Hole Computing™
  *
+ * XBox specific code from the Xemu project - https://github.com/xemu-project/xemu/tree/master/hw/ide/atapi.c
+ * Copyright (c) 2003 Fabrice Bellard
+ * Copyright (c) 2006 Openedhand Ltd.
+ *
  * ZuluIDE™ firmware is licensed under the GPL version 3 or any later version.
  *
  * https://www.gnu.org/licenses/gpl-3.0.html
@@ -312,6 +316,7 @@ void IDECDROMDevice::set_image(IDEImage *image)
         valid = loadAndValidateCueSheet(cuesheetname);
     }
 
+
     if (!valid)
     {
         // No cue sheet or parsing failed, use as plain binary image.
@@ -321,6 +326,16 @@ void IDECDROMDevice::set_image(IDEImage *image)
             INDEX 01 00:00:00
         )");
         m_cueparser = CUEParser(m_cuesheet);
+    }
+
+    if (image &&
+        image->get_filename(filename, sizeof(filename)) &&
+        strncasecmp(filename + strlen(filename) - 4, ".xbox", 5) == 0)
+    {
+        static char xbox_dvd_layout_filename[MAX_FILE_PATH + 1] = {0};
+        strncpy(xbox_dvd_layout_filename, filename, strlen(filename) - 4);
+        strlcat(xbox_dvd_layout_filename, ".xbox", sizeof(xbox_dvd_layout_filename));
+        g_config.sys.files.dvd_security_path = xbox_dvd_layout_filename;
     }
 
     if (image)
@@ -378,6 +393,7 @@ bool IDECDROMDevice::handle_atapi_command(const uint8_t *cmd)
         case ATAPI_CMD_READ_CD:                 return atapi_read_cd(cmd);
         case ATAPI_CMD_READ_CD_MSF:             return atapi_read_cd_msf(cmd);
         case ATAPI_CMD_GET_EVENT_STATUS_NOTIFICATION: return atapi_get_event_status_notification(cmd);
+        case ATAPI_CMD_READ_DISC_STRUCTURE:     return atapi_read_disc_structure(cmd);
 
         default:
             return IDEATAPIDevice::handle_atapi_command(cmd);
@@ -731,6 +747,159 @@ bool IDECDROMDevice::atapi_get_event_status_notification(const uint8_t *cmd)
     }
     return atapi_cmd_ok();
 }
+
+bool IDECDROMDevice::atapi_read_disc_structure(const uint8_t *cmd)
+{
+    uint8_t media = cmd[1];
+    uint8_t format = cmd[7];
+    uint16_t  max_len = parse_be16(&cmd[8]);
+    int ret;
+
+    uint8_t *buf = m_buffer.bytes;
+    if (format < 0xff)
+    {
+        // \todo implement media_is_cd
+        // if (media_is_cd())
+        //     return atapi_cmd_error(ATAPI_SENSE_ILLEGAL_REQ, ATAPI_ASC_INVALID_CMD);
+        // else if (has_image())
+        //     return atapi_cmd_error(ATAPI_SENSE_ILLEGAL_REQ, ATAPI_ASC_INVALID_FIELD);
+    }
+
+    memset(buf, 0, max_len > IDE_DMA_BUF_SECTORS * BDRV_SECTOR_SIZE + 4 ?
+           IDE_DMA_BUF_SECTORS * BDRV_SECTOR_SIZE + 4 : max_len);
+
+    switch (format) 
+    {
+    case 0x00 ... 0x7f:
+    case 0xff:
+        if (media == 0)
+        {
+            ret = read_dvd_disc_structure(format, cmd, buf);
+            if (ret < 0)
+            {
+                return atapi_cmd_error(ATAPI_SENSE_ILLEGAL_REQ, -ret);
+            }
+            else
+            {
+                atapi_send_data(buf, ret);
+                return atapi_cmd_ok();
+            }
+            break;
+        }
+        /* TODO: BD support, fall through for now */
+
+    /* Generic disk structures */
+    case 0x80: /* TODO: AACS volume identifier */
+    case 0x81: /* TODO: AACS media serial number */
+    case 0x82: /* TODO: AACS media identifier */
+    case 0x83: /* TODO: AACS media key block */
+    case 0x90: /* TODO: List of recognized format layers */
+    case 0xc0: /* TODO: Write protection status */
+    default:
+        break;
+    }
+    return atapi_cmd_error(ATAPI_SENSE_ILLEGAL_REQ,ATAPI_ASC_INVALID_FIELD);
+}
+
+int IDECDROMDevice::read_dvd_disc_structure(int format, const uint8_t *cmd, uint8_t *buf)
+{
+    switch (format) {
+        case 0x0: /* Physical format information */
+            {
+                int layer = cmd[6];
+                uint64_t total_sectors;
+
+                uint32_t block_number = parse_be32(&cmd[2]);
+
+                // Challenge table is located on disk runout, on Xbox these locations are always set to these for this command it looks like
+                if (layer == XDVD_STRUCTURE_LAYER && block_number == XDVD_STRUCTURE_BLOCK_NUMBER)
+                {
+                    if (xdvd_get_encrypted_challenge_table(m_dvd_structure.xdvd_challenges_encrypted))
+                    {
+                        xdvd_get_decrypted_responses(m_dvd_structure.xdvd_challenges_encrypted, m_dvd_structure.xdvd_challenges_decrypted);
+                        memcpy(buf, m_dvd_structure.xdvd_challenges_encrypted, XDVD_STRUCTURE_LEN);
+                        return XDVD_STRUCTURE_LEN;
+                    }
+                } 
+
+                if (layer != 0)
+                    return -ATAPI_ASC_INVALID_FIELD;
+
+                total_sectors = capacity_lba();
+                if (total_sectors == 0) {
+                    return -ATAPI_ASC_NO_MEDIUM;
+                }
+
+                buf[4] = 1;   /* DVD-ROM, part version 1 */
+                buf[5] = 0xf; /* 120mm disc, minimum rate unspecified */
+                buf[6] = 1;   /* one layer, read-only (per MMC-2 spec) */
+                buf[7] = 0;   /* default densities */
+
+                /* FIXME: 0x30000 per spec? */
+                write_be32(&buf[8], 0); /* start sector */
+                write_be32(&buf[12], total_sectors - 1); /* end sector */
+                write_be32(&buf[16], total_sectors - 1); /* l0 end sector */
+
+                /* Size of buffer, not including 2 byte size field */
+                write_be16(buf, 2048 + 2);
+
+                /* 2k data + 4 byte header */
+                return (2048 + 4);
+            }
+
+        case 0x01: /* DVD copyright information */
+            buf[4] = 0; /* no copyright data */
+            buf[5] = 0; /* no region restrictions */
+
+            /* Size of buffer, not including 2 byte size field */
+            write_be16(buf, 4 + 2);
+
+            /* 4 byte header + 4 byte data */
+            return (4 + 4);
+
+        case 0x03: /* BCA information - invalid field for no BCA info */
+            return -ATAPI_ASC_INVALID_FIELD;
+
+        case 0x04: /* DVD disc manufacturing information */
+            /* Size of buffer, not including 2 byte size field */
+            write_be16(buf, 2048 + 2);
+
+            /* 2k data + 4 byte header */
+            return (2048 + 4);
+
+        case 0xff:
+            /*
+             * This lists all the command capabilities above.  Add new ones
+             * in order and update the length and buffer return values.
+             */
+
+            buf[4] = 0x00; /* Physical format */
+            buf[5] = 0x40; /* Not writable, is readable */
+            write_be16(&buf[6], 2048 + 4);
+
+            buf[8] = 0x01; /* Copyright info */
+            buf[9] = 0x40; /* Not writable, is readable */
+            write_be16(&buf[10], 4 + 4);
+
+            buf[12] = 0x03; /* BCA info */
+            buf[13] = 0x40; /* Not writable, is readable */
+            write_be16(&buf[14], 188 + 4);
+
+            buf[16] = 0x04; /* Manufacturing info */
+            buf[17] = 0x40; /* Not writable, is readable */
+            write_be16(&buf[18], 2048 + 4);
+
+            /* Size of buffer, not including 2 byte size field */
+            write_be16(buf, 16 + 2);
+
+            /* data written + 4 byte header */
+            return (16 + 4);
+
+        default: /* TODO: formats beyond DVD-ROM requires */
+            return -ATAPI_ASC_INVALID_FIELD;
+    }
+}
+
 
 bool IDECDROMDevice::doReadTOC(bool MSF, uint8_t track, uint16_t allocationLength)
 {
@@ -1490,6 +1659,31 @@ size_t IDECDROMDevice::atapi_get_mode_page(uint8_t page_ctrl, uint8_t page_idx, 
         }
 
         return 8;
+    }
+
+    if (page_idx == ATAPI_MODESENSE_XBOX_SECURITY)
+    {
+                // If this is the first response, get the default security page
+        if (m_dvd_structure.xdvd_security.page.PageCode != MODE_PAGE_XBOX_SECURITY) {
+            xdvd_get_default_security_page(&m_dvd_structure.xdvd_security);
+        }
+
+        dbgmsg("Got MODE_SENSE: PAGE_XBOX_SECURITY. Responding with ss ");
+
+        m_dvd_structure.xdvd_security.page.ResponseValue =
+            xdvd_get_challenge_response(m_dvd_structure.xdvd_challenges_decrypted,
+                                        m_dvd_structure.xdvd_security.page.ChallengeID);
+
+        dbgmsg("Challenge value ", m_dvd_structure.xdvd_security.page.ChallengeValue,
+                     "ID ", m_dvd_structure.xdvd_security.page.ChallengeID,
+                     " Response ", m_dvd_structure.xdvd_security.page.ResponseValue);
+
+        dbgmsg("Authenticated: ", (int) m_dvd_structure.xdvd_security.page.Authenticated,
+                " Partition: ", (int) m_dvd_structure.xdvd_security.page.Partition);
+
+        memcpy(buffer, &m_dvd_structure.xdvd_security, sizeof(m_dvd_structure.xdvd_security));
+
+        atapi_send_data(buffer, sizeof(XBOX_DVD_SECURITY));
     }
 
     return IDEATAPIDevice::atapi_get_mode_page(page_ctrl, page_idx, buffer, max_bytes);
