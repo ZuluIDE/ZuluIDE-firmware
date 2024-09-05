@@ -34,6 +34,7 @@
 #include <hardware/structs/usb.h>
 #include <hardware/structs/iobank0.h>
 #include <hardware/flash.h>
+#include <hardware/pll.h>
 #include <pico/multicore.h>
 #include "rp2040_fpga.h"
 #include <strings.h>
@@ -87,6 +88,36 @@ void platform_init()
     // Make sure second core is stopped
     multicore_reset_core1();
 
+    uart_tx_wait_blocking(uart0);
+    // switch clk_sys and clk_peri to pll_usb
+    // see code in 2.15.6.1 of the datasheet for useful comments
+    clock_configure(clk_sys,
+            CLOCKS_CLK_SYS_CTRL_SRC_VALUE_CLKSRC_CLK_SYS_AUX,
+            CLOCKS_CLK_SYS_CTRL_AUXSRC_VALUE_CLKSRC_PLL_USB,
+            48 * MHZ,
+            48 * MHZ);
+    clock_configure(clk_peri,
+            0,
+            CLOCKS_CLK_PERI_CTRL_AUXSRC_VALUE_CLKSRC_PLL_USB,
+            48 * MHZ,
+            48 * MHZ);
+    // reset PLL for 135.428571MHz
+    pll_init(pll_sys, 1, 1356000000, 5, 2);
+    // switch clocks back to pll_sys
+    clock_configure(clk_sys,
+            CLOCKS_CLK_SYS_CTRL_SRC_VALUE_CLKSRC_CLK_SYS_AUX,
+            CLOCKS_CLK_SYS_CTRL_AUXSRC_VALUE_CLKSRC_PLL_SYS,
+            135600000,
+            135600000);
+    clock_configure(clk_peri,
+            0,
+            CLOCKS_CLK_PERI_CTRL_AUXSRC_VALUE_CLKSRC_PLL_SYS,
+            135600000,
+            135600000);
+    // reset UART for the new clock speed
+    uart_init(uart0, 1000000);
+
+
     /* Check dip switch settings */
     gpio_conf(DIP_CABLESEL,     GPIO_FUNC_SIO, false, false, false, false, false);
     gpio_conf(DIP_DRIVE_ID,     GPIO_FUNC_SIO, false, false, false, false, false);
@@ -103,7 +134,7 @@ void platform_init()
     gpio_conf(SWO_PIN,        GPIO_FUNC_UART,false,false, true,  false, true);
     uart_init(uart0, 1000000); // Debug UART at 1 MHz baudrate
     g_uart_initialized = true;
-
+    logmsg("Clocking at ", (int) clock_get_hz(clk_sys));
     logmsg("Platform: ", g_platform_name);
     logmsg("FW Version: ", g_log_firmwareversion);
 
