@@ -102,18 +102,18 @@ void platform_init()
             48 * MHZ,
             48 * MHZ);
     // reset PLL for 135.428571MHz
-    pll_init(pll_sys, 1, 1356000000, 5, 2);
+    pll_init(pll_sys, 2, 882000000, 5, 1);
     // switch clocks back to pll_sys
     clock_configure(clk_sys,
             CLOCKS_CLK_SYS_CTRL_SRC_VALUE_CLKSRC_CLK_SYS_AUX,
             CLOCKS_CLK_SYS_CTRL_AUXSRC_VALUE_CLKSRC_PLL_SYS,
-            135600000,
-            135600000);
+            176400000,
+            176400000);
     clock_configure(clk_peri,
             0,
             CLOCKS_CLK_PERI_CTRL_AUXSRC_VALUE_CLKSRC_PLL_SYS,
-            135600000,
-            135600000);
+            176400000,
+            176400000);
     // reset UART for the new clock speed
     uart_init(uart0, 1000000);
 
