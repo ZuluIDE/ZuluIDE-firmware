@@ -41,6 +41,9 @@
 #include <minIni.h>
 #include <zuluide/images/image_iterator.h>
 #include <status/status_controller.h>
+#ifdef ENABLE_AUDIO_OUTPUT
+#include "ZuluSCSI_audio.h"
+#endif
 
 extern zuluide::status::StatusController g_StatusController;
 
@@ -378,6 +381,11 @@ bool IDECDROMDevice::handle_atapi_command(const uint8_t *cmd)
         case ATAPI_CMD_READ_CD:                 return atapi_read_cd(cmd);
         case ATAPI_CMD_READ_CD_MSF:             return atapi_read_cd_msf(cmd);
         case ATAPI_CMD_GET_EVENT_STATUS_NOTIFICATION: return atapi_get_event_status_notification(cmd);
+        case ATAPI_CMD_PLAY_AUDIO_10            return atapi_play_audio_10(cmd);
+        case ATAPI_CMD_PLAY_AUDIO_12:           return atapi_play_audio_12(cmd);
+        case ATAPI_CMD_PLAY_AUDIO_MSF:          return atapi_play_audio_msf(cmd);
+        case ATAPI_CMD_PAUSE_RESUME_AUDIO:      return atapi_pause_resume(cmd);
+        case ATAPI_CMD_STOP_PLAY_SCAN_AUDIO:    return atapi_stop_play_scan(cmd);
 
         default:
             return IDEATAPIDevice::handle_atapi_command(cmd);
@@ -393,6 +401,10 @@ bool IDECDROMDevice::atapi_cmd_not_ready_error()
 
 bool IDECDROMDevice::atapi_set_cd_speed(const uint8_t *cmd)
 {
+#if ENABLE_AUDIO_OUTPUT
+    // terminate audio playback if active on this target (Annex C)
+    audio_stop();
+#endif
     uint16_t read_speed = parse_be16(&cmd[2]);
     uint16_t write_speed = parse_be16(&cmd[4]);
     dbgmsg("-- Host requested read_speed=", (int)read_speed, ", write_speed=", (int)write_speed);
@@ -401,6 +413,11 @@ bool IDECDROMDevice::atapi_set_cd_speed(const uint8_t *cmd)
 
 bool IDECDROMDevice::atapi_read_disc_information(const uint8_t *cmd)
 {
+#if ENABLE_AUDIO_OUTPUT
+    // terminate audio playback if active on this target (Annex C)
+    audio_stop();
+#endif
+
     if (!is_medium_present()) return atapi_cmd_not_ready_error();
     if (m_atapi_state.not_ready) return atapi_cmd_error(ATAPI_SENSE_NOT_READY, ATAPI_ASC_UNIT_BECOMING_READY);
 
@@ -429,6 +446,11 @@ bool IDECDROMDevice::atapi_read_disc_information(const uint8_t *cmd)
 
 bool IDECDROMDevice::atapi_read_track_information(const uint8_t *cmd)
 {
+#if ENABLE_AUDIO_OUTPUT
+    // terminate audio playback if active on this target (Annex C)
+    audio_stop();
+#endif
+
     if (!is_medium_present()) return atapi_cmd_not_ready_error();
     if (m_atapi_state.not_ready) return atapi_cmd_error(ATAPI_SENSE_NOT_READY, ATAPI_ASC_UNIT_BECOMING_READY);
 
@@ -504,6 +526,11 @@ bool IDECDROMDevice::atapi_read_track_information(const uint8_t *cmd)
 
 bool IDECDROMDevice::atapi_read_sub_channel(const uint8_t * cmd)
 {
+#if ENABLE_AUDIO_OUTPUT
+    // terminate audio playback if active on this target (Annex C)
+    audio_stop();
+#endif
+
     if (!is_medium_present()) return atapi_cmd_not_ready_error();
     if (m_atapi_state.not_ready) return atapi_cmd_error(ATAPI_SENSE_NOT_READY, ATAPI_ASC_UNIT_BECOMING_READY);
 
@@ -518,6 +545,11 @@ bool IDECDROMDevice::atapi_read_sub_channel(const uint8_t * cmd)
 
 bool IDECDROMDevice::atapi_read_toc(const uint8_t *cmd)
 {
+#if ENABLE_AUDIO_OUTPUT
+    // terminate audio playback if active on this target (Annex C)
+    audio_stop();
+#endif
+
     if (!is_medium_present()) return atapi_cmd_not_ready_error();
     if (m_atapi_state.not_ready) return atapi_cmd_error(ATAPI_SENSE_NOT_READY, ATAPI_ASC_UNIT_BECOMING_READY);
 
@@ -564,8 +596,18 @@ bool IDECDROMDevice::atapi_read_toc(const uint8_t *cmd)
 // Given 2048-byte block sizes this effectively is 1:1 with the provided LBA.
 bool IDECDROMDevice::atapi_read_header(const uint8_t *cmd)
 {
+#if ENABLE_AUDIO_OUTPUT
+    // terminate audio playback if active on this target (Annex C)
+    audio_stop();
+#endif
+
     if (!is_medium_present()) return atapi_cmd_not_ready_error();
     if (m_atapi_state.not_ready) return atapi_cmd_error(ATAPI_SENSE_NOT_READY, ATAPI_ASC_UNIT_BECOMING_READY);
+
+#if ENABLE_AUDIO_OUTPUT
+    // terminate audio playback if active on this target (Annex C)
+    audio_stop();
+#endif
 
     bool MSF = (cmd[1] & 0x02);
     uint32_t lba = 0; // IGNORED for now
@@ -599,6 +641,10 @@ bool IDECDROMDevice::atapi_read_header(const uint8_t *cmd)
 
 bool IDECDROMDevice::atapi_read_cd(const uint8_t *cmd)
 {
+#if ENABLE_AUDIO_OUTPUT
+    // terminate audio playback if active on this target (Annex C)
+    audio_stop();
+#endif
     if (!is_medium_present()) return atapi_cmd_not_ready_error();
     if (m_atapi_state.not_ready) return atapi_cmd_error(ATAPI_SENSE_NOT_READY, ATAPI_ASC_UNIT_BECOMING_READY);
 
@@ -613,6 +659,10 @@ bool IDECDROMDevice::atapi_read_cd(const uint8_t *cmd)
 
 bool IDECDROMDevice::atapi_read_cd_msf(const uint8_t *cmd)
 {
+#if ENABLE_AUDIO_OUTPUT
+    // terminate audio playback if active on this target (Annex C)
+    audio_stop();
+#endif
     if (!is_medium_present()) return atapi_cmd_not_ready_error();
     if (m_atapi_state.not_ready) return atapi_cmd_error(ATAPI_SENSE_NOT_READY, ATAPI_ASC_UNIT_BECOMING_READY);
 
@@ -730,6 +780,69 @@ bool IDECDROMDevice::atapi_get_event_status_notification(const uint8_t *cmd)
         return atapi_cmd_error(ATAPI_SENSE_ABORTED_CMD, 0);
     }
     return atapi_cmd_ok();
+}
+
+void IDECDROMDevice::atapi_play_audio_10(const uint8_t *cmd)
+{
+        uint32_t lba = parse_be32(&cmd[2]);
+        uint32_t blocks = parse_be32(&cmd[6]);
+
+        doPlayAudio(lba, blocks);
+}
+
+void IDECDROMDevice::atapi_play_audio_12(const uint8_t *cmd)
+{
+        uint32_t lba = parse_be32(&cmd[2]);
+        uint16_t blocks = parse_be16(&cmd[7]);
+
+        doPlayAudio(lba, blocks);
+
+}
+
+void IDECDROMDevice::atapi_play_audio_msf(const uint8_t *cmd)
+{
+    uint8_t m = cmd[3];
+    uint8_t s = cmd[4];
+    uint8_t f = cmd[5];
+    uint32_t start_lba MSF2LBA(m, s, f, false);
+
+#ifdef ENABLE_AUDIO_OUTPUT
+    if (m == 0xFF && s == 0xFF && f == 0xFF)
+    {
+            // request to start playback from 'current position'
+            start_lba = audio_get_file_position() / AUDIO_CD_SECTOR_LEN;
+    }
+#endif
+
+    m =  cmd[6];
+    s =  cmd[7];
+    f =  cmd[8];
+    uint32_t stop_lba MSF2LBA(m, s, f, false);
+
+    uint32_t blocks = stop_lba - start_lba;
+
+    doPlayAudio(start_lba, blocks);
+}
+
+void IDECDROMDevice::atapi_pause_resume_audio(const uint8_t *cmd)
+{
+#ifdef ENABLE_AUDIO_OUTPUT
+    bool resume = cmd[8] & 1;
+    dbgmsg("------ CD-ROM ", resume ? "resume" : "pause", " audio playback");
+    if (audio_is_playing())
+    {
+        audio_set_paused(!resume);
+        atapi_cmd_ok();
+    }
+    else
+    {
+        atapi_cmd_error(ATAPI_SENSE_ILLEGAL_REQ, ATAPI_ASC_COMMAND_SEQUENCE_ERROR);
+
+    }
+#else
+    dbgmsg("---- Target does not support audio pausing");
+    atapi_cmd_error(ATAPI_SENSE_ILLEGAL_REQ, ATAPI_ASC_NO_ASC);
+#endif
 }
 
 bool IDECDROMDevice::doReadTOC(bool MSF, uint8_t track, uint16_t allocationLength)
@@ -879,7 +992,7 @@ void IDECDROMDevice::cdromGetAudioPlaybackStatus(uint8_t *status, uint32_t *curr
     if (current_lba)
     {
         if (image && image->is_open()) {
-            *current_lba = image->file_position() / 2352;
+            *current_lba = image->file_position() / ATAPI_AUDIO_CD_SECTOR_SIZE;
         } else {
             *current_lba = 0;
         }
@@ -1040,9 +1153,9 @@ bool IDECDROMDevice::doReadCD(uint32_t lba, uint32_t length, uint8_t sector_type
     else if (trackinfo.track_mode == CUETrack_AUDIO)
     {
         // Transfer whole 2352 byte audio sectors from file to host
-        m_cd_read_format.sector_length_file = 2352;
-        m_cd_read_format.sector_data_length = 2352;
-        m_cd_read_format.sector_length_out = 2352;
+        m_cd_read_format.sector_length_file = ATAPI_AUDIO_CD_SECTOR_SIZE;
+        m_cd_read_format.sector_data_length = ATAPI_AUDIO_CD_SECTOR_SIZE;
+        m_cd_read_format.sector_length_out = ATAPI_AUDIO_CD_SECTOR_SIZE;
     }
     else if (trackinfo.track_mode == CUETrack_MODE1_2048 && main_channel == 0x10)
     {
@@ -1063,7 +1176,7 @@ bool IDECDROMDevice::doReadCD(uint32_t lba, uint32_t length, uint8_t sector_type
     else if (trackinfo.track_mode == CUETrack_MODE1_2352 && main_channel == 0x10)
     {
         // Transfer the 2048 byte payload of data sector to host.
-        m_cd_read_format.sector_length_file = 2352;
+        m_cd_read_format.sector_length_file = ATAPI_AUDIO_CD_SECTOR_SIZE;
         m_cd_read_format.sector_data_skip = 16;
         m_cd_read_format.sector_data_length = 2048;
         m_cd_read_format.sector_length_out = 2048;
@@ -1071,9 +1184,9 @@ bool IDECDROMDevice::doReadCD(uint32_t lba, uint32_t length, uint8_t sector_type
     else if (trackinfo.track_mode == CUETrack_MODE1_2352 && (main_channel & 0xB8) == 0xB8)
     {
         // Transfer whole 2352 byte data sector with ECC to host
-        m_cd_read_format.sector_length_file = 2352;
-        m_cd_read_format.sector_data_length = 2352;
-        m_cd_read_format.sector_length_out = 2352;
+        m_cd_read_format.sector_length_file = ATAPI_AUDIO_CD_SECTOR_SIZE;
+        m_cd_read_format.sector_data_length = ATAPI_AUDIO_CD_SECTOR_SIZE;
+        m_cd_read_format.sector_length_out = ATAPI_AUDIO_CD_SECTOR_SIZE;
     }
     else
     {
@@ -1310,6 +1423,10 @@ void IDECDROMDevice::eject_media()
     logmsg("Device ejecting media: \"", filename, "\"");
     set_esn_event(esn_event_t::NoChange);
     m_removable.ejected = true;
+#if ENABLE_AUDIO_OUTPUT
+    // terminate audio playback if active on this target (MMC-1 Annex C)
+    audio_stop();
+#endif
 }
 
 void IDECDROMDevice::button_eject_media()
@@ -1453,7 +1570,7 @@ CUETrackInfo IDECDROMDevice::getTrackFromLBA(uint32_t lba)
     return result;
 }
 
-size_t IDECDROMDevice::atapi_get_configuration(uint16_t feature, uint8_t *buffer, size_t max_bytes)
+size_t IDECDROMDevice::atapi_get_configuration(uint8_t return_type, uint16_t feature, uint8_t *buffer, size_t max_bytes)
 {
     if (feature == ATAPI_FEATURE_CDREAD)
     {
@@ -1467,7 +1584,24 @@ size_t IDECDROMDevice::atapi_get_configuration(uint16_t feature, uint8_t *buffer
         return 8;
     }
 
-    return IDEATAPIDevice::atapi_get_configuration(feature, buffer, max_bytes);
+#ifdef ENABLE_AUDIO_OUTPUT
+    // CD audio feature (0x103, 259)
+    if (feature == ATAPI_FEATURE_CDAUDIO 
+        && (return_type == ATAPI_RT_SINGLE 
+            || return_type == ATAPI_RT_ALL
+            || (return_type == ATAPI_RT_ALL_CURRENT && !m_removable.ejected)))
+    {
+        write_be16(&buffer[0], feature);
+        scsiDev.data[2] = (img.ejected) ? 0x04 : 0x05;
+        buffer[3] = 4;     // length
+        buffer[4] = 0x03; // scan=0,scm=1,sv=1
+        buffer[5] = 0; // resevered
+        write_be16(&bufer[6], 256); // numer of audio levels
+        return 8;
+    }
+#endif
+
+    return IDEATAPIDevice::atapi_get_configuration(return_type, feature, buffer, max_bytes);
 }
 
 size_t IDECDROMDevice::atapi_get_mode_page(uint8_t page_ctrl, uint8_t page_idx, uint8_t *buffer, size_t max_bytes)
@@ -1493,4 +1627,107 @@ size_t IDECDROMDevice::atapi_get_mode_page(uint8_t page_ctrl, uint8_t page_idx, 
     }
 
     return IDEATAPIDevice::atapi_get_mode_page(page_ctrl, page_idx, buffer, max_bytes);
+}
+
+
+/**************************************/
+/* CD-ROM audio playback              */
+/**************************************/
+
+void cdromGetAudioPlaybackStatus(uint8_t *status, uint32_t *current_lba, bool current_only)
+{
+#ifdef ENABLE_AUDIO_OUTPUT
+    if (status) {
+        if (current_only) {
+            *status = audio_is_playing() ? 1 : 0;
+        } else {
+            *status = (uint8_t) audio_get_status_code();
+        }
+    }
+    *current_lba = audio_get_file_position() / ATAPI_AUDIO_CD_SECTOR_SIZE;
+#else
+    if (status) *status = 0; // audio status code for 'unsupported/invalid' and not-playing indicator
+#endif
+}
+
+void IDECDROMDevice::doPlayAudio(uint32_t lba, uint32_t length)
+{
+#ifdef ENABLE_AUDIO_OUTPUT
+    dbgmsg("------ CD-ROM Play Audio request at ", lba, " for ", length, " sectors");
+
+    // Per Annex C terminate playback immediately if already in progress on
+    // the current target. Non-current targets may also get their audio
+    // interrupted later due to hardware limitations
+    audio_stop();
+
+    // if transfer length is zero no audio playback happens.
+    // don't treat as an error per SCSI-2; handle via short-circuit
+
+    if (length == 0)
+    {
+        audio_set_file_position(lba);
+        return;
+    }
+
+    // if actual playback is requested perform steps to verify prior to playback
+    if (m_devinfo.medium_type == ATAPI_MEDIUM_CDDA || m_devinfo.medium_type == ATAPI_MEDIUM_CDMIXED)
+    {
+        getTrackFromLBA(lba);
+
+        if (lba == 0xFFFFFFFF)
+        {
+            // request to start playback from 'current position'
+            lba = audio_get_file_position() / ATAPI_AUDIO_CD_SECTOR_SIZE;
+        }
+
+        CUETrackInfo *trackinfo = &(m_cd_read_format.trackinfo);
+
+        uint64_t offset = m_cd_read_format.trackinfo.file_offset
+                + trackinfo->sector_length * (lba - trackinfo->track_start);
+        dbgmsg("------ Play audio CD: ", (int)length, " sectors starting at ", (int)lba,
+           ", track number ", trackinfo->track_number, ", data offset in file ", (int)offset);
+
+        if (trackinfo->track_mode != CUETrack_AUDIO)
+        {
+            dbgmsg("---- Host tried audio playback on track type ", (int)trackinfo->track_mode);
+            atapi_cmd_error(ATAPI_SENSE_ILLEGAL_REQ, ATAPI_ASC_ILLEGAL_MODE_FOR_TRACK);
+            return;
+        }
+
+        // playback request appears to be sane, so perform it
+        // see earlier note for context on the block length below
+        if (!audio_play(&(img.file), offset,
+                offset + length * trackinfo->sector_length, false))
+        {
+            // Underlying data/media error? Fake a disk scratch, which should
+            // be a condition most CD-DA players are expecting
+            atapi_cmd_error(ATAPI_SENSE_MEDIUM_ERROR, ATAPI_CIRC_UNRECOVERED_ERROR);
+            return;
+        }
+        atapi_cmd_ok();
+    }
+    else
+    {
+        // virtual drive supports audio, just not with this disk image
+        dbgmsg("---- Request to play audio on non-audio image");
+        atapi_cmd_error(ATAPI_SENSE_ILLEGAL_REQ, ATAPI_ASC_ILLEGAL_MODE_FOR_TRACK);
+    }
+#else
+    dbgmsg("---- Target does not support audio playback");
+    // per SCSI-2, targets not supporting audio respond to zero-length
+    // PLAY AUDIO commands with ILLEGAL REQUEST; this seems to be a check
+    // performed by at least some audio playback software
+    atapi_cmd_error(ATAPI_SENSE_ILLEGAL_REQ, ATAPI_ASC_NO_ASC);
+#endif
+}
+
+
+
+
+static void doStopAudio()
+{
+    dbgmsg("------ CD-ROM Stop Audio request");
+#ifdef ENABLE_AUDIO_OUTPUT
+    audio_stop();
+#endif
 }

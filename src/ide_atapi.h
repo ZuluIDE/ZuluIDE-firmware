@@ -27,6 +27,8 @@
 #include "ide_imagefile.h"
 #include <stddef.h>
 
+#define ATAPI_AUDIO_CD_SECTOR_SIZE ATAPI_AUDIO_CD_SECTOR_SIZE
+
 // Number of simultaneous transfer requests to pass to ide_phy.
 #define ATAPI_TRANSFER_REQ_COUNT 2
 
@@ -135,7 +137,7 @@ protected:
     union {
         uint32_t dword[588];
         uint16_t word[1176];
-        uint8_t bytes[2352];
+        uint8_t bytes[ATAPI_AUDIO_CD_SECTOR_SIZE];
     } m_buffer;
 
     // IDE command handlers
@@ -202,7 +204,7 @@ protected:
     virtual void atapi_set_mode_page(uint8_t page_ctrl, uint8_t page_idx, const uint8_t *buffer, size_t length);
 
     // ATAPI get_configuration responses
-    virtual size_t atapi_get_configuration(uint16_t feature, uint8_t *buffer, size_t max_bytes);
+    virtual size_t atapi_get_configuration(uint8_t return_type, uint16_t feature, uint8_t *buffer, size_t max_bytes);
 
     // ATAPI standard inquiry string settings
     void set_inquiry_strings(const char* default_vendor, const char* default_product, const char* default_version);

@@ -995,7 +995,7 @@ bool IDEATAPIDevice::atapi_request_sense(const uint8_t *cmd)
 
 bool IDEATAPIDevice::atapi_get_configuration(const uint8_t *cmd)
 {
-    uint8_t type = cmd[1] & 3;
+    uint8_t rt = cmd[1] & 3;
     uint16_t starting_feature = parse_be16(&cmd[2]);
     uint16_t req_bytes = parse_be16(&cmd[7]);
 
@@ -1003,30 +1003,30 @@ bool IDEATAPIDevice::atapi_get_configuration(const uint8_t *cmd)
     size_t max_bytes = sizeof(m_buffer);
     size_t resp_bytes = 8; // Reserve space for feature header
 
-    if (type == 0)
+    if (rt == ATAPI_RT_ALL)
     {
         // All supported features
         for (uint16_t i = starting_feature; i <= ATAPI_FEATURE_MAX && resp_bytes < max_bytes; i++)
         {
-            resp_bytes += atapi_get_configuration(i, &resp[resp_bytes], max_bytes - resp_bytes);
+            resp_bytes += atapi_get_configuration(rt, i, &resp[resp_bytes], max_bytes - resp_bytes);
         }
     }
-    else if (type == 1)
+    else if (rt == ATAPI_RT_ALL_CURRENT)
     {
         // Only current features
         for (uint16_t i = starting_feature; i <= ATAPI_FEATURE_MAX && resp_bytes < max_bytes; i++)
         {
-            size_t len = atapi_get_configuration(i, &resp[resp_bytes], max_bytes - resp_bytes);
+            size_t len = atapi_get_configuration(rt, i, &resp[resp_bytes], max_bytes - resp_bytes);
             if (len > 0 && (resp[resp_bytes + 2] & 1))
             {
                 resp_bytes += len;
             }
         }
     }
-    else if (type == 2)
+    else if (rt == ATAPI_RT_SINGLE)
     {
         // Single feature
-        resp_bytes += atapi_get_configuration(starting_feature, &resp[resp_bytes], max_bytes - resp_bytes);
+        resp_bytes += atapi_get_configuration(rt, starting_feature, &resp[resp_bytes], max_bytes - resp_bytes);
     }
 
     // Fill in feature header
@@ -1250,7 +1250,7 @@ void IDEATAPIDevice::atapi_set_mode_page(uint8_t page_ctrl, uint8_t page_idx, co
 
 }
 
-size_t IDEATAPIDevice::atapi_get_configuration(uint16_t feature, uint8_t *buffer, size_t max_bytes)
+size_t IDEATAPIDevice::atapi_get_configuration(uint8_t return_type, uint16_t feature, uint8_t *buffer, size_t max_bytes)
 {
     if (feature == ATAPI_FEATURE_PROFILES)
     {

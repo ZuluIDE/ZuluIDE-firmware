@@ -76,7 +76,10 @@ protected:
     virtual bool atapi_read_cd(const uint8_t *cmd);
     virtual bool atapi_read_cd_msf(const uint8_t *cmd);
     virtual bool atapi_get_event_status_notification(const uint8_t *cmd) override;
-
+    virtual bool atapi_play_audio_10(const uint8_t *cmd);
+    virtual bool atapi_play_audio_12(const uint8_t *cmd);
+    virtual bool atapi_play_audio_msf(const uint8_t *cmd);
+    virtual bool atapi_pause_resume_audio(const uint8_t *cmd);
     bool doReadTOC(bool MSF, uint8_t track, uint16_t allocationLength);
     bool doReadSessionInfo(bool MSF, uint16_t allocationLength);
     bool doReadFullTOC(uint8_t session, uint16_t allocationLength, bool useBCD);
@@ -113,12 +116,11 @@ protected:
     CUETrackInfo getTrackFromLBA(uint32_t lba);
 
     // ATAPI configuration pages
-    virtual size_t atapi_get_configuration(uint16_t feature, uint8_t *buffer, size_t max_bytes) override;
+    virtual size_t atapi_get_configuration(uint8_t return_type, uint16_t feature, uint8_t *buffer, size_t max_bytes) override;
 
     // ATAPI mode pages
     virtual size_t atapi_get_mode_page(uint8_t page_ctrl, uint8_t page_idx, uint8_t *buffer, size_t max_bytes) override;
 
-    
     // Event status notification handling
     struct 
     {
@@ -129,4 +131,8 @@ protected:
 
     // Event Status Notification statemachine
     void esn_next_event();
+
+    // Audio playback handling
+    void doPlayAudio(uint32_t lba, uint32_t length);
+    void doPauseResumeAudio(bool resume)
 };

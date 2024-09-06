@@ -38,6 +38,7 @@ X(ATAPI_CMD_FORMAT_UNIT                   , 0x04) \
 X(ATAPI_CMD_VENDOR_0x06                   , 0x06) \
 X(ATAPI_CMD_READ6                         , 0x08) \
 X(ATAPI_CMD_WRITE6                        , 0x0A) \
+X(ATAPI_CMD_SEEK_6                        , 0x0B) \
 X(ATAPI_CMD_VENDOR_0x0D                   , 0x0D) \
 X(ATAPI_CMD_INQUIRY                       , 0x12) \
 X(ATAPI_CMD_MODE_SELECT6                  , 0x15) \
@@ -57,8 +58,12 @@ X(ATAPI_CMD_READ_BUFFER                   , 0x3C) \
 X(ATAPI_CMD_READ_SUB_CHANNEL              , 0x42) \
 X(ATAPI_CMD_READ_TOC                      , 0x43) \
 X(ATAPI_CMD_READ_HEADER                   , 0x44) \
+X(ATAPI_CMD_PLAY_AUDIO_10                 , 0x45) \
 X(ATAPI_CMD_GET_CONFIGURATION             , 0x46) \
+x(ATAPI_CMD_PLAY_AUDIO_MSF                , 0x47) \
 X(ATAPI_CMD_GET_EVENT_STATUS_NOTIFICATION , 0x4A) \
+x(ATAPI_CMD_PAUSE_RESUME_AUDIO            , 0x4B) \
+X(ATAPI_CMD_STOP_PLAY_SCAN_AUDIO            0x4E) \
 X(ATAPI_CMD_READ_DISC_INFORMATION         , 0x51) \
 X(ATAPI_CMD_READ_TRACK_INFORMATION        , 0x52) \
 X(ATAPI_CMD_RESERVE_TRACK                 , 0x53) \
@@ -74,6 +79,7 @@ X(ATAPI_CMD_BLANK                         , 0xA1) \
 X(ATAPI_CMD_SECURITY_PROTOCOL_IN          , 0xA2) \
 X(ATAPI_CMD_SEND_KEY                      , 0xA3) \
 X(ATAPI_CMD_REPORT_KEY                    , 0xA4) \
+X(ATAPI_CMD_PLAY_AUDIO_12                 , 0xA5) \
 X(ATAPI_CMD_LOAD_UNLOAD_MEDIUM            , 0xA6) \
 X(ATAPI_CMD_SET_READ_AHEAD                , 0xA7) \
 X(ATAPI_CMD_READ12                        , 0xA8) \
@@ -122,20 +128,22 @@ ATAPI_COMMAND_LIST(ATAPI_ENUM_ENTRY)
 #define ATAPI_SENSE_MISCOMPARE      0x0E
 
 
+#define ATAPI_ASC_NO_ASC                    0x0000
+#define ATAPI_ASC_CRC_ERROR                 0x0803
+#define ATAPI_CIRC_UNRECOVERED_ERROR        0x1106
+#define ATAPI_ASC_PARAMETER_LENGTH_ERROR    0x1A00
 #define ATAPI_ASC_INVALID_CMD               0x2000
 #define ATAPI_ASC_LBA_OUT_OF_RANGE          0x2100
 #define ATAPI_ASC_INVALID_FIELD             0x2400
 #define ATAPI_ASC_WRITE_PROTECTED           0x2700
+#define ATAPI_ASC_MEDIUM_CHANGE             0x2800
+#define ATAPI_ASC_RESET_OCCURRED            0x2900
+#define ATAPI_ASC_COMMAND_SEQUENCE_ERROR    0x2C00
 #define ATAPI_ASC_NO_MEDIUM                 0x3A00
 #define ATAPI_ASC_NO_MEDIUM_TRAY_OPEN       0x3A02
+#define ATAPI_ASC_UNIT_BECOMING_READY       0x0401
 #define ATAPI_ASC_MEDIUM_REMOVAL_PREVENTED  0x5302
 #define ATAPI_ASC_ILLEGAL_MODE_FOR_TRACK    0x6400
-#define ATAPI_ASC_CRC_ERROR                 0x0803
-#define ATAPI_ASC_PARAMETER_LENGTH_ERROR    0x1A00
-#define ATAPI_ASC_RESET_OCCURRED            0x2900
-#define ATAPI_ASC_MEDIUM_CHANGE             0x2800
-#define ATAPI_ASC_UNIT_BECOMING_READY       0x0401
-
 
 // ATAPI INQUIRY response format
 #define ATAPI_INQUIRY_OFFSET_TYPE       0
@@ -164,12 +172,20 @@ ATAPI_COMMAND_LIST(ATAPI_ENUM_ENTRY)
 #define ATAPI_PROFILE_REMOVABLE         0x0002
 #define ATAPI_PROFILE_CDROM             0x0008
 
+// GET_CONFIGURATION return types (rt)
+#define ATAPI_RT_ALL            0x0
+#define ATAPI_RT_ALL_CURRENT    0x1
+#define ATAPI_RT_SINGLE         0x2
+
 // GET_CONFIGURATION features
 #define ATAPI_FEATURE_PROFILES          0x0000
 #define ATAPI_FEATURE_CORE              0x0001
 #define ATAPI_FEATURE_REMOVABLE         0x0003
 #define ATAPI_FEATURE_CDREAD            0x001E
+#define ATAPI_FEATURE_CDAUDIO           0x0103
 #define ATAPI_FEATURE_MAX               0x0032
+
+
 
 // MODE SENSE pages
 #define ATAPI_MODESENSE_ERRORRECOVERY   0x01
