@@ -64,7 +64,7 @@
 #define GPIO_I2C_SCL 27
 #define GPIO_EXT_INTERRUPT 15
 
-#ifndef ENABLE_AUDIO_OUTPUT
+#ifdef ENABLE_AUDIO_OUTPUT
     // IO expander I2C pins being used as SPI for audio
     #define AUDIO_SPI      spi1
     #define GPIO_EXP_SPARE 12

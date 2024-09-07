@@ -27,7 +27,7 @@
 #include "ide_imagefile.h"
 #include <stddef.h>
 
-#define ATAPI_AUDIO_CD_SECTOR_SIZE ATAPI_AUDIO_CD_SECTOR_SIZE
+#define ATAPI_AUDIO_CD_SECTOR_SIZE 2352
 
 // Number of simultaneous transfer requests to pass to ide_phy.
 #define ATAPI_TRANSFER_REQ_COUNT 2

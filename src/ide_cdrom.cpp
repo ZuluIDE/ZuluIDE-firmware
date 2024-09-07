@@ -381,11 +381,11 @@ bool IDECDROMDevice::handle_atapi_command(const uint8_t *cmd)
         case ATAPI_CMD_READ_CD:                 return atapi_read_cd(cmd);
         case ATAPI_CMD_READ_CD_MSF:             return atapi_read_cd_msf(cmd);
         case ATAPI_CMD_GET_EVENT_STATUS_NOTIFICATION: return atapi_get_event_status_notification(cmd);
-        case ATAPI_CMD_PLAY_AUDIO_10            return atapi_play_audio_10(cmd);
+        case ATAPI_CMD_PLAY_AUDIO_10:           return atapi_play_audio_10(cmd);
         case ATAPI_CMD_PLAY_AUDIO_12:           return atapi_play_audio_12(cmd);
         case ATAPI_CMD_PLAY_AUDIO_MSF:          return atapi_play_audio_msf(cmd);
-        case ATAPI_CMD_PAUSE_RESUME_AUDIO:      return atapi_pause_resume(cmd);
-        case ATAPI_CMD_STOP_PLAY_SCAN_AUDIO:    return atapi_stop_play_scan(cmd);
+        case ATAPI_CMD_PAUSE_RESUME_AUDIO:      return atapi_pause_resume_audio(cmd);
+        case ATAPI_CMD_STOP_PLAY_SCAN_AUDIO:    return atapi_stop_play_scan_audio(cmd);
 
         default:
             return IDEATAPIDevice::handle_atapi_command(cmd);
@@ -823,8 +823,14 @@ void IDECDROMDevice::atapi_play_audio_msf(const uint8_t *cmd)
 
     doPlayAudio(start_lba, blocks);
 }
+bool IDECDROMDevice::atapi_stop_play_scan_audio(const unit8_t *cmd)
+{
+        // STOP PLAY/SCAN
+        doStopAudio();
+        return atapi_cmd_ok();
+}
 
-void IDECDROMDevice::atapi_pause_resume_audio(const uint8_t *cmd)
+bool IDECDROMDevice::atapi_pause_resume_audio(const uint8_t *cmd)
 {
 #ifdef ENABLE_AUDIO_OUTPUT
     bool resume = cmd[8] & 1;
@@ -832,16 +838,15 @@ void IDECDROMDevice::atapi_pause_resume_audio(const uint8_t *cmd)
     if (audio_is_playing())
     {
         audio_set_paused(!resume);
-        atapi_cmd_ok();
+        return atapi_cmd_ok();
     }
     else
     {
-        atapi_cmd_error(ATAPI_SENSE_ILLEGAL_REQ, ATAPI_ASC_COMMAND_SEQUENCE_ERROR);
-
+        return atapi_cmd_error(ATAPI_SENSE_ILLEGAL_REQ, ATAPI_ASC_COMMAND_SEQUENCE_ERROR);
     }
 #else
     dbgmsg("---- Target does not support audio pausing");
-    atapi_cmd_error(ATAPI_SENSE_ILLEGAL_REQ, ATAPI_ASC_NO_ASC);
+    return atapi_cmd_error(ATAPI_SENSE_ILLEGAL_REQ, ATAPI_ASC_NO_ASC);
 #endif
 }
 
@@ -1666,7 +1671,7 @@ void IDECDROMDevice::doPlayAudio(uint32_t lba, uint32_t length)
     if (length == 0)
     {
         audio_set_file_position(lba);
-        return;
+        return atapi_cmd_ok();
     }
 
     // if actual playback is requested perform steps to verify prior to playback
@@ -1690,8 +1695,7 @@ void IDECDROMDevice::doPlayAudio(uint32_t lba, uint32_t length)
         if (trackinfo->track_mode != CUETrack_AUDIO)
         {
             dbgmsg("---- Host tried audio playback on track type ", (int)trackinfo->track_mode);
-            atapi_cmd_error(ATAPI_SENSE_ILLEGAL_REQ, ATAPI_ASC_ILLEGAL_MODE_FOR_TRACK);
-            return;
+            return atapi_cmd_error(ATAPI_SENSE_ILLEGAL_REQ, ATAPI_ASC_ILLEGAL_MODE_FOR_TRACK);
         }
 
         // playback request appears to be sane, so perform it
@@ -1701,23 +1705,22 @@ void IDECDROMDevice::doPlayAudio(uint32_t lba, uint32_t length)
         {
             // Underlying data/media error? Fake a disk scratch, which should
             // be a condition most CD-DA players are expecting
-            atapi_cmd_error(ATAPI_SENSE_MEDIUM_ERROR, ATAPI_CIRC_UNRECOVERED_ERROR);
-            return;
+            return atapi_cmd_error(ATAPI_SENSE_MEDIUM_ERROR, ATAPI_CIRC_UNRECOVERED_ERROR);
         }
-        atapi_cmd_ok();
+        return atapi_cmd_ok();
     }
     else
     {
         // virtual drive supports audio, just not with this disk image
         dbgmsg("---- Request to play audio on non-audio image");
-        atapi_cmd_error(ATAPI_SENSE_ILLEGAL_REQ, ATAPI_ASC_ILLEGAL_MODE_FOR_TRACK);
+        return atapi_cmd_error(ATAPI_SENSE_ILLEGAL_REQ, ATAPI_ASC_ILLEGAL_MODE_FOR_TRACK);
     }
 #else
     dbgmsg("---- Target does not support audio playback");
     // per SCSI-2, targets not supporting audio respond to zero-length
     // PLAY AUDIO commands with ILLEGAL REQUEST; this seems to be a check
     // performed by at least some audio playback software
-    atapi_cmd_error(ATAPI_SENSE_ILLEGAL_REQ, ATAPI_ASC_NO_ASC);
+    return atapi_cmd_error(ATAPI_SENSE_ILLEGAL_REQ, ATAPI_ASC_NO_ASC);
 #endif
 }
 

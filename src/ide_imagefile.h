@@ -114,6 +114,10 @@ public:
     virtual void set_prefix(const char* prefix);
     virtual const char* const get_prefix();
 
+    // This is direct access to the file object, ideally this should be remove
+    // But this makes importing the audio playback code easier
+    virtual FsFile* direct_file() {return &m_file;}
+
 protected:
     FsFile m_file;
     SdCard *m_blockdev;
