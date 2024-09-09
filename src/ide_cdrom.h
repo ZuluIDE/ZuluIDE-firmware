@@ -79,6 +79,7 @@ protected:
     virtual bool atapi_play_audio_10(const uint8_t *cmd);
     virtual bool atapi_play_audio_12(const uint8_t *cmd);
     virtual bool atapi_play_audio_msf(const uint8_t *cmd);
+    virtual bool atapi_stop_play_scan_audio(const uint8_t *cmd);
     virtual bool atapi_pause_resume_audio(const uint8_t *cmd);
     bool doReadTOC(bool MSF, uint8_t track, uint16_t allocationLength);
     bool doReadSessionInfo(bool MSF, uint16_t allocationLength);
@@ -133,6 +134,6 @@ protected:
     void esn_next_event();
 
     // Audio playback handling
-    void doPlayAudio(uint32_t lba, uint32_t length);
-    void doPauseResumeAudio(bool resume)
+    bool doPlayAudio(uint32_t lba, uint32_t length);
+    bool doPauseResumeAudio(bool resume);
 };

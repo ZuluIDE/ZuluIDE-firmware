@@ -328,6 +328,11 @@ void setupStatusController()
     break;
   }
 
+  if (isPrimary)
+      ide_protocol_init(g_ide_device, NULL); // Primary device
+  else
+      ide_protocol_init(NULL, g_ide_device); // Secondary device
+
   if (device) {
     g_StatusController.SetIsPrimary(isPrimary);
     g_StatusController.UpdateDeviceStatus(std::move(device));
@@ -480,18 +485,13 @@ void zuluide_init(void)
   }
 #endif
 
-    // Setup the status controller.
-    setupStatusController();
+  // Setup the status controller.
+  setupStatusController();
 
-    if (platform_get_device_id() == 1)
-        ide_protocol_init(NULL, g_ide_device); // Secondary device
-    else
-        ide_protocol_init(g_ide_device, NULL); // Primary device
-
-    blinkStatus(BLINK_STATUS_OK);
+  blinkStatus(BLINK_STATUS_OK);
 
 
-    logmsg("Initialization complete!");
+  logmsg("Initialization complete!");
 }
 
 void zuluide_main_loop(void)

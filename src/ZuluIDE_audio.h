@@ -76,7 +76,7 @@ bool audio_is_playing();
  * \param swap   If false, little-endian sample order, otherwise big-endian.
  * \return       True if successful, false otherwise.
  */
-bool audio_play(IDEImage *img, uint64_t start, uint64_t end, bool swap);
+bool audio_play(uint64_t start, uint64_t end, bool swap);
 
 /**
  * Pauses audio playback. This may be delayed slightly to allow sample buffers

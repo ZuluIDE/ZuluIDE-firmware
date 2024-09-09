@@ -30,6 +30,7 @@
 #include <hardware/adc.h>
 #include <hardware/uart.h>
 #include <hardware/spi.h>
+#include <hardware/pll.h>
 #include <hardware/structs/xip_ctrl.h>
 #include <hardware/structs/usb.h>
 #include <hardware/structs/iobank0.h>
@@ -965,12 +966,12 @@ const void * btldr_vectors[2] = {&__StackTop, (void*)&btldr_reset_handler};
 /********************************/
 void zuluide_setup(void)
 {
-  if (!platform_check_for_controller())
-  {
-    rp2040.idleOtherCore();
-    multicore_reset_core1();
-    dbgmsg("No Zulu Control board or I2C server found, disabling 2nd core");
-  }
+//   if (!platform_check_for_controller())
+//   {
+//     rp2040.idleOtherCore();
+//     multicore_reset_core1();
+//     dbgmsg("No Zulu Control board or I2C server found, disabling 2nd core");
+//   }
 }
 
 void zuluide_setup1(void)

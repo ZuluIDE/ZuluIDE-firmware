@@ -133,23 +133,17 @@ static uint16_t wire_buf_a[WIRE_BUFFER_SIZE];
 static uint16_t wire_buf_b[WIRE_BUFFER_SIZE];
 
 // tracking for audio playback
-static uint8_t audio_owner; // SCSI ID or 0xFF when idle
+static bool audio_idle = true;
+static bool audio_playing = false;
 static volatile bool audio_paused = false;
 static uint64_t fpos;
 static uint32_t fleft;
 
 // historical playback status information
-static audio_status_code audio_last_status[8] = {ASC_NO_STATUS, ASC_NO_STATUS, ASC_NO_STATUS, ASC_NO_STATUS,
-                                                 ASC_NO_STATUS, ASC_NO_STATUS, ASC_NO_STATUS, ASC_NO_STATUS};
+static audio_status_code audio_last_status = ASC_NO_STATUS;
 // volume information for targets
-static volatile uint16_t volumes[8] = {
-    DEFAULT_VOLUME_LEVEL_2CH, DEFAULT_VOLUME_LEVEL_2CH, DEFAULT_VOLUME_LEVEL_2CH, DEFAULT_VOLUME_LEVEL_2CH,
-    DEFAULT_VOLUME_LEVEL_2CH, DEFAULT_VOLUME_LEVEL_2CH, DEFAULT_VOLUME_LEVEL_2CH, DEFAULT_VOLUME_LEVEL_2CH
-};
-static volatile uint16_t channels[8] = {
-    AUDIO_CHANNEL_ENABLE_MASK, AUDIO_CHANNEL_ENABLE_MASK, AUDIO_CHANNEL_ENABLE_MASK, AUDIO_CHANNEL_ENABLE_MASK,
-    AUDIO_CHANNEL_ENABLE_MASK, AUDIO_CHANNEL_ENABLE_MASK, AUDIO_CHANNEL_ENABLE_MASK, AUDIO_CHANNEL_ENABLE_MASK
-};
+static volatile uint16_t volume = DEFAULT_VOLUME_LEVEL_2CH;
+static volatile uint16_t channel = AUDIO_CHANNEL_ENABLE_MASK;
 
 // mechanism for cleanly stopping DMA units
 static volatile bool audio_stopping = false;
@@ -169,7 +163,7 @@ static uint8_t invert = 0; // biphase encode help: set if last wire bit was '1'
  * output.
  */
 static void snd_encode(uint8_t* samples, uint16_t* wire_patterns, uint16_t len, uint8_t swap) {
-    uint16_t wvol = volumes[audio_owner & 7];
+    uint16_t wvol = volume;
     uint8_t lvol = ((wvol >> 8) + (wvol & 0xFF)) >> 1; // average of both values
     // limit maximum volume; with my DACs I've had persistent issues
     // with signal clipping when sending data in the highest bit position
@@ -178,7 +172,7 @@ static void snd_encode(uint8_t* samples, uint16_t* wire_patterns, uint16_t len, 
     // enable or disable based on the channel information for both output
     // ports, where the high byte and mask control the right channel, and
     // the low control the left channel
-    uint16_t chn = channels[audio_owner & 7] & AUDIO_CHANNEL_ENABLE_MASK;
+    uint16_t chn = channel & AUDIO_CHANNEL_ENABLE_MASK;
     if (!(chn >> 8)) rvol = 0;
     if (!(chn & 0xFF)) lvol = 0;
 
@@ -348,14 +342,17 @@ void audio_dma_irq() {
 }
 
 bool audio_is_active() {
-    return audio_owner != 0xFF;
+    return !audio_idle;
 }
 
-bool audio_is_playing(uint8_t id) {
-    return audio_owner == (id & 7);
+bool audio_is_playing() {
+    return audio_playing;
 }
 
 void audio_setup() {
+    dbgmsg("Disabling Arduino Core 1 setup to enable the Audio Ouput Core 1 handler");
+    rp2040.idleOtherCore();
+    multicore_reset_core1();
     // setup SPI to blast SP/DIF data over the TX pin
     spi_set_baudrate(AUDIO_SPI, 5644800); // will be slightly wrong, ~0.03% slow
     hw_write_masked(&spi_get_hw(AUDIO_SPI)->cr0,
@@ -427,25 +424,21 @@ void audio_poll() {
     }
 }
 
-bool audio_play(uint8_t owner, uint64_t start, uint64_t end, bool swap) {
+bool audio_play(uint64_t start, uint64_t end, bool swap) {
     FsFile *audio_file = g_ide_imagefile.direct_file();
     // stop any existing playback first
-    if (audio_is_active()) audio_stop(audio_owner);
+    if (audio_is_active()) audio_stop();
 
     // dbgmsg("Request to play ('", file, "':", start, ":", end, ")");
 
     // verify audio file is present and inputs are (somewhat) sane
-    if (owner == 0xFF) {
-        logmsg("Illegal audio owner");
-        return false;
-    }
     if (start >= end) {
         logmsg("Invalid range for audio (", start, ":", end, ")");
         return false;
     }
     platform_set_sd_callback(NULL, NULL);
     if (!audio_file->isOpen()) {
-        logmsg("File not open for audio playback, ", owner);
+        logmsg("File not open for audio playback");
         return false;
     }
     uint64_t len = audio_file->size();
@@ -487,8 +480,7 @@ bool audio_play(uint8_t owner, uint64_t start, uint64_t end, bool swap) {
     sbufswap = swap;
     sbufst_a = READY;
     sbufst_b = READY;
-    audio_owner = owner & 7;
-    audio_last_status[audio_owner] = ASC_PLAYING;
+    audio_last_status = ASC_PLAYING;
     audio_paused = false;
 
     // prepare the wire buffers
@@ -526,22 +518,25 @@ bool audio_play(uint8_t owner, uint64_t start, uint64_t end, bool swap) {
     return true;
 }
 
-bool audio_set_paused(uint8_t id, bool paused) {
-    if (audio_owner != (id & 7)) return false;
+bool audio_set_paused(bool paused) {
+    if (audio_idle) return false;
     else if (audio_paused && paused) return false;
     else if (!audio_paused && !paused) return false;
 
     audio_paused = paused;
+
     if (paused) {
-        audio_last_status[audio_owner] = ASC_PAUSED;
+        audio_last_status = ASC_PAUSED;
+        audio_playing = false;
     } else {
-        audio_last_status[audio_owner] = ASC_PLAYING;
+        audio_last_status = ASC_PLAYING;
+        audio_playing = true;
     }
     return true;
 }
 
-void audio_stop(uint8_t id) {
-    if (audio_owner != (id & 7)) return;
+void audio_stop() {
+    if (audio_idle) return;
 
     // to help mute external hardware, send a bunch of '0' samples prior to
     // halting the datastream; easiest way to do this is invalidating the
@@ -558,33 +553,34 @@ void audio_stop(uint8_t id) {
     audio_stopping = false;
 
     // idle the subsystem
-    audio_last_status[audio_owner] = ASC_COMPLETED;
+    audio_last_status = ASC_COMPLETED;
     audio_paused = false;
-    audio_owner = 0xFF;
+    audio_playing = false;
+    audio_idle = true;;
 }
 
-audio_status_code audio_get_status_code(uint8_t id) {
-    audio_status_code tmp = audio_last_status[id & 7];
+audio_status_code audio_get_status_code() {
+    audio_status_code tmp = audio_last_status;
     if (tmp == ASC_COMPLETED || tmp == ASC_ERRORED) {
-        audio_last_status[id & 7] = ASC_NO_STATUS;
+        audio_last_status = ASC_NO_STATUS;
     }
     return tmp;
 }
 
-uint16_t audio_get_volume(uint8_t id) {
-    return volumes[id & 7];
+uint16_t audio_get_volume() {
+    return volume;
 }
 
-void audio_set_volume(uint8_t id, uint16_t vol) {
-    volumes[id & 7] = vol;
+void audio_set_volume(uint16_t vol) {
+    volume = vol;
 }
 
-uint16_t audio_get_channel(uint8_t id) {
-    return channels[id & 7];
+uint16_t audio_get_channel() {
+    return channel;
 }
 
-void audio_set_channel(uint8_t id, uint16_t chn) {
-    channels[id & 7] = chn;
+void audio_set_channel(uint16_t chn) {
+    channel = chn;
 }
 
 uint64_t audio_get_file_position()
