@@ -526,10 +526,11 @@ bool IDECDROMDevice::atapi_read_track_information(const uint8_t *cmd)
 
 bool IDECDROMDevice::atapi_read_sub_channel(const uint8_t * cmd)
 {
-#if ENABLE_AUDIO_OUTPUT
-    // terminate audio playback if active on this target (Annex C)
-    audio_stop();
-#endif
+// \todo allow read subchannel while audio is playing
+// #if ENABLE_AUDIO_OUTPUT
+//     // terminate audio playback if active on this target (Annex C)
+//     audio_stop();
+// #endif
 
     if (!is_medium_present()) return atapi_cmd_not_ready_error();
     if (m_atapi_state.not_ready) return atapi_cmd_error(ATAPI_SENSE_NOT_READY, ATAPI_ASC_UNIT_BECOMING_READY);
@@ -545,10 +546,11 @@ bool IDECDROMDevice::atapi_read_sub_channel(const uint8_t * cmd)
 
 bool IDECDROMDevice::atapi_read_toc(const uint8_t *cmd)
 {
-#if ENABLE_AUDIO_OUTPUT
-    // terminate audio playback if active on this target (Annex C)
-    audio_stop();
-#endif
+// \todo  don't stop on read toc
+// #if ENABLE_AUDIO_OUTPUT
+//     // terminate audio playback if active on this target (Annex C)
+//     audio_stop();
+// #endif
 
     if (!is_medium_present()) return atapi_cmd_not_ready_error();
     if (m_atapi_state.not_ready) return atapi_cmd_error(ATAPI_SENSE_NOT_READY, ATAPI_ASC_UNIT_BECOMING_READY);

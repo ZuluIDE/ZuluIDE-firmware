@@ -313,7 +313,7 @@ static void core1_handler() {
 /* ---------- VISIBLE FUNCTIONS ------------------------------------------- */
 /* ------------------------------------------------------------------------ */
 
-void audio_dma_irq() {
+static void audio_dma_irq() {
     if (dma_hw->intr & (1 << SOUND_DMA_CHA)) {
         dma_hw->ints0 = (1 << SOUND_DMA_CHA);
         multicore_fifo_push_blocking((uintptr_t) &snd_process_a);
@@ -363,6 +363,9 @@ void audio_setup() {
 
     dma_channel_claim(SOUND_DMA_CHA);
 	dma_channel_claim(SOUND_DMA_CHB);
+
+    irq_set_exclusive_handler(DMA_IRQ_0, audio_dma_irq);
+    irq_set_enabled(DMA_IRQ_0, true);
 
     logmsg("Starting Core1 for audio");
     multicore_launch_core1(core1_handler);
@@ -482,6 +485,9 @@ bool audio_play(uint64_t start, uint64_t end, bool swap) {
     sbufst_b = READY;
     audio_last_status = ASC_PLAYING;
     audio_paused = false;
+    audio_playing = true;
+    audio_idle = false;
+
 
     // prepare the wire buffers
     for (uint16_t i = 0; i < WIRE_BUFFER_SIZE; i++) {
@@ -590,7 +596,7 @@ uint64_t audio_get_file_position()
 
 void audio_set_file_position(uint32_t lba)
 {
-    fpos = 2352 * (uint64_t)lba;
+    fpos = ATAPI_AUDIO_CD_SECTOR_SIZE * (uint64_t)lba;
 
 }
 #endif // ENABLE_AUDIO_OUTPUT

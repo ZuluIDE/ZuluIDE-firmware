@@ -39,7 +39,8 @@
  * the bug. To work around the problem the above exclusive handler
  * delegates to this function if its normal mask is not matched.
  */
-void audio_dma_irq();
+// \todo made static because the irq handler is free in ZuluIDE, erase me
+// void audio_dma_irq();
 
 /**
  * Indicates if the audio subsystem is actively streaming, including if it is
