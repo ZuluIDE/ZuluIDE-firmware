@@ -189,17 +189,6 @@ void platform_init()
     //        pin                 function       pup   pdown  out    state fast
     gpio_conf(GPIO_I2C_SCL,       GPIO_FUNC_I2C, true, false, false,  true, true);
     gpio_conf(GPIO_I2C_SDA,       GPIO_FUNC_I2C, true, false, false,  true, true);
-    //gpio_conf(GPIO_I2C_SDA,   GPIO_FUNC_SIO, true,false, true,  true, true); // FIXME: DEBUG
-
-#ifndef ENABLE_AUDIO_OUTPUT
-    gpio_conf(GPIO_EXT_INTERRUPT, GPIO_FUNC_SIO, false, false, true,  false, false);
-#else
-    //        pin             function       pup   pdown  out    state fast
-    gpio_conf(GPIO_EXP_AUDIO, GPIO_FUNC_SPI, true,false, false,  true, true);
-    gpio_conf(GPIO_EXP_SPARE, GPIO_FUNC_SIO, true,false, false,  true, false);
-    // configuration of corresponding SPI unit occurs in audio_setup()
-#endif
-
 
     // FPGA bus
     // Signals will be switched between SPI/PIO by rp2040_fpga.cpp, but pull-ups are configured here.
