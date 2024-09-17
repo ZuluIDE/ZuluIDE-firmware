@@ -95,6 +95,7 @@ static void do_phy_reset()
     // \todo if the code base support two devices, make `disable_iordy` a per device setting
     g_ide_config.disable_iordy = ((g_ide_devices[0] != NULL) && (g_ide_devices[0]->disables_iordy()))
                                  || ((g_ide_devices[1] != NULL) && (g_ide_devices[1]->disables_iordy()));
+    g_ide_config.enable_packet_intrq = ini_getbool("IDE", "atapi_intrq", 1, CONFIGFILE);
 
     if (g_ide_config.enable_dev0 && !g_ide_config.enable_dev1)
     {
@@ -198,7 +199,7 @@ void ide_protocol_poll()
                 dbgmsg("-- Command was for a device that is not present - reporting failure");
                 regs.error = IDE_ERROR_ABORT;
                 ide_phy_set_regs(&regs);
-                ide_phy_assert_irq(IDE_STATUS_DEVRDY | IDE_STATUS_ERR);
+                ide_phy_assert_irq(IDE_STATUS_DEVRDY | IDE_STATUS_DSC | IDE_STATUS_ERR);
                 return;
             }
 
@@ -422,10 +423,7 @@ void ide_protocol_poll()
 
             regs.status &= ~IDE_STATUS_BSY;
             ide_phy_set_regs(&regs);
-            if (g_ide_devices[0]->is_packet_device())
-                ide_phy_assert_irq(IDE_STATUS_DEVRDY | regs.status);
-            else
-                ide_phy_assert_irq(IDE_STATUS_DEVRDY | IDE_STATUS_DSC | regs.status);
+            ide_phy_assert_irq(IDE_STATUS_DEVRDY | IDE_STATUS_DSC | regs.status);
         }
     }
 }

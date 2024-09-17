@@ -54,6 +54,8 @@ struct ide_phy_config_t {
     bool atapi_dev0; // Automatically read command for ATAPI PACKET on device 0
     bool atapi_dev1; // Automatically read command for ATAPI PACKET on device 1
     bool disable_iordy; // Disable IORDY in PIO mode 
+    // Enables INTRQ between the initial ATA PACKET command and receiving the ATAPI command
+    bool enable_packet_intrq;
 };
 
 // Reset the IDE phy
