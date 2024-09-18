@@ -129,10 +129,9 @@ static uint16_t sbufpos = 0;
 static uint8_t sbufswap = 0;
 
 // buffers for storing biphase patterns
-#define SAMPLE_CHUNK_SIZE 1024 // ~5.8ms
-#define WIRE_BUFFER_SIZE (SAMPLE_CHUNK_SIZE * 2)
-static uint32_t output_buf_a[WIRE_BUFFER_SIZE];
-static uint32_t output_buf_b[WIRE_BUFFER_SIZE];
+#define AUDIO_OUT_BUFFER_SIZE (AUDIO_BUFFER_SIZE / 4)
+static uint32_t output_buf_a[AUDIO_OUT_BUFFER_SIZE];
+static uint32_t output_buf_b[AUDIO_OUT_BUFFER_SIZE];
 
 // tracking for audio playback
 static bool audio_idle = true;
@@ -144,7 +143,7 @@ static uint32_t fleft;
 // historical playback status information
 static audio_status_code audio_last_status = ASC_NO_STATUS;
 // volume information for targets
-static volatile uint16_t volume = DEFAULT_VOLUME_LEVEL_2CH;
+static volatile uint16_t volume[2] = {DEFAULT_VOLUME_LEVEL, DEFAULT_VOLUME_LEVEL};
 static volatile uint16_t channel = AUDIO_CHANNEL_ENABLE_MASK;
 
 // mechanism for cleanly stopping DMA units
@@ -164,37 +163,21 @@ static uint8_t invert = 0; // biphase encode help: set if last wire bit was '1'
  * cores. It must also be called in the same order data is intended to be
  * output.
  */
-static void snd_encode(uint8_t* samples, uint32_t* output_buf, uint16_t len, uint8_t swap) {
-    uint16_t wvol = volume;
-    uint8_t rvol = wvol >> 8;
-    uint8_t lvol = wvol & 0xFF;
+static void snd_encode(int16_t* samples, int16_t* output_buf, uint16_t len, uint8_t swap) {
     // enable or disable based on the channel information for both output
     // ports, where the high byte and mask control the right channel, and
     // the low control the left channel
+    uint8_t vol[2] ={volume[0], volume[1]};
     uint16_t chn = channel & AUDIO_CHANNEL_ENABLE_MASK;
-    if (!(chn >> 8)) rvol = 0;
-    if (!(chn & 0xFF)) lvol = 0;
+    if (!(chn >> 8)) vol[1] = 0;   // right
+    if (!(chn & 0xFF)) vol[0] = 0; // left
 
-    uint16_t widx = 0;
-    for (uint16_t i = 0; i < len; i += 4) {
-        uint32_t output_sample = 0;
-        if (samples != NULL) {
-            int16_t rsamp;
-            int16_t lsamp;
-            if (swap) {
-                lsamp = (int16_t)(samples[i + 1] + (samples[i    ] << 8));
-                rsamp = (int16_t)(samples[i + 3] + (samples[i + 2] << 8));
-            } else {
-                lsamp = (int16_t)(samples[i     ] + (samples[i + 1] << 8));
-                rsamp = (int16_t)(samples[i + 2 ] + (samples[i + 3] << 8));
-            }
-            // linear scale to requested audio value
-            // rsamp = rsamp * rvol / 0xFF;
-            // lsamp = lsamp * lvol / 0xFF;
-            output_sample = (rsamp << 16) | lsamp;
-        }
-
-        output_buf[widx++] = output_sample ;
+    for (uint16_t i = 0; i < len; i++ )
+    {
+        if (samples == nullptr)
+            output_buf[i] = 0;
+        else
+            output_buf[i] = (int16_t)(((int32_t)samples[i]) * (vol[i & 0x01]) / 255);
     }
 }
 
@@ -202,27 +185,19 @@ static void snd_encode(uint8_t* samples, uint32_t* output_buf, uint16_t len, uin
 static void snd_process_a() {
     if (sbufsel == A) {
         if (sbufst_a == READY) {
-            snd_encode(sample_buf_a + sbufpos, output_buf_a, SAMPLE_CHUNK_SIZE, sbufswap);
-            sbufpos += SAMPLE_CHUNK_SIZE;
-            if (sbufpos >= AUDIO_BUFFER_SIZE) {
-                sbufsel = B;
-                sbufpos = 0;
-                sbufst_a = STALE;
-            }
+            snd_encode((int16_t *)(sample_buf_a), (int16_t*)(output_buf_a), AUDIO_BUFFER_SIZE/2, sbufswap);
+            sbufsel = B;
+            sbufst_a = STALE;
         } else {
-            snd_encode(NULL, output_buf_a, SAMPLE_CHUNK_SIZE, sbufswap);
+            snd_encode(nullptr, (int16_t*)output_buf_a, AUDIO_BUFFER_SIZE/2, sbufswap);
         }
     } else {
         if (sbufst_b == READY) {
-            snd_encode(sample_buf_b + sbufpos, output_buf_a, SAMPLE_CHUNK_SIZE, sbufswap);
-            sbufpos += SAMPLE_CHUNK_SIZE;
-            if (sbufpos >= AUDIO_BUFFER_SIZE) {
-                sbufsel = A;
-                sbufpos = 0;
-                sbufst_b = STALE;
-            }
+            snd_encode((int16_t *)sample_buf_b, (int16_t*)output_buf_a, AUDIO_BUFFER_SIZE/2, sbufswap);
+            sbufsel = A;
+            sbufst_b = STALE;
         } else {
-            snd_encode(NULL, output_buf_a, SAMPLE_CHUNK_SIZE, sbufswap);
+            snd_encode(nullptr, (int16_t*)output_buf_a, AUDIO_BUFFER_SIZE/2, sbufswap);
         }
     }
 }
@@ -230,27 +205,21 @@ static void snd_process_b() {
     // clone of above for the other wire buffer
     if (sbufsel == A) {
         if (sbufst_a == READY) {
-            snd_encode(sample_buf_a + sbufpos, output_buf_b, SAMPLE_CHUNK_SIZE, sbufswap);
-            sbufpos += SAMPLE_CHUNK_SIZE;
-            if (sbufpos >= AUDIO_BUFFER_SIZE) {
-                sbufsel = B;
-                sbufpos = 0;
-                sbufst_a = STALE;
-            }
+            snd_encode((int16_t *)sample_buf_a, (int16_t*)(output_buf_b), AUDIO_BUFFER_SIZE/2, sbufswap);
+            sbufsel = B;
+            sbufpos = 0;
+            sbufst_a = STALE;
         } else {
-            snd_encode(NULL, output_buf_b, SAMPLE_CHUNK_SIZE, sbufswap);
+            snd_encode(nullptr, (int16_t*)output_buf_a, AUDIO_BUFFER_SIZE/2, sbufswap);
         }
     } else {
         if (sbufst_b == READY) {
-            snd_encode(sample_buf_b + sbufpos, output_buf_b, SAMPLE_CHUNK_SIZE, sbufswap);
-            sbufpos += SAMPLE_CHUNK_SIZE;
-            if (sbufpos >= AUDIO_BUFFER_SIZE) {
-                sbufsel = A;
-                sbufpos = 0;
-                sbufst_b = STALE;
-            }
+            snd_encode((int16_t *)sample_buf_b, (int16_t*)output_buf_b, AUDIO_BUFFER_SIZE/2, sbufswap);
+            sbufsel = A;
+            sbufpos = 0;
+            sbufst_b = STALE;
         } else {
-            snd_encode(NULL, output_buf_b, SAMPLE_CHUNK_SIZE, sbufswap);
+            snd_encode(nullptr, (int16_t*)output_buf_a, AUDIO_BUFFER_SIZE/2, sbufswap);
         }
     }
 }
@@ -267,7 +236,8 @@ static void core1_handler() {
 /* ------------------------------------------------------------------------ */
 /* ---------- VISIBLE FUNCTIONS ------------------------------------------- */
 /* ------------------------------------------------------------------------ */
-
+extern "C"
+{
 static void audio_dma_irq() {
     if (dma_hw->intr & (1 << SOUND_DMA_CHA)) {
         dma_hw->ints0 = (1 << SOUND_DMA_CHA);
@@ -279,7 +249,7 @@ static void audio_dma_irq() {
                 &snd_dma_a_cfg,
                 i2s.getPioFIFOAddr(),
                 &output_buf_a,
-                WIRE_BUFFER_SIZE,
+                AUDIO_OUT_BUFFER_SIZE,
                 false);
     } else if (dma_hw->intr & (1 << SOUND_DMA_CHB)) {
         dma_hw->ints0 = (1 << SOUND_DMA_CHB);
@@ -291,11 +261,11 @@ static void audio_dma_irq() {
                 &snd_dma_b_cfg,
                 i2s.getPioFIFOAddr(),
                 &output_buf_b,
-                WIRE_BUFFER_SIZE,
+                AUDIO_OUT_BUFFER_SIZE,
                 false);
     }
 }
-
+}
 bool audio_is_active() {
     return !audio_idle;
 }
@@ -312,7 +282,7 @@ void audio_setup() {
     i2s.setBCLK(GPIO_I2S_BCLK);
     i2s.setDATA(GPIO_I2S_DOUT);
     i2s.setBitsPerSample(16);
-    i2s.setDivider(48, 0); // 44.1KHz to the nearest integer with a sys clk of 135.43MHz
+    i2s.setDivider(96, 0); // 44.1KHz to the nearest integer with a sys clk of 135.43MHz
     i2s.begin();
     dma_channel_claim(SOUND_DMA_CHA);
 	dma_channel_claim(SOUND_DMA_CHB);
@@ -443,7 +413,7 @@ bool audio_play(uint64_t start, uint64_t end, bool swap) {
 
 
     // prepare the wire buffers
-    for (uint16_t i = 0; i < WIRE_BUFFER_SIZE; i++) {
+    for (uint16_t i = 0; i < AUDIO_OUT_BUFFER_SIZE; i++) {
         output_buf_a[i] = 0;
         output_buf_b[i] = 0;
     }
@@ -460,7 +430,7 @@ bool audio_play(uint64_t start, uint64_t end, bool swap) {
     // version of pico-sdk lacks channel_config_set_high_priority()
     snd_dma_a_cfg.ctrl |= DMA_CH0_CTRL_TRIG_HIGH_PRIORITY_BITS;
 	dma_channel_configure(SOUND_DMA_CHA, &snd_dma_a_cfg, i2s.getPioFIFOAddr(),
-			&output_buf_a, WIRE_BUFFER_SIZE, false);
+			&output_buf_a, AUDIO_OUT_BUFFER_SIZE, false);
     dma_channel_set_irq0_enabled(SOUND_DMA_CHA, true);
 	snd_dma_b_cfg = dma_channel_get_default_config(SOUND_DMA_CHB);
 	channel_config_set_transfer_data_size(&snd_dma_b_cfg, DMA_SIZE_32);
@@ -469,7 +439,7 @@ bool audio_play(uint64_t start, uint64_t end, bool swap) {
 	channel_config_set_chain_to(&snd_dma_b_cfg, SOUND_DMA_CHA);
     snd_dma_b_cfg.ctrl |= DMA_CH0_CTRL_TRIG_HIGH_PRIORITY_BITS;
 	dma_channel_configure(SOUND_DMA_CHB, &snd_dma_b_cfg, i2s.getPioFIFOAddr(),
-			&output_buf_b, WIRE_BUFFER_SIZE, false);
+			&output_buf_b, AUDIO_OUT_BUFFER_SIZE, false);
     dma_channel_set_irq0_enabled(SOUND_DMA_CHB, true);
 
     // ready to go
@@ -530,11 +500,12 @@ audio_status_code audio_get_status_code() {
 }
 
 uint16_t audio_get_volume() {
-    return volume;
+    return volume[0] | (volume[1] << 8);
 }
 
-void audio_set_volume(uint16_t vol) {
-    volume = vol;
+void audio_set_volume(uint8_t lvol, uint8_t rvol) {
+    volume[1] = rvol;
+    volume[2] = lvol;
 }
 
 uint16_t audio_get_channel() {

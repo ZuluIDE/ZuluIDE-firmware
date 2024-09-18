@@ -190,6 +190,7 @@ bool I2S::begin() {
     _hasPeeked = false;
     _isHolding = 0;
     int off = 0;
+    // _i2s = new PIOProgram(&pio_lsbj_out_program);
     _i2s = new PIOProgram(&pio_i2s_out_program);
     if (!_i2s->prepare(&_pio, &_sm, &off)) {
         _running = false;
@@ -197,11 +198,11 @@ bool I2S::begin() {
         _i2s = nullptr;
         return false;
     }
+    // pio_lsbj_out_program_init(_pio, _sm, off, _pinDOUT, _pinBCLK, _bps, _swapClocks);
     pio_i2s_out_program_init(_pio, _sm, off, _pinDOUT, _pinBCLK, _bps, _swapClocks);
     setDivider(_div_int, _div_frac);
 
     pio_sm_set_enabled(_pio, _sm, true);
-    _pio->txf[_sm] = 0xAAAAAAAA;
     return true;
 }
 
