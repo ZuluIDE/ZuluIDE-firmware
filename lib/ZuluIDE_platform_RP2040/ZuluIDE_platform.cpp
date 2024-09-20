@@ -155,9 +155,9 @@ void platform_init()
     g_log_debug = dbglog;
     
 #ifdef ENABLE_AUDIO_OUTPUT
-    logmsg("SP/DIF audio to expansion header enabled");
-    logmsg("-- Overclocking to 135.428571MHz");
+    logmsg("I2S audio to expansion header enabled");
     reclock_for_audio();
+    logmsg("-- System clock is set to ", (int) clock_get_hz(clk_sys),  "Hz");
 #endif
 
     // Get flash chip size
@@ -955,12 +955,12 @@ const void * btldr_vectors[2] = {&__StackTop, (void*)&btldr_reset_handler};
 /********************************/
 void zuluide_setup(void)
 {
-//   if (!platform_check_for_controller())
-//   {
-//     rp2040.idleOtherCore();
-//     multicore_reset_core1();
-//     dbgmsg("No Zulu Control board or I2C server found, disabling 2nd core");
-//   }
+   if (!platform_check_for_controller())
+   {
+     rp2040.idleOtherCore();
+     multicore_reset_core1();
+     dbgmsg("No Zulu Control board or I2C server found, disabling 2nd core");
+   }
 }
 
 void zuluide_setup1(void)
