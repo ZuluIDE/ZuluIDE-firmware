@@ -321,7 +321,7 @@ static inline void pio_i2s_out_program_init(PIO pio, uint sm, uint offset, uint 
     pio_sm_config sm_config = pio_i2s_out_program_get_default_config(offset);
     sm_config_set_out_pins(&sm_config, data_pin, 1);
     sm_config_set_sideset_pins(&sm_config, clock_pin_base);
-    sm_config_set_out_shift(&sm_config, false, true, bits);
+    sm_config_set_out_shift(&sm_config, false, true, (bits <= 16) ? 2 * bits : bits);
     sm_config_set_fifo_join(&sm_config, PIO_FIFO_JOIN_TX);
     pio_sm_init(pio, sm, offset, &sm_config);
     uint pin_mask = (1u << data_pin) | (3u << clock_pin_base);

@@ -526,12 +526,6 @@ bool IDECDROMDevice::atapi_read_track_information(const uint8_t *cmd)
 
 bool IDECDROMDevice::atapi_read_sub_channel(const uint8_t * cmd)
 {
-// \todo allow read subchannel while audio is playing
-// #if ENABLE_AUDIO_OUTPUT
-//     // terminate audio playback if active on this target (Annex C)
-//     audio_stop();
-// #endif
-
     if (!is_medium_present()) return atapi_cmd_not_ready_error();
     if (m_atapi_state.not_ready) return atapi_cmd_error(ATAPI_SENSE_NOT_READY, ATAPI_ASC_UNIT_BECOMING_READY);
 
@@ -546,12 +540,6 @@ bool IDECDROMDevice::atapi_read_sub_channel(const uint8_t * cmd)
 
 bool IDECDROMDevice::atapi_read_toc(const uint8_t *cmd)
 {
-// \todo  don't stop on read toc
-// #if ENABLE_AUDIO_OUTPUT
-//     // terminate audio playback if active on this target (Annex C)
-//     audio_stop();
-// #endif
-
     if (!is_medium_present()) return atapi_cmd_not_ready_error();
     if (m_atapi_state.not_ready) return atapi_cmd_error(ATAPI_SENSE_NOT_READY, ATAPI_ASC_UNIT_BECOMING_READY);
 
@@ -605,11 +593,6 @@ bool IDECDROMDevice::atapi_read_header(const uint8_t *cmd)
 
     if (!is_medium_present()) return atapi_cmd_not_ready_error();
     if (m_atapi_state.not_ready) return atapi_cmd_error(ATAPI_SENSE_NOT_READY, ATAPI_ASC_UNIT_BECOMING_READY);
-
-#if ENABLE_AUDIO_OUTPUT
-    // terminate audio playback if active on this target (Annex C)
-    audio_stop();
-#endif
 
     bool MSF = (cmd[1] & 0x02);
     uint32_t lba = 0; // IGNORED for now
@@ -782,6 +765,15 @@ bool IDECDROMDevice::atapi_get_event_status_notification(const uint8_t *cmd)
         return atapi_cmd_error(ATAPI_SENSE_ABORTED_CMD, 0);
     }
     return atapi_cmd_ok();
+}
+
+bool IDECDROMDevice::atapi_start_stop_unit(const uint8_t *cmd)
+{
+    if ((cmd[ATAPI_START_STOP_EJT_OFFSET] & ATAPI_START_STOP_START) == 0)
+    {
+        audio_stop();
+    }
+    return IDEATAPIDevice::atapi_start_stop_unit(cmd);
 }
 
 bool IDECDROMDevice::atapi_play_audio_10(const uint8_t *cmd)
@@ -1004,8 +996,11 @@ bool IDECDROMDevice::doReadFullTOC(uint8_t session, uint16_t allocationLength, b
 void IDECDROMDevice::cdromGetAudioPlaybackStatus(uint8_t *status, uint32_t *current_lba, bool current_only)
 {
     IDEImageFile *image = (IDEImageFile*) m_image;
-
+#ifdef ENABLE_AUDIO_OUTPUT
+    if (status) *status = audio_get_status_code(); // audio playback status code 
+#else
     if (status) *status = 0; // audio status code for 'unsupported/invalid' and not-playing indicator
+#endif
     if (current_lba)
     {
         if (image && image->is_open()) {
@@ -1085,7 +1080,7 @@ bool IDECDROMDevice::doReadSubChannel(bool time, bool subq, uint8_t parameter, u
         len += 4;
 
         if (len > allocation_length) len = allocation_length;
-        atapi_send_data(buf, std::min<uint32_t>(allocation_length, len));
+        atapi_send_data(m_buffer.bytes, std::min<uint32_t>(allocation_length, len));
         return atapi_cmd_ok();
     }
     else
@@ -1642,10 +1637,84 @@ size_t IDECDROMDevice::atapi_get_mode_page(uint8_t page_ctrl, uint8_t page_idx, 
 
         return 8;
     }
+#ifdef ENABLE_AUDIO_OUTPUT
+    if (page_idx == ATAPI_MODESENSE_CD_AUDIO_CONTROL)
+    {
+        uint16_t vol = audio_get_volume();
+        uint8_t r_vol = vol >> 8;
+        uint8_t l_vol = vol & 0xFF;
+        uint16_t ch = audio_get_channel() & AUDIO_CHANNEL_ENABLE_MASK;
+        uint8_t l_ch = ch & 0xFF;
+        uint8_t r_ch = ch >> 8;
+        dbgmsg("Volume returns: lc ", l_ch, " lv ", l_vol, " rc ", r_ch, " rv ", r_vol);
+        buffer[0] = ATAPI_MODESENSE_CD_AUDIO_CONTROL;
+        buffer[1] = 14; // page length
+        buffer[2] = 0x04; // 'Immed' bti set, 'SOTC' bit not set
+        buffer[3] = 0x00; // reserved
+        buffer[4] = 0x00; // reserved
+        buffer[5] = 0x00; // reserved
+        buffer[6] = 0x00; // obsolete
+        buffer[7] = 0x00; // obsolete
+        buffer[8] = l_ch; // output port 0
+        buffer[9] = l_vol; // port 0 - left volume
+        buffer[10] = r_ch; // output port 1
+        buffer[11] = r_vol; // port 1 - right volume
+        buffer[12] = 0x00; // output port 3 inactive
+        buffer[13] = 0x00; // output port 3 inactive
+        buffer[14] = 0x00; // output port 4 inactive
+        buffer[15] = 0x00; // output port 4 inactive
+    return 16;
 
+    }
+#endif
+
+    if (page_idx == ATAPI_MODESENSE_CD_CAPABILITIES)
+    {
+        buffer[0] = ATAPI_MODESENSE_CD_CAPABILITIES;
+        buffer[1] = 14; // page length
+        buffer[2] = 0x00; // CD-R/RW reading not supported
+        buffer[3] = 0x00; // CD-R/RW writing not supported
+#ifdef ENABLE_AUDIO_OUTPUT
+        buffer[4] = 0x01; // byte 4: audio play supported
+#else
+        buffer[4] = 0x00; // byte 4: no features supported
+#endif
+        buffer[5] = 0x03; // byte 5: CD-DA ok with accurate streaming, no other features
+        buffer[6] = 0x28; // byte 6: tray loader, ejection ok, but prevent/allow not supported
+#ifdef ENABLE_AUDIO_OUTPUT
+        buffer[7] = 0x03; // byte 7: separate channel mute and volumes
+#else
+        buffer[7] = 0x00; // byte 7: no features supported
+#endif
+        write_be16(&buffer[8],6292);  // max read speed, state (40, ~6292KB/s)
+#ifdef ENABLE_AUDIO_OUTPUT
+        write_be16(&buffer[10], 256); // 256 volume levels supported
+#else
+        write_be16(&buffer[10], 0); // no volume levels supported
+#endif
+        write_be16(&buffer[12], 64); // read buffer (64KB)
+        write_be16(&buffer[14],6292);  // current max read speed, state (40, ~6292KB/s)
+    }
     return IDEATAPIDevice::atapi_get_mode_page(page_ctrl, page_idx, buffer, max_bytes);
 }
 
+void IDECDROMDevice::atapi_set_mode_page(uint8_t page_ctrl, uint8_t page_idx, const uint8_t *buffer, size_t length)
+{
+#ifdef ENABLE_AUDIO_OUTPUT
+    if (page_idx == ATAPI_MODESENSE_CD_AUDIO_CONTROL)
+    {
+
+        uint8_t l_ch = buffer[8];  // output port 0
+        uint8_t l_vol = buffer[9]; // port 0 - left volume
+        uint8_t r_ch = buffer[10];  // output port 1
+        uint8_t r_vol = buffer[11]; // port 1 - right volume;
+
+        audio_set_channel((r_ch << 8) | l_ch);
+        audio_set_volume(l_vol, r_vol);
+    }
+#endif
+    IDEATAPIDevice::atapi_set_mode_page(page_ctrl, page_idx, buffer, length);
+}
 
 /**************************************/
 /* CD-ROM audio playback              */

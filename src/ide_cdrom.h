@@ -77,11 +77,13 @@ protected:
     virtual bool atapi_read_cd(const uint8_t *cmd);
     virtual bool atapi_read_cd_msf(const uint8_t *cmd);
     virtual bool atapi_get_event_status_notification(const uint8_t *cmd) override;
+    virtual bool atapi_start_stop_unit(const uint8_t *cmd) override;
     virtual bool atapi_play_audio_10(const uint8_t *cmd);
     virtual bool atapi_play_audio_12(const uint8_t *cmd);
     virtual bool atapi_play_audio_msf(const uint8_t *cmd);
     virtual bool atapi_stop_play_scan_audio(const uint8_t *cmd);
     virtual bool atapi_pause_resume_audio(const uint8_t *cmd);
+    
     bool doReadTOC(bool MSF, uint8_t track, uint16_t allocationLength);
     bool doReadSessionInfo(bool MSF, uint16_t allocationLength);
     bool doReadFullTOC(uint8_t session, uint16_t allocationLength, bool useBCD);
@@ -122,6 +124,7 @@ protected:
 
     // ATAPI mode pages
     virtual size_t atapi_get_mode_page(uint8_t page_ctrl, uint8_t page_idx, uint8_t *buffer, size_t max_bytes) override;
+    virtual void atapi_set_mode_page(uint8_t page_ctrl, uint8_t page_idx, const uint8_t *buffer, size_t length) override;
 
     // Event status notification handling
     struct 

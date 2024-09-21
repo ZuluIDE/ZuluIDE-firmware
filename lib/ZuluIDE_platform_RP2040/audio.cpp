@@ -40,9 +40,14 @@ I2S i2s;
 static dma_channel_config snd_dma_a_cfg;
 static dma_channel_config snd_dma_b_cfg;
 
-// some chonky buffers to store audio samples
-static uint8_t sample_buf_a[AUDIO_BUFFER_SIZE];
-static uint8_t sample_buf_b[AUDIO_BUFFER_SIZE];
+// some chonky buffers to store audio samples, 
+// output and sample buffers are the same memory
+#define AUDIO_OUT_BUFFER_SIZE (AUDIO_BUFFER_SIZE / 4)
+static uint32_t output_buf_a[AUDIO_OUT_BUFFER_SIZE];
+static uint32_t output_buf_b[AUDIO_OUT_BUFFER_SIZE];
+
+static uint8_t *sample_buf_a = (uint8_t*) output_buf_a;
+static uint8_t *sample_buf_b = (uint8_t*) output_buf_b;
 
 // tracking for the state of the above buffers
 enum bufstate { STALE, FILLING, PROCESSING, READY };
@@ -51,10 +56,6 @@ static volatile bufstate sbufst_b = STALE;
 enum bufselect { A, B };
 static bufselect sbufsel = A;
 
-// buffers for storing biphase patterns
-#define AUDIO_OUT_BUFFER_SIZE (AUDIO_BUFFER_SIZE / 4)
-static uint32_t *output_buf_a = (uint32_t*)sample_buf_a; // [AUDIO_OUT_BUFFER_SIZE];
-static uint32_t *output_buf_b = (uint32_t*)sample_buf_b; //[AUDIO_OUT_BUFFER_SIZE];
 
 // tracking for audio playback
 static bool audio_idle = true;
@@ -78,17 +79,26 @@ static volatile bool audio_stopping = false;
  * is disabled.
  */
 static void snd_encode(int16_t* samples, int16_t* output_buf, uint16_t len) {
-    uint8_t vol[2] ={volume[0], volume[1]};
+    uint8_t vol[2] = {volume[0], volume[1]};
     uint16_t chn = channel & AUDIO_CHANNEL_ENABLE_MASK;
-    if (!(chn >> 8)) vol[1] = 0;   // right
+    if (!(chn >> 8))   vol[1] = 0;   // right
     if (!(chn & 0xFF)) vol[0] = 0; // left
-
+    int16_t temp = 0;
     for (uint16_t i = 0; i < len; i++ )
     {
         if (samples == nullptr)
             output_buf[i] = 0;
         else
-            output_buf[i] = (int16_t)(((int32_t)samples[i]) * (vol[i & 0x01]) / 255);
+        {
+
+            if (i % 2 == 0)
+            {
+                temp = output_buf[i+1];
+                output_buf[i+1] = (int16_t)(((int32_t)samples[i]) * (vol[0]) / 255);
+            }
+            else
+                output_buf[i-1] = (int16_t)(((int32_t)temp) * (vol[1]) / 255);
+        }
     }
 }
 
@@ -109,7 +119,6 @@ static void audio_dma_irq() {
     if (dma_hw->intr & (1 << SOUND_DMA_CHA)) {
         dma_hw->ints0 = (1 << SOUND_DMA_CHA);
         sbufst_a = STALE;
-        // multicore_fifo_push_blocking((uintptr_t) &snd_process_a);
         if (audio_stopping) {
             channel_config_set_chain_to(&snd_dma_a_cfg, SOUND_DMA_CHA);
         }
@@ -122,7 +131,6 @@ static void audio_dma_irq() {
     } else if (dma_hw->intr & (1 << SOUND_DMA_CHB)) {
         dma_hw->ints0 = (1 << SOUND_DMA_CHB);
         sbufst_b = STALE;
-        // multicore_fifo_push_blocking((uintptr_t) &snd_process_b);
         if (audio_stopping) {
             channel_config_set_chain_to(&snd_dma_b_cfg, SOUND_DMA_CHB);
         }
@@ -148,9 +156,9 @@ void audio_setup() {
     i2s.setBCLK(GPIO_I2S_BCLK);
     i2s.setDATA(GPIO_I2S_DOUT);
     i2s.setBitsPerSample(16);
-    // 44.1KHz to the nearest integer with a sys clk of 135.43MHz and 2 x 16-bit samples
-    // 135.43Mhz / 16 / 2 / 44.1KHz = 95.98 ~= 96
-    i2s.setDivider(96, 0); 
+    // 44.1KHz to the nearest integer with a sys clk of 135.43MHz and 2 x 16-bit samples with the pio clock running 2x I2S clock
+    // 135.43Mhz / 16 / 2 / 2 / 44.1KHz = 47.98 ~= 48
+    i2s.setDivider(48, 0); 
     i2s.begin();
     dma_channel_claim(SOUND_DMA_CHA);
 	dma_channel_claim(SOUND_DMA_CHB);
@@ -162,7 +170,20 @@ void audio_setup() {
 void audio_poll() {
     FsFile *audio_file = g_ide_imagefile.direct_file();
     if (audio_idle) return;
-    if (audio_paused) return;
+
+    static bool set_pause_buf = true;
+    if (audio_paused) 
+    {
+        if (set_pause_buf)
+        {
+            memset(output_buf_a, 0, sizeof(output_buf_a));
+            memset(output_buf_b, 0, sizeof(output_buf_b));
+        }
+        set_pause_buf = false;
+        return;
+    }
+    set_pause_buf = true;
+
     if (fleft == 0 && sbufst_a == STALE && sbufst_b == STALE) {
         // out of data and ready to stop
         audio_stop();
@@ -303,10 +324,8 @@ bool audio_set_paused(bool paused) {
 
     if (paused) {
         audio_last_status = ASC_PAUSED;
-        audio_playing = false;
     } else {
         audio_last_status = ASC_PLAYING;
-        audio_playing = true;
     }
     return true;
 }
@@ -314,11 +333,8 @@ bool audio_set_paused(bool paused) {
 void audio_stop() {
     if (audio_idle) return;
 
-    // to help mute external hardware, send a bunch of '0' samples prior to
-    // halting the datastream; easiest way to do this is invalidating the
-    // sample buffers, same as if there was a sample data underrun
-    sbufst_a = STALE;
-    sbufst_b = STALE;
+    memset(output_buf_a, 0, sizeof(output_buf_a));
+    memset(output_buf_b, 0, sizeof(output_buf_b));
 
     // then indicate that the streams should no longer chain to one another
     // and wait for them to shut down naturally
@@ -330,7 +346,8 @@ void audio_stop() {
     // if the fifo is empty and the PIO's program counter is at the first instruction
     // while (spi_is_busy(AUDIO_SPI)) tight_loop_contents();
     audio_stopping = false;
-
+    dma_channel_abort(SOUND_DMA_CHA);
+    dma_channel_abort(SOUND_DMA_CHB);
     // idle the subsystem
     audio_last_status = ASC_COMPLETED;
     audio_paused = false;
@@ -351,8 +368,8 @@ uint16_t audio_get_volume() {
 }
 
 void audio_set_volume(uint8_t lvol, uint8_t rvol) {
-    volume[0] = rvol;
-    volume[1] = lvol;
+    volume[0] = lvol;
+    volume[1] = rvol;
 }
 
 uint16_t audio_get_channel() {

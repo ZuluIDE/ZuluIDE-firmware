@@ -113,9 +113,10 @@ uint16_t audio_get_volume();
 /**
  * Sets the volume level for a target, as above. See 0x0E mode page for more.
  *
- * \param vol   The new volume level.
+ * \param l_vol   The new volume level for the left channel.
+ * \param r_vol   The new volume level for the right channel.
  */
-void audio_set_volume(uint16_t vol);
+void audio_set_volume(uint8_t l_vol, uint8_t r_vol);
 
 /**
  * Gets the 0x0E channel information for both audio ports. The high byte
