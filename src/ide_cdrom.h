@@ -62,8 +62,7 @@ public:
     };
 
     virtual void set_esn_event(esn_event_t event);
-    // \todo put back in protected
-    bool doPlayAudio(uint32_t lba, uint32_t length);
+
 protected:
     
     virtual bool handle_atapi_command(const uint8_t *cmd);
@@ -83,6 +82,7 @@ protected:
     virtual bool atapi_play_audio_msf(const uint8_t *cmd);
     virtual bool atapi_stop_play_scan_audio(const uint8_t *cmd);
     virtual bool atapi_pause_resume_audio(const uint8_t *cmd);
+    virtual bool atapi_seek_10(const uint8_t *cmd);
     
     bool doReadTOC(bool MSF, uint8_t track, uint16_t allocationLength);
     bool doReadSessionInfo(bool MSF, uint16_t allocationLength);
@@ -140,6 +140,6 @@ protected:
     // Audio playback handling
 
     bool doPauseResumeAudio(bool resume);
-    // \todo remove from public and enable here
-    // bool doPlayAudio(uint32_t lba, uint32_t length);
+
+    bool doPlayAudio(uint32_t lba, uint32_t length);
 };

@@ -153,12 +153,7 @@ void platform_init()
     logmsg("DIP switch settings: cablesel ", (int)g_dip_cable_sel, ", drive_id ", (int)g_dip_drive_id, " debug log ", (int)dbglog);
 
     g_log_debug = dbglog;
-    
-#ifdef ENABLE_AUDIO_OUTPUT
-    logmsg("I2S audio to expansion header enabled");
-    reclock_for_audio();
-    logmsg("-- System clock is set to ", (int) clock_get_hz(clk_sys),  "Hz");
-#endif
+
 
     // Get flash chip size
     uint8_t cmd_read_jedec_id[4] = {0x9f, 0, 0, 0};
@@ -224,7 +219,11 @@ void platform_late_init()
     {
         logmsg("ERROR: FPGA initialization failed");
     }
-
+#ifdef ENABLE_AUDIO_OUTPUT
+    logmsg("I2S audio to expansion header enabled");
+    reclock_for_audio();
+    logmsg("-- System clock is set to ", (int) clock_get_hz(clk_sys),  "Hz");
+#endif
 #ifdef ENABLE_AUDIO_OUTPUT
     // one-time control setup for DMA channels and second core
     audio_setup();

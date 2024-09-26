@@ -511,7 +511,7 @@ void zuluide_main_loop(void)
     g_ide_device->eject_button_poll(true);
     blink_poll();
   
-    // g_StatusController.ProcessUpdates();
+    g_StatusController.ProcessUpdates();
 
     save_logfile();
 

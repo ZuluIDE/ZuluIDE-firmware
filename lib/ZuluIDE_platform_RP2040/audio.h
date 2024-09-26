@@ -26,20 +26,7 @@
 
 // size of the two audio sample buffers, in bytes
 // these must be divisible by 1024
-#define AUDIO_BUFFER_SIZE 4096 // reduce memory usage
-
-/**
- * Handler for DMA interrupts
- *
- * This is called from scsi_dma_irq() in scsi_accel_rp2040.cpp. That is
- * obviously a silly way to handle things. However, using
- * irq_add_shared_handler() causes a lockup, likely due to pico-sdk issue #724
- * fixed in 1.3.1. Current builds use pico-sdk 1.3.0 and are affected by
- * the bug. To work around the problem the above exclusive handler
- * delegates to this function if its normal mask is not matched.
- */
-// \todo made static because the irq handler is free in ZuluIDE, erase me
-// void audio_dma_irq();
+#define AUDIO_BUFFER_SIZE 8192 // reduce memory usage
 
 /**
  * Indicates if the audio subsystem is actively streaming, including if it is

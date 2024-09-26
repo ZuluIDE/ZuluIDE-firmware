@@ -386,6 +386,7 @@ bool IDECDROMDevice::handle_atapi_command(const uint8_t *cmd)
         case ATAPI_CMD_PLAY_AUDIO_MSF:          return atapi_play_audio_msf(cmd);
         case ATAPI_CMD_PAUSE_RESUME_AUDIO:      return atapi_pause_resume_audio(cmd);
         case ATAPI_CMD_STOP_PLAY_SCAN_AUDIO:    return atapi_stop_play_scan_audio(cmd);
+        case ATAPI_CMD_SEEK10:                  return atapi_seek_10(cmd);
 
         default:
             return IDEATAPIDevice::handle_atapi_command(cmd);
@@ -853,6 +854,17 @@ bool IDECDROMDevice::atapi_pause_resume_audio(const uint8_t *cmd)
     return atapi_cmd_error(ATAPI_SENSE_ILLEGAL_REQ, ATAPI_ASC_NO_ASC);
 #endif
 }
+
+bool IDECDROMDevice::atapi_seek_10(const uint8_t *cmd)
+{
+    uint32_t lba = parse_be32(&cmd[2]);
+    dbgmsg("---- Seek 10 - LBA: ", lba, " - seek not implemented - Win95 uses to pause audio ");
+#ifdef ENABLE_AUDIO_OUTPUT
+    doStopAudio();
+#endif
+    return atapi_cmd_ok();
+}
+
 
 bool IDECDROMDevice::doReadTOC(bool MSF, uint8_t track, uint16_t allocationLength)
 {
