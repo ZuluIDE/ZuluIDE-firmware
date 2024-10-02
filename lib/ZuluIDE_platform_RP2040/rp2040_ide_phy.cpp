@@ -82,12 +82,13 @@ void ide_phy_reset(const ide_phy_config_t* config)
     g_ide_phy.watchdog_error = false;
 
     uint8_t cfg = 0;
-    if (config->enable_dev0)       cfg |= 0x01;
-    if (config->enable_dev1)       cfg |= 0x02;
-    if (config->enable_dev1_zeros) cfg |= 0x04;
-    if (config->atapi_dev0)        cfg |= 0x08;
-    if (config->atapi_dev1)        cfg |= 0x10;
-    if (config->disable_iordy)     cfg |= 0x20;
+    if (config->enable_dev0)         cfg |= 0x01;
+    if (config->enable_dev1)         cfg |= 0x02;
+    if (config->enable_dev1_zeros)   cfg |= 0x04;
+    if (config->atapi_dev0)          cfg |= 0x08;
+    if (config->atapi_dev1)          cfg |= 0x10;
+    if (config->disable_iordy)       cfg |= 0x20;
+    if (config->enable_packet_intrq) cfg |= 0x40;
     fpga_wrcmd(FPGA_CMD_SET_IDE_PHY_CFG, &cfg, 1);
 }
 
