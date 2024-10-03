@@ -983,7 +983,7 @@ bool IDECDROMDevice::doReadCD(uint32_t lba, uint32_t length, uint8_t sector_type
     }
 
     // Figure out the data offset in the file
-    uint64_t offset = trackinfo.file_offset + trackinfo.sector_length * (lba - trackinfo.track_start);
+    uint64_t offset = trackinfo.file_offset + trackinfo.sector_length * (lba - trackinfo.data_start);
     dbgmsg("---- Read CD: ", (int)length, " sectors starting at ", (int)lba,
            ", track number ", trackinfo.track_number, ", sector size ", (int)trackinfo.sector_length,
            ", main channel ", main_channel, ", sub channel ", sub_channel,
@@ -1424,7 +1424,7 @@ uint32_t IDECDROMDevice::getLeadOutLBA(const CUETrackInfo* lasttrack)
     if (lasttrack != nullptr && lasttrack->track_number != 0 && m_image != nullptr)
     {
         uint32_t lastTrackBlocks = (m_image->capacity() - lasttrack->file_offset) / lasttrack->sector_length;
-        return lasttrack->track_start + lastTrackBlocks;
+        return lasttrack->data_start + lastTrackBlocks;
     }
     else
     {
@@ -1440,7 +1440,7 @@ CUETrackInfo IDECDROMDevice::getTrackFromLBA(uint32_t lba)
     m_cueparser.restart();
     while ((tmptrack = m_cueparser.next_track()) != NULL)
     {
-        if (tmptrack->track_start <= lba)
+        if (tmptrack->data_start <= lba)
         {
             result = *tmptrack;
         }
