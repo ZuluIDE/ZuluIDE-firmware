@@ -66,7 +66,9 @@ void status_observer(const zuluide::status::SystemStatus& current);
 void loadFirstImage();
 void load_image(const zuluide::images::Image& toLoad, bool insert = true);
 
+#ifndef SD_SPEED_CLASS_WARN_BELOW
 #define SD_SPEED_CLASS_WARN_BELOW 10
+#endif
 
 /************************************/
 /* Status reporting by blinking led */
@@ -176,10 +178,9 @@ void print_sd_info()
     }
 
     sds_t sds = {0};
-    SD.card()->readSDS(&sds);
-    if ( sds.speedClass() < SD_SPEED_CLASS_WARN_BELOW)
+    if (SD.card()->readSDS(&sds) && sds.speedClass() < SD_SPEED_CLASS_WARN_BELOW)
     {
-		  logmsg("WARNING: Your SD Card Speed Class is ", (int)sds.speedClass(), ". Class ", (int) SD_SPEED_CLASS_WARN_BELOW," or better is recommended for best performance.");
+		  logmsg("-- WARNING: Your SD Card Speed Class is ", (int)sds.speedClass(), ". Class ", (int) SD_SPEED_CLASS_WARN_BELOW," or better is recommended for best performance.");
     }
 }
 
