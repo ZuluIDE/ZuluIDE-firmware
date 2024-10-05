@@ -28,18 +28,6 @@
 extern uint8_t g_ide_signals;
 static uint8_t ide_disk_buffer[512];
 
-// Map from command index for command name for logging
-static const char *get_atapi_command_name(uint8_t cmd)
-{
-    switch (cmd)
-    {
-#define CMD_NAME_TO_STR(name, code) case code: return #name;
-    ATAPI_COMMAND_LIST(CMD_NAME_TO_STR)
-#undef CMD_NAME_TO_STR
-        default: return "UNKNOWN_CMD";
-    }
-}
-
 static bool find_chs_capacity(uint64_t lba, uint16_t max_cylinders, uint8_t min_heads, uint16_t &c, uint8_t &h, uint8_t &s)
 {
     bool found_chs = false;

@@ -259,7 +259,6 @@ bool IDEImageFile::write(uint64_t startpos, size_t blocksize, size_t num_blocks,
     sd_cb_state.blocks_available = 0;
     sd_cb_state.bufsize_blocks = m_buffer_size / blocksize;
 
-    bool first_run = true;
     while (sd_cb_state.blocks_done < num_blocks && !sd_cb_state.error)
     {
         platform_poll();
