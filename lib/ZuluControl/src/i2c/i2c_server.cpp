@@ -75,8 +75,6 @@ void I2CServer::HandleUpdate(const SystemStatus& current) {
   status = current.ToJson();
   if (isSubscribed) {
     writeLengthPrefacedString(wire, I2C_SERVER_SYSTEM_STATUS_JSON, status.length(), status.c_str());
-  } else {
-    logmsg("Received an update, but I2C client is not subscribed.");
   }
 }
 

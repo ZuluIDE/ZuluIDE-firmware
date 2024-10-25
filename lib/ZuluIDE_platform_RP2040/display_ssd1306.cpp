@@ -133,15 +133,6 @@ void DisplaySSD1306::updateDisplay() {
 
     // Set the time of the next refresh.
     nextRefresh = make_timeout_time_ms(SCROLL_INTERVAL_MS);
-  } else {
-    // Show loading message.
-    if (!currentDispState && !currentSysStatus) {
-      logmsg("Received an update when display and system status is not set.");
-    } else if (!currentDispState) {
-      logmsg("Received an update when display is not set.");
-    } else {
-      logmsg("Received an update when system status is not set.");
-    }
   }
 }
 
