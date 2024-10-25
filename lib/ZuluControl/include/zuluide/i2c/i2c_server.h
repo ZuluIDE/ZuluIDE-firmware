@@ -92,6 +92,10 @@ namespace zuluide::i2c {
        succesful, otherwise false.
      */
     bool CheckForDevice();
+    /**
+       True iff the SSID and and password have been set.
+     */
+    bool WifiCredentialsSet();
   private:
     TwoWire* wire;
     DeviceControlSafe* deviceControl;
