@@ -185,7 +185,12 @@ bool platform_check_for_controller()
   bool hasHardwareUI = g_rotary_input.CheckForDevice();
   bool hasI2CServer = g_I2cServer.CheckForDevice();
   logmsg(hasHardwareUI ? "Hardware UI found." : "Hardware UI not found.");
-  logmsg(hasI2CServer ? "I2C server Found" : "I2C server not found");
+  logmsg(hasI2CServer ? "I2C server found" : "I2C server not found");
+  if (hasI2CServer && !g_I2cServer.WifiCredentialsSet()) {
+    // The I2C server responded but we cannot configure wifi. This may cause issues.
+    logmsg("An I2C client was detected but the WIFI credentials are not configured. This will cause problems if the I2C client needs WIFI configuration data.");
+  }
+  
   return hasHardwareUI || hasI2CServer;
 }
 
