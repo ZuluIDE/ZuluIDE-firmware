@@ -296,27 +296,57 @@ void IDECDROMDevice::reset()
 
 void IDECDROMDevice::set_image(IDEImage *image)
 {
-    IDEATAPIDevice::set_image(image);
-
     char filename[MAX_FILE_PATH];
     bool valid = false;
 
+    IDEATAPIDevice::set_image(image);
+    m_selected_file_index = -1;
+
     if (image &&
+        !image->is_folder() &&
         image->get_filename(filename, sizeof(filename)) &&
         strncasecmp(filename + strlen(filename) - 4, ".bin", 4) == 0)
     {
+        // There is a cue sheet with the same name as the .bin
         char cuesheetname[MAX_FILE_PATH + 1] = {0};
         strncpy(cuesheetname, filename, strlen(filename) - 4);
         strlcat(cuesheetname, ".cue", sizeof(cuesheetname));
 
-        valid = loadAndValidateCueSheet(cuesheetname);
+        IDEImageFile *imagefile = (IDEImageFile*)image;
+        valid = loadAndValidateCueSheet(imagefile->get_folder(), cuesheetname);
+    }
+    else if (image && image->is_folder())
+    {
+        // This is a folder, find the first valid cue sheet file
+        char foldername[MAX_FILE_PATH + 1] = {0};
+        image->get_foldername(foldername, sizeof(foldername));
+
+        IDEImageFile *imagefile = (IDEImageFile*)image;
+        FsFile *folder = imagefile->get_folder();
+        FsFile iterfile;
+        valid = false;
+        filename[0] = '\0';
+        while (!valid && iterfile.openNext(folder, O_RDONLY))
+        {
+            iterfile.getName(filename, sizeof(filename));
+            if (strncasecmp(filename + strlen(filename) - 4, ".cue", 4) == 0)
+            {
+                valid = loadAndValidateCueSheet(folder, filename);
+            }
+        }
+
+        if (!valid)
+        {
+            logmsg("No valid .cue sheet found in folder '", foldername, "'");
+            image = nullptr;
+        }
     }
 
     if (!valid)
     {
-        // No cue sheet or parsing failed, use as plain binary image.
+        // No cue sheet, use as plain binary image.
         strcpy(m_cuesheet, R"(
-            FILE "x" BINARY
+            FILE "" BINARY
             TRACK 01 MODE1/2048
             INDEX 01 00:00:00
         )");
@@ -351,7 +381,6 @@ void IDECDROMDevice::set_image(IDEImage *image)
         m_atapi_state.unit_attention = true;
         m_atapi_state.sense_key = ATAPI_SENSE_NOT_READY;
         m_atapi_state.sense_asc = ATAPI_ASC_NO_MEDIUM;
-
     }
 
 
@@ -447,8 +476,9 @@ bool IDECDROMDevice::atapi_read_track_information(const uint8_t *cmd)
     uint32_t tracklen = 0;
     CUETrackInfo mtrack = {0};
     const CUETrackInfo *trackinfo;
+    uint64_t prev_capacity = 0;
     m_cueparser.restart();
-    while ((trackinfo = m_cueparser.next_track()) != NULL)
+    while ((trackinfo = m_cueparser.next_track(prev_capacity)) != NULL)
     {
         if (mtrack.track_number != 0) // skip 1st track, just store later
         {
@@ -461,6 +491,9 @@ bool IDECDROMDevice::atapi_read_track_information(const uint8_t *cmd)
             }
         }
         mtrack = *trackinfo;
+
+        selectBinFileForTrack(trackinfo);
+        prev_capacity = m_image->capacity();
     }
     // try the last track as a final attempt if no match found beforehand
     if (!trackfound)
@@ -742,8 +775,9 @@ bool IDECDROMDevice::doReadTOC(bool MSF, uint8_t track, uint16_t allocationLengt
     int firsttrack = -1;
     CUETrackInfo lasttrack = {0};
     const CUETrackInfo *trackinfo;
+    uint64_t prev_capacity = 0;
     m_cueparser.restart();
-    while ((trackinfo = m_cueparser.next_track()) != NULL)
+    while ((trackinfo = m_cueparser.next_track(prev_capacity)) != NULL)
     {
         if (firsttrack < 0) firsttrack = trackinfo->track_number;
         lasttrack = *trackinfo;
@@ -753,6 +787,9 @@ bool IDECDROMDevice::doReadTOC(bool MSF, uint8_t track, uint16_t allocationLengt
             formatTrackInfo(trackinfo, &trackdata[8 * trackcount], MSF);
             trackcount += 1;
         }
+
+        selectBinFileForTrack(trackinfo);
+        prev_capacity = m_image->capacity();
     }
 
     // Format lead-out track info
@@ -820,8 +857,9 @@ bool IDECDROMDevice::doReadFullTOC(uint8_t session, uint16_t allocationLength, b
     int firsttrack = -1;
     CUETrackInfo lasttrack = {0};
     const CUETrackInfo *trackinfo;
+    uint64_t prev_capacity = 0;
     m_cueparser.restart();
-    while ((trackinfo = m_cueparser.next_track()) != NULL)
+    while ((trackinfo = m_cueparser.next_track(prev_capacity)) != NULL)
     {
         if (firsttrack < 0)
         {
@@ -836,6 +874,9 @@ bool IDECDROMDevice::doReadFullTOC(uint8_t session, uint16_t allocationLength, b
         formatRawTrackInfo(trackinfo, &buf[len], useBCD);
         trackcount += 1;
         len += 11;
+
+        selectBinFileForTrack(trackinfo);
+        prev_capacity = m_image->capacity();
     }
 
     // First and last track numbers
@@ -975,145 +1016,193 @@ bool IDECDROMDevice::doRead(uint32_t lba, uint32_t transfer_len)
 bool IDECDROMDevice::doReadCD(uint32_t lba, uint32_t length, uint8_t sector_type,
                               uint8_t main_channel, uint8_t sub_channel, bool data_only)
 {
-    CUETrackInfo trackinfo = getTrackFromLBA(lba);
-
-    if (!m_image)
+    // We may need to loop if the request spans multiple .bin files
+    uint32_t total_length = length;
+    uint32_t length_done = 0;
+    while (length_done < total_length)
     {
-        return atapi_cmd_error(ATAPI_SENSE_NOT_READY, ATAPI_ASC_NO_MEDIUM);
-    }
+        length = total_length - length_done;
 
-    // Figure out the data offset in the file
-    uint64_t offset = trackinfo.file_offset + trackinfo.sector_length * (lba - trackinfo.data_start);
-    dbgmsg("---- Read CD: ", (int)length, " sectors starting at ", (int)lba,
-           ", track number ", trackinfo.track_number, ", sector size ", (int)trackinfo.sector_length,
-           ", main channel ", main_channel, ", sub channel ", sub_channel,
-           ", data offset in file ", (int)offset);
+        CUETrackInfo trackinfo = getTrackFromLBA(lba);
 
-    // Ensure read is not out of range of the image
-    uint64_t readend = offset + trackinfo.sector_length * length;
-    uint64_t capacity = m_image->capacity();
-    if (readend > capacity)
-    {
-        logmsg("WARNING: Host attempted CD read at sector ", lba, "+", length,
-              ", exceeding image size ", capacity);
-        return atapi_cmd_error(ATAPI_SENSE_ILLEGAL_REQ, ATAPI_ASC_LBA_OUT_OF_RANGE);
-    }
-
-    // Verify sector type
-    if (sector_type != 0)
-    {
-        bool sector_type_ok = false;
-        if (sector_type == 1 && trackinfo.track_mode == CUETrack_AUDIO)
+        if (!m_image || !selectBinFileForTrack(&trackinfo))
         {
-            sector_type_ok = true;
-        }
-        else if (sector_type == 2 && trackinfo.track_mode == CUETrack_MODE1_2048)
-        {
-            sector_type_ok = true;
+            return atapi_cmd_error(ATAPI_SENSE_NOT_READY, ATAPI_ASC_NO_MEDIUM);
         }
 
-        if (!sector_type_ok)
+        // Figure out the data offset in the file
+        uint64_t offset = trackinfo.file_offset;
+        if (lba >= trackinfo.data_start)
         {
-            dbgmsg("---- Failed sector type check, host requested ", (int)sector_type, " CUE file has ", (int)trackinfo.track_mode);
+            offset += (lba - trackinfo.data_start) * trackinfo.sector_length;
+        }
+        else if (lba >= trackinfo.data_start - trackinfo.unstored_pregap_length)
+        {
+            // It doesn't really matter what data we give for the unstored pregap
+        }
+        else
+        {
+            // Get data from stored pregap, which is in the file before trackinfo.file_offset.
+            uint32_t seek_back = (trackinfo.data_start - lba) * trackinfo.sector_length;
+            if (seek_back > offset)
+            {
+                logmsg("WARNING: Host attempted CD read at sector ", lba, "+", length,
+                       " pregap request ", (int)seek_back, " exceeded available ", (int)offset, " for track ", trackinfo.track_number,
+                       " (possible .cue file issue)");
+                offset = 0;
+            }
+            else
+            {
+                offset -= seek_back;
+            }
+        }
+
+        dbgmsg("---- Read CD: ", (int)length, " sectors starting at ", (int)lba,
+            ", track number ", trackinfo.track_number, ", sector size ", (int)trackinfo.sector_length,
+            ", main channel ", main_channel, ", sub channel ", sub_channel,
+            ", data offset in file ", (int)offset);
+
+        // Ensure read is not out of range of the image
+        // If it is, we may be able to get more from the next .bin file.
+        uint64_t capacity = m_image->capacity();
+        uint32_t sectors_available = (capacity - offset) / trackinfo.sector_length;
+        if (length > sectors_available)
+        {
+            if (sectors_available == 0 || !m_image->is_folder())
+            {
+                // This is really past the end of the CD
+                logmsg("WARNING: Host attempted CD read at sector ", lba, "+", length,
+                    ", exceeding image size ", capacity);
+                return atapi_cmd_error(ATAPI_SENSE_ILLEGAL_REQ, ATAPI_ASC_LBA_OUT_OF_RANGE);
+            }
+            else
+            {
+                // Read as much as we can and continue with next file
+                dbgmsg("------ Splitting read request at image file end");
+                length = sectors_available;
+            }
+        }
+
+        // Verify sector type
+        if (sector_type != 0)
+        {
+            bool sector_type_ok = false;
+            if (sector_type == 1 && trackinfo.track_mode == CUETrack_AUDIO)
+            {
+                sector_type_ok = true;
+            }
+            else if (sector_type == 2 && trackinfo.track_mode == CUETrack_MODE1_2048)
+            {
+                sector_type_ok = true;
+            }
+
+            if (!sector_type_ok)
+            {
+                dbgmsg("---- Failed sector type check, host requested ", (int)sector_type, " CUE file has ", (int)trackinfo.track_mode);
+                return atapi_cmd_error(ATAPI_SENSE_ILLEGAL_REQ, ATAPI_ASC_ILLEGAL_MODE_FOR_TRACK);
+            }
+        }
+
+        // Select fields to transfer
+        // Refer to table 351 in T10/1545-D MMC-4 Revision 5a
+        // Only the mandatory cases are supported.
+        m_cd_read_format.sector_length_file = 2048;
+        m_cd_read_format.sector_length_out = 2048;
+        m_cd_read_format.sector_data_skip = 0;
+        m_cd_read_format.sector_data_length = 2048;
+        m_cd_read_format.add_fake_headers = false;
+        m_cd_read_format.field_q_subchannel = false;
+        m_cd_read_format.start_lba = lba;
+        m_cd_read_format.sectors_done = 0;
+
+        if (main_channel == 0)
+        {
+            // No actual data requested, just sector type check or subchannel
+            m_cd_read_format.sector_length_file = 0;
+            m_cd_read_format.sector_data_length = 0;
+        }
+        else if (trackinfo.track_mode == CUETrack_AUDIO)
+        {
+            // Transfer whole 2352 byte audio sectors from file to host
+            m_cd_read_format.sector_length_file = 2352;
+            m_cd_read_format.sector_data_length = 2352;
+            m_cd_read_format.sector_length_out = 2352;
+        }
+        else if (trackinfo.track_mode == CUETrack_MODE1_2048 && main_channel == 0x10)
+        {
+            // Transfer whole 2048 byte data sectors from file to host
+            m_cd_read_format.sector_length_file = 2048;
+            m_cd_read_format.sector_data_length = 2048;
+            m_cd_read_format.sector_length_out = 2048;
+        }
+        else if (trackinfo.track_mode == CUETrack_MODE1_2048 && (main_channel & 0xB8) == 0xB8)
+        {
+            // Transfer 2048 bytes of data from file and fake the headers
+            m_cd_read_format.sector_length_file = 2048;
+            m_cd_read_format.sector_data_length = 2048;
+            m_cd_read_format.sector_length_out = 2048 + 304;
+            m_cd_read_format.add_fake_headers = true;
+            dbgmsg("------ Host requested ECC data but image file lacks it, replacing with zeros");
+        }
+        else if (trackinfo.track_mode == CUETrack_MODE1_2352 && main_channel == 0x10)
+        {
+            // Transfer the 2048 byte payload of data sector to host.
+            m_cd_read_format.sector_length_file = 2352;
+            m_cd_read_format.sector_data_skip = 16;
+            m_cd_read_format.sector_data_length = 2048;
+            m_cd_read_format.sector_length_out = 2048;
+        }
+        else if (trackinfo.track_mode == CUETrack_MODE1_2352 && (main_channel & 0xB8) == 0xB8)
+        {
+            // Transfer whole 2352 byte data sector with ECC to host
+            m_cd_read_format.sector_length_file = 2352;
+            m_cd_read_format.sector_data_length = 2352;
+            m_cd_read_format.sector_length_out = 2352;
+        }
+        else
+        {
+            dbgmsg("---- Unsupported channel request for track type ", (int)trackinfo.track_mode);
             return atapi_cmd_error(ATAPI_SENSE_ILLEGAL_REQ, ATAPI_ASC_ILLEGAL_MODE_FOR_TRACK);
         }
+
+        if (data_only && m_cd_read_format.sector_length_out != 2048)
+        {
+            dbgmsg("------ Host tried to read non-data sector with standard READ command");
+            return atapi_cmd_error(ATAPI_SENSE_ILLEGAL_REQ, ATAPI_ASC_ILLEGAL_MODE_FOR_TRACK);
+        }
+
+        if (sub_channel == 2)
+        {
+            // Include position information in Q subchannel
+            m_cd_read_format.field_q_subchannel = true;
+            m_cd_read_format.sector_length_out += 16;
+        }
+        else if (sub_channel != 0)
+        {
+            dbgmsg("---- Unsupported subchannel request");
+            return atapi_cmd_error(ATAPI_SENSE_ILLEGAL_REQ, ATAPI_ASC_INVALID_FIELD);
+        }
+
+        if (m_cd_read_format.sector_length_file == 0)
+        {
+            // No actual data needed, just send headers
+            read_callback(nullptr, 0, length);
+        }
+        else if (m_image->read(offset, m_cd_read_format.sector_length_file, length, this))
+        {
+            // Read callback does the work
+        }
+        else
+        {
+            dbgmsg("-- CD read failed, starting offset ", (int)offset, " length ", (int)length);
+            return atapi_cmd_error(ATAPI_SENSE_MEDIUM_ERROR, 0);
+        }
+
+        length_done += length;
+        lba += length;
     }
 
-    // Select fields to transfer
-    // Refer to table 351 in T10/1545-D MMC-4 Revision 5a
-    // Only the mandatory cases are supported.
-    m_cd_read_format.sector_length_file = 2048;
-    m_cd_read_format.sector_length_out = 2048;
-    m_cd_read_format.sector_data_skip = 0;
-    m_cd_read_format.sector_data_length = 2048;
-    m_cd_read_format.add_fake_headers = false;
-    m_cd_read_format.field_q_subchannel = false;
-    m_cd_read_format.start_lba = lba;
-    m_cd_read_format.sectors_done = 0;
-
-    if (main_channel == 0)
-    {
-        // No actual data requested, just sector type check or subchannel
-        m_cd_read_format.sector_length_file = 0;
-        m_cd_read_format.sector_data_length = 0;
-    }
-    else if (trackinfo.track_mode == CUETrack_AUDIO)
-    {
-        // Transfer whole 2352 byte audio sectors from file to host
-        m_cd_read_format.sector_length_file = 2352;
-        m_cd_read_format.sector_data_length = 2352;
-        m_cd_read_format.sector_length_out = 2352;
-    }
-    else if (trackinfo.track_mode == CUETrack_MODE1_2048 && main_channel == 0x10)
-    {
-        // Transfer whole 2048 byte data sectors from file to host
-        m_cd_read_format.sector_length_file = 2048;
-        m_cd_read_format.sector_data_length = 2048;
-        m_cd_read_format.sector_length_out = 2048;
-    }
-    else if (trackinfo.track_mode == CUETrack_MODE1_2048 && (main_channel & 0xB8) == 0xB8)
-    {
-        // Transfer 2048 bytes of data from file and fake the headers
-        m_cd_read_format.sector_length_file = 2048;
-        m_cd_read_format.sector_data_length = 2048;
-        m_cd_read_format.sector_length_out = 2048 + 304;
-        m_cd_read_format.add_fake_headers = true;
-        dbgmsg("------ Host requested ECC data but image file lacks it, replacing with zeros");
-    }
-    else if (trackinfo.track_mode == CUETrack_MODE1_2352 && main_channel == 0x10)
-    {
-        // Transfer the 2048 byte payload of data sector to host.
-        m_cd_read_format.sector_length_file = 2352;
-        m_cd_read_format.sector_data_skip = 16;
-        m_cd_read_format.sector_data_length = 2048;
-        m_cd_read_format.sector_length_out = 2048;
-    }
-    else if (trackinfo.track_mode == CUETrack_MODE1_2352 && (main_channel & 0xB8) == 0xB8)
-    {
-        // Transfer whole 2352 byte data sector with ECC to host
-        m_cd_read_format.sector_length_file = 2352;
-        m_cd_read_format.sector_data_length = 2352;
-        m_cd_read_format.sector_length_out = 2352;
-    }
-    else
-    {
-        dbgmsg("---- Unsupported channel request for track type ", (int)trackinfo.track_mode);
-        return atapi_cmd_error(ATAPI_SENSE_ILLEGAL_REQ, ATAPI_ASC_ILLEGAL_MODE_FOR_TRACK);
-    }
-
-    if (data_only && m_cd_read_format.sector_length_out != 2048)
-    {
-        dbgmsg("------ Host tried to read non-data sector with standard READ command");
-        return atapi_cmd_error(ATAPI_SENSE_ILLEGAL_REQ, ATAPI_ASC_ILLEGAL_MODE_FOR_TRACK);
-    }
-
-    if (sub_channel == 2)
-    {
-        // Include position information in Q subchannel
-        m_cd_read_format.field_q_subchannel = true;
-        m_cd_read_format.sector_length_out += 16;
-    }
-    else if (sub_channel != 0)
-    {
-        dbgmsg("---- Unsupported subchannel request");
-        return atapi_cmd_error(ATAPI_SENSE_ILLEGAL_REQ, ATAPI_ASC_INVALID_FIELD);
-    }
-
-    if (m_cd_read_format.sector_length_file == 0)
-    {
-        // No actual data needed, just send headers
-        read_callback(nullptr, 0, length);
-        return atapi_send_wait_finish() && atapi_cmd_ok();
-    }
-    else if (m_image->read(offset, m_cd_read_format.sector_length_file, length, this))
-    {
-        return atapi_send_wait_finish() && atapi_cmd_ok();
-    }
-    else
-    {
-        dbgmsg("-- CD read failed, starting offset ", (int)offset, " length ", (int)length);
-        return atapi_cmd_error(ATAPI_SENSE_MEDIUM_ERROR, 0);
-    }
+    return atapi_send_wait_finish() && atapi_cmd_ok();
 }
 
 ssize_t IDECDROMDevice::read_callback(const uint8_t *data, size_t blocksize, size_t num_blocks)
@@ -1217,12 +1306,13 @@ ssize_t IDECDROMDevice::read_callback(const uint8_t *data, size_t blocksize, siz
     return blocks_done;
 }
 
-bool IDECDROMDevice::loadAndValidateCueSheet(const char *cuesheetname)
+bool IDECDROMDevice::loadAndValidateCueSheet(FsFile *dir, const char *cuesheetname)
 {
-    FsFile cuesheetfile = SD.open(cuesheetname, O_RDONLY);
+    FsFile cuesheetfile;
+    cuesheetfile.open(dir, cuesheetname);
     if (!cuesheetfile.isOpen())
     {
-        logmsg("---- No CUE sheet found at ", cuesheetname, ", using as plain binary image");
+        logmsg("---- No CUE sheet found at ", cuesheetname);
         return false;
     }
 
@@ -1246,7 +1336,8 @@ bool IDECDROMDevice::loadAndValidateCueSheet(const char *cuesheetname)
 
     const CUETrackInfo *trackinfo;
     int trackcount = 0;
-    while ((trackinfo = m_cueparser.next_track()) != NULL)
+    uint64_t prev_capacity = 0;
+    while ((trackinfo = m_cueparser.next_track(prev_capacity)) != NULL)
     {
         trackcount++;
 
@@ -1261,6 +1352,13 @@ bool IDECDROMDevice::loadAndValidateCueSheet(const char *cuesheetname)
         {
             logmsg("---- Unsupported CUE data file mode ", (int)trackinfo->file_mode);
         }
+
+        // Check that the bin file is available
+        if (!selectBinFileForTrack(trackinfo))
+        {
+            return false;
+        }
+        prev_capacity = m_image->capacity();
     }
 
     if (trackcount == 0)
@@ -1279,7 +1377,8 @@ bool IDECDROMDevice::getFirstLastTrackInfo(CUETrackInfo &first, CUETrackInfo &la
 
     const CUETrackInfo *trackinfo;
     bool got_track = false;
-    while ((trackinfo = m_cueparser.next_track()) != NULL)
+    uint64_t prev_capacity = 0;
+    while ((trackinfo = m_cueparser.next_track(prev_capacity)) != NULL)
     {
         if (!got_track)
         {
@@ -1288,6 +1387,9 @@ bool IDECDROMDevice::getFirstLastTrackInfo(CUETrackInfo &first, CUETrackInfo &la
         }
 
         last = *trackinfo;
+
+        selectBinFileForTrack(trackinfo);
+        prev_capacity = m_image->capacity();
     }
 
     return got_track;
@@ -1423,6 +1525,7 @@ uint32_t IDECDROMDevice::getLeadOutLBA(const CUETrackInfo* lasttrack)
 {
     if (lasttrack != nullptr && lasttrack->track_number != 0 && m_image != nullptr)
     {
+        selectBinFileForTrack(lasttrack);
         uint32_t lastTrackBlocks = (m_image->capacity() - lasttrack->file_offset) / lasttrack->sector_length;
         return lasttrack->data_start + lastTrackBlocks;
     }
@@ -1437,10 +1540,11 @@ CUETrackInfo IDECDROMDevice::getTrackFromLBA(uint32_t lba)
 {
     CUETrackInfo result = {};
     const CUETrackInfo *tmptrack;
+    uint64_t prev_capacity = 0;
     m_cueparser.restart();
-    while ((tmptrack = m_cueparser.next_track()) != NULL)
+    while ((tmptrack = m_cueparser.next_track(prev_capacity)) != NULL)
     {
-        if (tmptrack->data_start <= lba)
+        if (tmptrack->track_start <= lba)
         {
             result = *tmptrack;
         }
@@ -1448,9 +1552,46 @@ CUETrackInfo IDECDROMDevice::getTrackFromLBA(uint32_t lba)
         {
             break;
         }
+
+        selectBinFileForTrack(tmptrack);
+        prev_capacity = m_image->capacity();
     }
 
     return result;
+}
+
+// Check if we need to switch the data .bin file when track changes.
+bool IDECDROMDevice::selectBinFileForTrack(const CUETrackInfo *track)
+{
+    if (track->filename[0] == '\0' || !m_image->is_folder())
+    {
+        // Using a single image, no need to switch anything.
+        return true;
+    }
+    else if (m_selected_file_index == track->file_index)
+    {
+        // Haven't switched files
+        return true;
+    }
+
+    m_selected_file_index = track->file_index;
+
+    char filename[MAX_FILE_PATH + 1];
+    if (m_image->get_filename(filename, sizeof(filename)) &&
+        strncasecmp(track->filename, filename, sizeof(filename)) == 0)
+    {
+        // We already have the correct binfile open.
+        return true;
+    }
+
+    bool open_ok = m_image->select_image(track->filename);
+
+    if (!open_ok)
+    {
+        logmsg("CUE sheet specified track file '", track->filename, "' not found");
+    }
+
+    return open_ok;
 }
 
 size_t IDECDROMDevice::atapi_get_configuration(uint16_t feature, uint8_t *buffer, size_t max_bytes)

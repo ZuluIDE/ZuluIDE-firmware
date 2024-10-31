@@ -131,11 +131,11 @@ protected:
     } m_removable;
 
     // Buffer used for responses, ide_phy code benefits from this being aligned to 32 bits
-    // Enough for any inquiry/mode response and for up to one CD sector.
+    // Enough for any inquiry/mode response and for up to one CD sector with Q subchannel
     union {
-        uint32_t dword[588];
-        uint16_t word[1176];
-        uint8_t bytes[2352];
+        uint32_t dword[592];
+        uint16_t word[1184];
+        uint8_t bytes[2368];
     } m_buffer;
 
     // IDE command handlers

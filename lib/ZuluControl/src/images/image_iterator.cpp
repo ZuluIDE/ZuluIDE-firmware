@@ -257,9 +257,25 @@ bool ImageIterator::IsLast() {
   return currentIsLast;
 }
 
+static bool folderContainsCueSheet(FsFile &dir)
+{
+  FsFile file;
+  char filename[MAX_FILE_PATH + 1];
+  while (file.openNext(&dir, O_RDONLY))
+  {
+    if (file.getName(filename, sizeof(filename)) &&
+        (strncasecmp(filename + strlen(filename) - 4, ".cue", 4) == 0))
+    {
+      return true;
+    }
+  }
+
+  return false;
+}
+
 static bool fileIsValidImage(FsFile& file, const char* fileName) {
-  // Skip directories.
-  if (file.isDirectory()) {
+  // Directories are allowed if they contain a .cue sheet
+  if (file.isDirectory() && !folderContainsCueSheet(file)) {
     return false;
   }
 

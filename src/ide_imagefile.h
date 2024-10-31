@@ -56,6 +56,12 @@ public:
     // Is the image file writable?
     virtual bool writable() = 0;
 
+    // Are there multiple image files we can switch between?
+    // Currently used for .cue / .bin sets.
+    virtual bool is_folder() = 0;
+    virtual bool get_foldername(char *buf, size_t buflen) = 0;
+    virtual bool select_image(const char *filename) = 0;
+
     // Read data from image file using a callback interface.
     // The callback function is passed a data pointer and number of blocks available.
     // It will return the number of blocks it has processed - any unprocessed blocks
@@ -94,6 +100,9 @@ public:
 
     void clear();
 
+    // Open a file or folder for the backing data of the image.
+    // If the path given points to a folder, it is regarded as a set of related images.
+    // Currently folders are used for .cue / .bin sets.
     bool open_file(FsVolume *volume, const char *filename, bool read_only = false);
     bool open_file(const char* filename, bool read_only = false);
     void close();
@@ -105,6 +114,17 @@ public:
     virtual bool writable();
     virtual bool read(uint64_t startpos, size_t blocksize, size_t num_blocks, Callback *callback);
     virtual bool write(uint64_t startpos, size_t blocksize, size_t num_blocks, Callback *callback);
+
+    // Support for opening a folder for images that consist of multiple files.
+    // Currently used for .cue / .bin sets.
+    virtual bool is_folder();
+    virtual bool get_foldername(char *buf, size_t buflen);
+    virtual bool select_image(const char *filename);
+
+    // Raw access to SdFat file types (used for loading .cue sheets)
+    // get_folder() is valid even if is_folder() is false (it will return the root folder)
+    FsFile *get_folder() { return &m_folder; }
+    FsFile *get_file() { return &m_file; }
 
     // Set drive type for filtering purposes
     virtual void set_drive_type(drive_type_t type);
@@ -118,6 +138,9 @@ protected:
     FsFile m_file;
     SdCard *m_blockdev;
 
+    bool m_is_folder;
+    FsFile m_folder;
+
     bool m_contiguous;
     uint32_t m_first_sector;
 
@@ -128,6 +151,8 @@ protected:
 
     char m_prefix[5];
     drive_type_t m_drive_type;
+
+    bool internal_open(const char *filename);
 
     struct sd_cb_state_t {
         IDEImage::Callback *callback;

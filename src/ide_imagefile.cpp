@@ -64,9 +64,35 @@ bool IDEImageFile::open_file(FsVolume *volume, const char *filename, bool read_o
     }
 
     m_contiguous = false;
+    m_capacity = 0;
     m_read_only = read_only;
     m_file.close();
-    m_file = volume->open(filename, read_only ? O_RDONLY : O_RDWR);
+    m_folder.close();
+
+    // First check if it is a directory
+    m_folder = volume->open(filename, O_RDONLY);
+    if (m_folder.isDirectory())
+    {
+        // Filename points to a directory
+        // Actual image file is opened later
+        m_is_folder = true;
+        return true;
+    }
+    else
+    {
+        // The filename points to a single file
+        m_is_folder = false;
+        m_folder.close();
+        m_folder = volume->open("/", O_RDONLY);
+        return internal_open(filename);
+    }
+}
+
+// Open a single image file from m_folder.
+// If m_is_folder is false, this is used only for opening the initial image.
+bool IDEImageFile::internal_open(const char *filename)
+{
+    m_file.open(&m_folder, filename, m_read_only ? O_RDONLY : O_RDWR);
 
     if (!m_file.isOpen())
     {
@@ -85,7 +111,10 @@ bool IDEImageFile::open_file(FsVolume *volume, const char *filename, bool read_o
     }
     else
     {
-        logmsg("Image file ", filename, " is not contiguous, access will be slower");
+        if (!m_is_folder || g_log_debug)
+        {
+            logmsg("Image file ", filename, " is not contiguous, access will be slower");
+        }
     }
 
     return true;
@@ -108,6 +137,35 @@ bool IDEImageFile::get_filename(char *buf, size_t buflen)
         m_file.getName(buf, buflen);
         return true;
     }
+}
+
+bool IDEImageFile::is_folder()
+{
+    return m_is_folder;
+}
+
+bool IDEImageFile::get_foldername(char *buf, size_t buflen)
+{
+    if (!m_is_folder || !m_folder.isOpen())
+    {
+        dbgmsg("IDEImageFile::get_foldername(): not a folder");
+        buf[0] = '\0';
+        return false;
+    }
+
+    m_folder.getName(buf, buflen);
+    return true;
+}
+
+bool IDEImageFile::select_image(const char *filename)
+{
+    if (!m_is_folder || !m_folder.isOpen())
+    {
+        dbgmsg("IDEImageFile::select_image(): not a folder");
+        return false;
+    }
+
+    return internal_open(filename);
 }
 
 void IDEImageFile::set_drive_type(drive_type_t type)
