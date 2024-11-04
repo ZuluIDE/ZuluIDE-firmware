@@ -114,10 +114,15 @@ protected:
     // Access data from CUE sheet, or dummy data if no cue sheet provided
     char m_cuesheet[1024];
     CUEParser m_cueparser;
-    bool loadAndValidateCueSheet(const char *cuesheetname);
+    bool loadAndValidateCueSheet(FsFile *dir, const char *cuesheetname);
     bool getFirstLastTrackInfo(CUETrackInfo &first, CUETrackInfo &last);
     uint32_t getLeadOutLBA(const CUETrackInfo* lasttrack);
     CUETrackInfo getTrackFromLBA(uint32_t lba);
+
+    // If the .cue file has data split across multiple files,
+    // this function will reopen m_imagefile when track is changed.
+    int m_selected_file_index;
+    bool selectBinFileForTrack(const CUETrackInfo *track);
 
     // ATAPI configuration pages
     virtual size_t atapi_get_configuration(uint8_t return_type, uint16_t feature, uint8_t *buffer, size_t max_bytes) override;

@@ -27,6 +27,15 @@ Image files
 
 Any file on the [ignored list](#ignored-list) will not be used as an device image.
 
+CD-ROM `.bin/.cue` images
+-------------------------
+Image files in `.bin/.cue` format that have only a single `.bin` data file can be placed directly in root folder of the SD card.
+Both the `.bin` and `.cue` should have the same name, and the name specified in `.cue` is ignored.
+
+Image files that have one `.cue` file and multiple `.bin` files should be placed in a subfolder.
+The `.bin` file is located by the name given in the `.cue` text file.
+The name of the folder is used as the name when switching images in alphabetical order.
+
 Cycling Images
 --------------
 Currently the only way to cycle to the next image for a removable device is the eject the medium via the operating system. This will load the next valid file in alphabetic order.

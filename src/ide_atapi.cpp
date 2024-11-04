@@ -725,6 +725,11 @@ bool IDEATAPIDevice::atapi_cmd_not_ready_error()
 
 bool IDEATAPIDevice::atapi_cmd_error(uint8_t sense_key, uint16_t sense_asc)
 {
+    if (m_atapi_state.data_state == ATAPI_DATA_WRITE)
+    {
+        ide_phy_stop_transfers();
+    }
+
     if (sense_key == ATAPI_SENSE_UNIT_ATTENTION)
     {
         dbgmsg("-- Reporting UNIT_ATTENTION condition after reset/medium change (ASC:", sense_asc, ")");

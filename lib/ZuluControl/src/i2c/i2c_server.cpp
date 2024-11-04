@@ -75,8 +75,6 @@ void I2CServer::HandleUpdate(const SystemStatus& current) {
   status = current.ToJson();
   if (isSubscribed) {
     writeLengthPrefacedString(wire, I2C_SERVER_SYSTEM_STATUS_JSON, status.length(), status.c_str());
-  } else {
-    logmsg("Received an update, but I2C client is not subscribed.");
   }
 }
 
@@ -225,6 +223,10 @@ void I2CServer::Poll() {
     if (ReadInLength(wire) != 0) {
       logmsg("Length was not 0 for fetch ssid request.");
     }
+
+    if (!WifiCredentialsSet()) {
+      logmsg("Client requested the WiFi SSID, but the SSID is not configured.");
+    }
         
     writeLengthPrefacedString(wire, I2C_SERVER_SSID, ssid.length(), ssid.c_str());
     break;
@@ -234,6 +236,10 @@ void I2CServer::Poll() {
     wire->requestFrom(CLIENT_ADDR, 2);
     if (ReadInLength(wire) != 0) {
       logmsg("Length was not 0 for fetch ssid pass request.");
+    }
+
+    if (!WifiCredentialsSet()) {
+      logmsg("Client requested SSID password, but the SSID password is not configured.");
     }
     
     writeLengthPrefacedString(wire, I2C_SERVER_SSID_PASS, password.length(), password.c_str());
@@ -293,4 +299,8 @@ void I2CServer::SetSSID(std::string& value) {
 
 void I2CServer::SetPassword(std::string &value) {
   password = value;
+}
+
+bool I2CServer::WifiCredentialsSet() {
+  return !ssid.empty() && !password.empty();
 }
