@@ -226,7 +226,7 @@ void platform_late_init()
 #endif
 #ifdef ENABLE_AUDIO_OUTPUT
     // one-time control setup for DMA channels and second core
-    audio_setup();
+    audio_init();
 #endif
 
 }

@@ -22,7 +22,7 @@
 #pragma once
 
 #include <stdint.h>
-#include <ide_imagefile.h>
+#include <CUEParser.h>
 /*
  * Starting volume level for audio output, with 0 being muted and 255 being
  * max volume. SCSI-2 says this should be 25% of maximum by default, MMC-1
@@ -70,12 +70,12 @@ bool audio_is_playing();
  * Begins audio playback for a file.
  *
  * \param img    Pointer to the image containing PCM samples to play.
- * \param start  Byte offset within file where playback will begin, inclusive.
- * \param end    Byte offset within file where playback will end, exclusive.
+ * \param start  LBA playback position where playback will begin, inclusive.
+ * \param length Number of sectors till end of playback.
  * \param swap   If false, little-endian sample order, otherwise big-endian.
  * \return       True if successful, false otherwise.
  */
-bool audio_play(uint64_t start, uint64_t end, bool swap);
+bool audio_play(uint32_t start, uint32_t length, bool swap);
 
 /**
  * Pauses audio playback. This may be delayed slightly to allow sample buffers
@@ -137,14 +137,22 @@ uint16_t audio_get_channel();
 void audio_set_channel(uint16_t chn);
 
 /**
- * Gets the byte position in the audio image
+ * Gets the lba position audio playback audio
  * 
  * \return byte position in the audio image
 */
-uint64_t audio_get_file_position();
+uint32_t audio_get_lba_position();
 
 /**
  * Sets the playback position in the audio image via the lba
  * 
 */
 void audio_set_file_position(uint32_t lba);
+
+
+/**
+ * Sets the cue_parser
+ * cue_parser - the cue parser in use
+ * filename - the filename for the bini file for a non directory bin/cue combination
+ */
+void audio_set_cue_parser(CUEParser *cue_parser, FsFile *file);

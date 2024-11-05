@@ -289,6 +289,8 @@ void IDECDROMDevice::initialize(int devidx)
     m_devinfo.current_profile = ATAPI_PROFILE_CDROM;
 
     set_esn_event(esn_event_t::NoChange);
+#if ENABLE_AUDIO_OUTPUT
+#endif // ENABLE_AUDIO_OUTPUT
 }
 
 void IDECDROMDevice::reset() 
@@ -317,6 +319,10 @@ void IDECDROMDevice::set_image(IDEImage *image)
 
         IDEImageFile *imagefile = (IDEImageFile*)image;
         valid = loadAndValidateCueSheet(imagefile->get_folder(), cuesheetname);
+#ifdef ENABLE_AUDIO_OUTPUT
+    if (valid)
+        audio_set_cue_parser(&m_cueparser, imagefile->get_file());
+#endif // ENABLE_AUDIO_OUTPUT
     }
     else if (image && image->is_folder())
     {
@@ -343,6 +349,10 @@ void IDECDROMDevice::set_image(IDEImage *image)
             logmsg("No valid .cue sheet found in folder '", foldername, "'");
             image = nullptr;
         }
+#ifdef ENABLE_AUDIO_OUTPUT
+        else 
+            audio_set_cue_parser(&m_cueparser, folder);
+#endif // ENABLE_AUDIO_OUTPUT
     }
 
     if (!valid)
@@ -838,7 +848,7 @@ bool IDECDROMDevice::atapi_play_audio_msf(const uint8_t *cmd)
     if (m == 0xFF && s == 0xFF && f == 0xFF)
     {
             // request to start playback from 'current position'
-            start_lba = audio_get_file_position() / ATAPI_AUDIO_CD_SECTOR_SIZE;
+            start_lba = audio_get_lba_position();
     }
 #endif
 
@@ -1048,20 +1058,20 @@ bool IDECDROMDevice::doReadFullTOC(uint8_t session, uint16_t allocationLength, b
 
 void IDECDROMDevice::cdromGetAudioPlaybackStatus(uint8_t *status, uint32_t *current_lba, bool current_only)
 {
-    IDEImageFile *image = (IDEImageFile*) m_image;
 #ifdef ENABLE_AUDIO_OUTPUT
-    if (status) *status = audio_get_status_code(); // audio playback status code 
-#else
-    if (status) *status = 0; // audio status code for 'unsupported/invalid' and not-playing indicator
-#endif
-    if (current_lba)
-    {
-        if (image && image->is_open()) {
-            *current_lba = image->file_position() / ATAPI_AUDIO_CD_SECTOR_SIZE;
+    if (status) {
+        if (current_only) {
+            *status = audio_is_playing() ? 1 : 0;
         } else {
-            *current_lba = 0;
+            *status = (uint8_t) audio_get_status_code();
         }
     }
+    if (current_lba) *current_lba = audio_get_lba_position();
+#else
+    if (status) *status = 0; // audio status code for 'unsupported/invalid' and not-playing indicator
+    if (current_lba) *current_lba = 0;
+#endif
+
 }
 
 bool IDECDROMDevice::doReadSubChannel(bool time, bool subq, uint8_t parameter, uint8_t track_number, uint16_t allocation_length)
@@ -1873,40 +1883,17 @@ void IDECDROMDevice::atapi_set_mode_page(uint8_t page_ctrl, uint8_t page_idx, co
 /* CD-ROM audio playback              */
 /**************************************/
 
-void cdromGetAudioPlaybackStatus(uint8_t *status, uint32_t *current_lba, bool current_only)
-{
-#ifdef ENABLE_AUDIO_OUTPUT
-    if (status) {
-        if (current_only) {
-            *status = audio_is_playing() ? 1 : 0;
-        } else {
-            *status = (uint8_t) audio_get_status_code();
-        }
-    }
-    *current_lba = audio_get_file_position() / ATAPI_AUDIO_CD_SECTOR_SIZE;
-#else
-    if (status) *status = 0; // audio status code for 'unsupported/invalid' and not-playing indicator
-#endif
-}
 
 bool IDECDROMDevice::doPlayAudio(uint32_t lba, uint32_t length)
 {
 #ifdef ENABLE_AUDIO_OUTPUT
-    dbgmsg("------ CD-ROM Play Audio request at ", lba, " for ", length, " sectors");
+    dbgmsg("------ CD-ROM Play Audio request at ", (int) lba, " for ",  (int)length, " sectors");
 
     // Per Annex C terminate playback immediately if already in progress on
     // the current target. Non-current targets may also get their audio
     // interrupted later due to hardware limitations
     audio_stop();
 
-    // if transfer length is zero no audio playback happens.
-    // don't treat as an error per SCSI-2; handle via short-circuit
-
-    if (length == 0)
-    {
-        audio_set_file_position(lba);
-        return atapi_cmd_ok();
-    }
 
     // if actual playback is requested perform steps to verify prior to playback
     if (m_devinfo.medium_type == ATAPI_MEDIUM_CDDA || m_devinfo.medium_type == ATAPI_MEDIUM_CDMIXED)
@@ -1915,7 +1902,7 @@ bool IDECDROMDevice::doPlayAudio(uint32_t lba, uint32_t length)
         if (lba == 0xFFFFFFFF)
         {
             // request to start playback from 'current position'
-            lba = audio_get_file_position() / ATAPI_AUDIO_CD_SECTOR_SIZE;
+            lba = audio_get_lba_position();
         }
 
         CUETrackInfo trackinfo = getTrackFromLBA(lba);
@@ -1932,9 +1919,12 @@ bool IDECDROMDevice::doPlayAudio(uint32_t lba, uint32_t length)
             return atapi_cmd_error(ATAPI_SENSE_ILLEGAL_REQ, ATAPI_ASC_ILLEGAL_MODE_FOR_TRACK);
         }
 
+        // if transfer length is zero no audio playback happens.
+        // don't treat as an error per SCSI-2; audio_play returns true
+
         // playback request appears to be sane, so perform it
         // see earlier note for context on the block length below
-        if (!audio_play(offset, offset + length * trackinfo.sector_length, false))
+        if (!audio_play(lba, length, false))
         {
             // Underlying data/media error? Fake a disk scratch, which should
             // be a condition most CD-DA players are expecting
