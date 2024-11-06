@@ -25,7 +25,9 @@
 #include <memory>
 #include <SdFat.h>
 #include <ZuluIDE_config.h>
+#include <CUEParser.h>
 
+#define MAX_CUE_SHEET_SIZE 1024
 
 namespace zuluide::images {
 
@@ -55,8 +57,14 @@ namespace zuluide::images {
     bool IsFirst();
     bool IsLast();
     void Cleanup();
+    /***
+	[En/Dis]able parsing bin cue sheets to check size of multi-part bin/cue images.
+	Defaults to true.
+     **/
+    void SetParseMultiPartBinCueSize(bool value);
   private:
     bool Move(bool forward = true);
+    bool FetchSizeFromCueFile();
     FsFile currentFile;
     FsFile root;
     char candidate[MAX_FILE_PATH + 1];
@@ -70,6 +78,8 @@ namespace zuluide::images {
     uint32_t lastIdx;
     bool currentIsFirst;
     bool currentIsLast;
+    bool parseMultiPartBinCueSize;
+    char cuesheet[MAX_CUE_SHEET_SIZE];
   };
   
 }
