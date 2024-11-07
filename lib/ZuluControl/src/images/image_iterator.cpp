@@ -30,7 +30,7 @@ static bool is_valid_filename(const char *name);
 static bool fileIsValidImage(FsFile& file, const char* fileName);
 
 ImageIterator::ImageIterator() :
-  fileCount (0), isEmpty(true)
+  fileCount (0), isEmpty(true), parseMultiPartBinCueSize(true)
 {
 }
 
@@ -91,6 +91,7 @@ bool ImageIterator::Move(bool forward) {
       currentFile.getName(current_candidate, sizeof(current_candidate));
       bool isValid = fileIsValidImage(currentFile, current_candidate);
       next = currentFile.dirIndex();
+
       currentFile.close();
 
       if (!isValid)
@@ -132,7 +133,15 @@ bool ImageIterator::Move(bool forward) {
   if (result_candidate[0] && currentFile.open(&root, result_candidate, O_RDONLY))
   {
     currentFile.getName(candidate, sizeof(candidate));
-    candidateSizeInBytes = currentFile.fileSize();
+    if (currentFile.isDirectory()) {
+      // Indicates probable multi-part bin/cue.
+      if(!FetchSizeFromCueFile()) {
+	logmsg("Failed to fetch bin/cue size.");
+      }
+    } else {
+      candidateSizeInBytes = currentFile.fileSize();
+    }
+    
     currentFile.close();
     currentIsLast = (matchingIdx == lastIdx);
     currentIsFirst = (matchingIdx == firstIdx);
@@ -147,11 +156,18 @@ bool ImageIterator::Move(bool forward) {
 }
 
 bool ImageIterator::MoveFirst()
-{
+{  
   if (currentFile.open(&root, firstIdx, O_RDONLY))
   {
     currentFile.getName(candidate, sizeof(candidate));
-    candidateSizeInBytes = currentFile.fileSize();
+    if (currentFile.isDirectory()) {
+      // Indicates probable multi-part bin/cue.
+      if(!FetchSizeFromCueFile()) {
+	logmsg("Failed to fetch bin/cue size.");
+      }
+    } else {
+      candidateSizeInBytes = currentFile.fileSize();
+    }
     curIdx = currentFile.dirIndex();
     currentIsLast = (lastIdx == firstIdx);
     currentIsFirst = true;
@@ -167,7 +183,15 @@ bool ImageIterator::MoveLast()
   if (currentFile.open(&root, lastIdx, O_RDONLY))
   {
     currentFile.getName(candidate, sizeof(candidate));
-    candidateSizeInBytes = currentFile.fileSize();
+    if (currentFile.isDirectory()) {
+      // Indicates probable multi-part bin/cue.
+      if(!FetchSizeFromCueFile()) {
+	logmsg("Failed to fetch bin/cue size.");
+      }
+    } else {
+      candidateSizeInBytes = currentFile.fileSize();
+    }
+    
     curIdx = currentFile.dirIndex();
     currentIsLast = lastIdx;
     currentIsFirst = (lastIdx == firstIdx);
@@ -182,7 +206,15 @@ bool ImageIterator::MoveToFile(char *filename)
   if (currentFile.open(&root, filename, O_RDONLY))
   {
     currentFile.getName(candidate, sizeof(candidate));
-    candidateSizeInBytes = currentFile.fileSize();
+    if (currentFile.isDirectory()) {
+      // Indicates probable multi-part bin/cue.
+      if(!FetchSizeFromCueFile()) {
+	logmsg("Failed to fetch bin/cue size.");
+      }
+    } else {
+      candidateSizeInBytes = currentFile.fileSize();
+    }
+    
     curIdx = currentFile.dirIndex();
     currentIsLast = (curIdx == lastIdx);
     currentIsFirst = (curIdx == firstIdx);
@@ -332,5 +364,80 @@ static bool is_valid_filename(const char *name)
       }
   }
 
+  return true;
+}
+
+bool tryReadQueueSheet(FsFile &cuesheetfile, char* cuesheet) {
+    if (!cuesheetfile.isOpen()) {
+      logmsg("---- Failed to load CUE sheet.");
+      return false;
+    }
+    
+    if (cuesheetfile.size() > MAX_CUE_SHEET_SIZE) {
+        logmsg("---- WARNING: CUE sheet length ", (int)cuesheetfile.size(), " exceeds maximum ",
+	       (int)sizeof(cuesheet), " bytes");
+	return false;
+    }
+
+    cuesheetfile.read(cuesheet, MAX_CUE_SHEET_SIZE);
+    return true;
+}
+
+bool searchForCueSheetFile(FsFile *directory, FsFile &outputFile) {
+  while (outputFile.openNext(directory, O_RDONLY)) {
+    char filename[MAX_FILE_PATH + 1];
+    if (outputFile.getName(filename, sizeof(filename)) &&
+	strncasecmp(filename + strlen(filename) - 4, ".cue", 4) == 0) {
+      return true;    
+    }
+
+    outputFile.close();
+  }
+
+  return false;
+}
+
+bool ImageIterator::FetchSizeFromCueFile() {
+  if (!parseMultiPartBinCueSize) {
+    return false;
+  }
+  
+  FsFile file;
+  if (!searchForCueSheetFile(&currentFile, file)) {
+    logmsg("Unabled find CUE sheet.");
+    return false;
+  }
+    
+  if (!tryReadQueueSheet(file, cuesheet)) {
+    logmsg("Failed to read the queuesheet into memory.");
+    file.close();
+    return false;
+  }
+  
+  CUEParser parser(cuesheet);
+  parser.restart();
+  auto current = parser.next_track(0);
+  uint64_t totalSize = 0;
+  std::string currentfilename = "";
+  // Check each track. Whenever a file changes, sum its size.
+  while (current) {
+    if (currentfilename != current->filename) {
+      // This track file has not be summed yet.
+      FsFile trackFile;
+      if (trackFile.open(&currentFile, current->filename, O_RDONLY)) {
+	totalSize += trackFile.fileSize();
+	trackFile.close();
+	currentfilename = current->filename;
+      } else {
+	// If we cannot open a track file, we cannot proceed in a meaningful way.
+	return false;
+      }
+    }
+    
+    current = parser.next_track(totalSize);
+  }
+    
+  candidateSizeInBytes = totalSize;
+  file.close();
   return true;
 }

@@ -43,7 +43,7 @@
 #include <Wire.h>
 #include <Adafruit_SSD1306.h>
 #include "ZuluIDE_platform_gpio.h"
-#include "display_ssd1306.h"
+#include "display/display_ssd1306.h"
 #include "rotary_control.h"
 #include <zuluide/i2c/i2c_server.h>
 #include <minIni.h>
