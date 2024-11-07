@@ -64,6 +64,13 @@
 #define GPIO_I2C_SCL 27
 #define GPIO_EXT_INTERRUPT 15
 
+#ifdef ENABLE_AUDIO_OUTPUT
+    // IO expander I2C pins being used as SPI for audio
+    #define GPIO_I2S_BCLK  12
+    #define GPIO_I2S_LRCLK 13
+    #define GPIO_I2S_DOUT  14
+#endif
+
 // GPIO Expansion bus pins IO0-IO7
 #define EXP_ROT_A_PIN   0
 #define EXP_ROT_B_PIN   1

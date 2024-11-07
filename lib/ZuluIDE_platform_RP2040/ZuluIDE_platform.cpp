@@ -30,6 +30,7 @@
 #include <hardware/adc.h>
 #include <hardware/uart.h>
 #include <hardware/spi.h>
+#include <hardware/pll.h>
 #include <hardware/structs/xip_ctrl.h>
 #include <hardware/structs/usb.h>
 #include <hardware/structs/iobank0.h>
@@ -46,6 +47,10 @@
 #include "rotary_control.h"
 #include <zuluide/i2c/i2c_server.h>
 #include <minIni.h>
+
+#ifdef ENABLE_AUDIO_OUTPUT
+#  include "audio.h"
+#endif // ENABLE_AUDIO_OUTPUT
 
 const char *g_platform_name = PLATFORM_NAME;
 static uint32_t g_flash_chip_size = 0;
@@ -82,6 +87,44 @@ static void gpio_conf(uint gpio, enum gpio_function fn, bool pullup, bool pulldo
     }
 }
 
+
+#ifdef ENABLE_AUDIO_OUTPUT
+// Increases clk_sys and clk_peri to 135.428571MHz at runtime to support
+// division to audio output rates. Invoke before anything is using clk_peri
+// except for the logging UART, which is handled below.
+static void reclock_for_audio() {
+    // ensure UART is fully drained before we mess up its clock
+    uart_tx_wait_blocking(uart0);
+    // switch clk_sys and clk_peri to pll_usb
+    // see code in 2.15.6.1 of the datasheet for useful comments
+    clock_configure(clk_sys,
+            CLOCKS_CLK_SYS_CTRL_SRC_VALUE_CLKSRC_CLK_SYS_AUX,
+            CLOCKS_CLK_SYS_CTRL_AUXSRC_VALUE_CLKSRC_PLL_USB,
+            48 * MHZ,
+            48 * MHZ);
+    clock_configure(clk_peri,
+            0,
+            CLOCKS_CLK_PERI_CTRL_AUXSRC_VALUE_CLKSRC_PLL_USB,
+            48 * MHZ,
+            48 * MHZ);
+    // reset PLL for 135.428571MHz
+    pll_init(pll_sys, 1, 948000000, 7, 1);
+    // switch clocks back to pll_sys
+    clock_configure(clk_sys,
+            CLOCKS_CLK_SYS_CTRL_SRC_VALUE_CLKSRC_CLK_SYS_AUX,
+            CLOCKS_CLK_SYS_CTRL_AUXSRC_VALUE_CLKSRC_PLL_SYS,
+            135428571,
+            135428571);
+    clock_configure(clk_peri,
+            0,
+            CLOCKS_CLK_PERI_CTRL_AUXSRC_VALUE_CLKSRC_PLL_SYS,
+            135428571,
+            135428571);
+    // reset UART for the new clock speed
+    uart_init(uart0, 1000000);
+}
+#endif
+
 void platform_init()
 {
     // Make sure second core is stopped
@@ -110,7 +153,8 @@ void platform_init()
     logmsg("DIP switch settings: cablesel ", (int)g_dip_cable_sel, ", drive_id ", (int)g_dip_drive_id, " debug log ", (int)dbglog);
 
     g_log_debug = dbglog;
-    
+
+
     // Get flash chip size
     uint8_t cmd_read_jedec_id[4] = {0x9f, 0, 0, 0};
     uint8_t response_jedec[4] = {0};
@@ -140,8 +184,6 @@ void platform_init()
     //        pin                 function       pup   pdown  out    state fast
     gpio_conf(GPIO_I2C_SCL,       GPIO_FUNC_I2C, true, false, false,  true, true);
     gpio_conf(GPIO_I2C_SDA,       GPIO_FUNC_I2C, true, false, false,  true, true);
-    //gpio_conf(GPIO_I2C_SDA,   GPIO_FUNC_SIO, true,false, true,  true, true); // FIXME: DEBUG
-    gpio_conf(GPIO_EXT_INTERRUPT, GPIO_FUNC_SIO, false, false, true,  false, false);
 
     // FPGA bus
     // Signals will be switched between SPI/PIO by rp2040_fpga.cpp, but pull-ups are configured here.
@@ -177,6 +219,16 @@ void platform_late_init()
     {
         logmsg("ERROR: FPGA initialization failed");
     }
+#ifdef ENABLE_AUDIO_OUTPUT
+    logmsg("I2S audio to expansion header enabled");
+    reclock_for_audio();
+    logmsg("-- System clock is set to ", (int) clock_get_hz(clk_sys),  "Hz");
+#endif
+#ifdef ENABLE_AUDIO_OUTPUT
+    // one-time control setup for DMA channels and second core
+    audio_init();
+#endif
+
 }
 
 bool platform_check_for_controller()
@@ -465,6 +517,17 @@ static void adc_poll()
         adc_run(true);
         initialized = true;
     }
+
+#ifdef ENABLE_AUDIO_OUTPUT
+    /*
+    * If ADC sample reads are done, either via direct reading, FIFO, or DMA,
+    * at the same time a SPI DMA write begins, it appears that the first
+    * 16-bit word of the DMA data is lost. This causes the bitstream to glitch
+    * and audio to 'pop' noticably. For now, just disable ADC reads when audio
+    * is playing.
+    */
+   if (audio_is_active()) return;
+#endif  // ENABLE_AUDIO_OUTPUT
 
     int adc_value_max = 0;
     while (!adc_fifo_is_empty())
@@ -786,6 +849,10 @@ void platform_poll()
     adc_poll();
     usb_log_poll();
     usb_command_poll();
+
+#ifdef ENABLE_AUDIO_OUTPUT
+    audio_poll();
+#endif // ENABLE_AUDIO_OUTPUT
 }
 
 /*****************************************/
@@ -892,12 +959,12 @@ const void * btldr_vectors[2] = {&__StackTop, (void*)&btldr_reset_handler};
 /********************************/
 void zuluide_setup(void)
 {
-  if (!platform_check_for_controller())
-  {
-    rp2040.idleOtherCore();
-    multicore_reset_core1();
-    dbgmsg("No Zulu Control board or I2C server found, disabling 2nd core");
-  }
+   if (!platform_check_for_controller())
+   {
+     rp2040.idleOtherCore();
+     multicore_reset_core1();
+     dbgmsg("No Zulu Control board or I2C server found, disabling 2nd core");
+   }
 }
 
 void zuluide_setup1(void)

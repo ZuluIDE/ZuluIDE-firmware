@@ -92,7 +92,7 @@ bool SdioCard::begin(SdioConfig sdioConfig)
     sdio_status_t status;
     
     // Initialize at 1 MHz clock speed
-    rp2040_sdio_init(25);
+    rp2040_sdio_init(27);
 
     // Establish initial connection with the card
     for (int retries = 0; retries < 5; retries++)
