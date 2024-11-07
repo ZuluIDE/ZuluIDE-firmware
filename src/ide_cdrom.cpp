@@ -755,7 +755,10 @@ bool IDECDROMDevice::atapi_get_event_status_notification(const uint8_t *cmd)
                 buf[5] = 0x02; // Media Present
                 buf[6] = 0; // Start slot
                 buf[7] = 0; // End slot
-                esn_next_event();
+#if ENABLE_AUDIO_OUTPUT
+                audio_stop();
+#endif
+                 esn_next_event();
             }
             else if (m_esn.current_event == esn_event_t::MMediaRemoval)
             {
@@ -1554,15 +1557,15 @@ uint64_t IDECDROMDevice::capacity_lba()
 
 void IDECDROMDevice::eject_media()
 {
+#if ENABLE_AUDIO_OUTPUT
+    audio_stop();
+#endif
     char filename[MAX_FILE_PATH+1];
     m_image->get_filename(filename, sizeof(filename));
     logmsg("Device ejecting media: \"", filename, "\"");
     set_esn_event(esn_event_t::NoChange);
     m_removable.ejected = true;
-#if ENABLE_AUDIO_OUTPUT
-    // terminate audio playback if active on this target (MMC-1 Annex C)
-    audio_stop();
-#endif
+
 }
 
 void IDECDROMDevice::button_eject_media()
@@ -1573,6 +1576,9 @@ void IDECDROMDevice::button_eject_media()
 
 void IDECDROMDevice::insert_media(IDEImage *image)
 {
+#if ENABLE_AUDIO_OUTPUT
+    audio_stop();
+#endif
     zuluide::images::ImageIterator img_iterator;
     char filename[MAX_FILE_PATH+1];
     if (m_devinfo.removable) 
