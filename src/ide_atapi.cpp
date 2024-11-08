@@ -661,6 +661,7 @@ bool IDEATAPIDevice::atapi_recv_data_block(uint8_t *data, uint16_t blocksize)
 
 bool IDEATAPIDevice::handle_atapi_command(const uint8_t *cmd)
 {
+
     // INQUIRY and REQUEST SENSE bypass unit attention
     switch (cmd[0])
     {
@@ -725,6 +726,13 @@ bool IDEATAPIDevice::atapi_cmd_not_ready_error()
 
 bool IDEATAPIDevice::atapi_cmd_error(uint8_t sense_key, uint16_t sense_asc)
 {
+    // Some OSes depend on the the not ready state to be emitted at least once after
+    // a media change. This allows not ready to be emitted once and then goes to a normal state
+    if (sense_key == ATAPI_SENSE_NOT_READY && m_atapi_state.not_ready && is_medium_present())
+    {
+        m_atapi_state.not_ready = false;
+    }
+
     if (m_atapi_state.data_state == ATAPI_DATA_WRITE)
     {
         ide_phy_stop_transfers();
@@ -798,7 +806,6 @@ bool IDEATAPIDevice::atapi_test_unit_ready(const uint8_t *cmd)
 
     if (m_atapi_state.not_ready)
     {
-        m_atapi_state.not_ready = false;
         return atapi_cmd_not_ready_error();
     }
     return atapi_cmd_ok();
