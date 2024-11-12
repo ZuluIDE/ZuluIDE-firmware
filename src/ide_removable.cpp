@@ -60,7 +60,7 @@ void IDERemovable::set_image(IDEImage *image)
     if (image)
     {
         char filename[MAX_FILE_PATH] = "";
-        image->get_filename(filename, sizeof(filename));
+        image->get_image_name(filename, sizeof(filename));
 
         if (image->capacity() % REMOVABLE_SECTORSIZE != 0)
         {

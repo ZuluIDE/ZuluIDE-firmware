@@ -1349,7 +1349,7 @@ void IDEATAPIDevice::button_eject_media()
 void IDEATAPIDevice::eject_media()
 {
     char filename[MAX_FILE_PATH+1];
-    m_image->get_filename(filename, sizeof(filename));
+    m_image->get_image_name(filename, sizeof(filename));
     logmsg("Device ejecting media: \"", filename, "\"");
     m_removable.ejected = true;
 }
@@ -1373,11 +1373,13 @@ void IDEATAPIDevice::insert_media(IDEImage *image)
                 img_iterator.MoveNext();
 
             g_ide_imagefile.clear();
-            if (g_ide_imagefile.open_file(img_iterator.Get().GetFilename().c_str(), true))
+            if (g_ide_imagefile.open_file(img_iterator.Get().GetFilename().c_str()))
             {
                 logmsg("-- Device loading media: \"", img_iterator.Get().GetFilename().c_str(), "\"");
                 m_removable.ejected = false;
                 set_image(&g_ide_imagefile);
+                m_atapi_state.unit_attention = true;
+                m_atapi_state.sense_asc = ATAPI_ASC_MEDIUM_CHANGE;
                 set_not_ready(true);
             }
         }

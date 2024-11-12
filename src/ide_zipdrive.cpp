@@ -123,8 +123,8 @@ void IDEZipDrive::set_image(IDEImage *image)
 {
     if (image)
     {
-        char filename[MAX_FILE_PATH] = "";
-        image->get_filename(filename, sizeof(filename));
+        char filename[MAX_FILE_PATH + 1] = {0};
+        image->get_image_name(filename, sizeof(filename));
         uint64_t actual_size = image->capacity();
         uint64_t expected_size = ZIP100_SECTORSIZE * ZIP100_SECTORCOUNT;
         // use filename for Zip disk serial string
