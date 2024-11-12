@@ -210,4 +210,7 @@ protected:
 
     // ATAPI standard inquiry string settings
     void set_inquiry_strings(const char* default_vendor, const char* default_product, const char* default_version);
+
+    // Set not ready if enabled via config ini
+    virtual void set_not_ready(bool not_ready);
 };

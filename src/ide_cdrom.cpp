@@ -1310,6 +1310,13 @@ bool IDECDROMDevice::doReadCD(uint32_t lba, uint32_t length, uint8_t sector_type
             m_cd_read_format.sector_data_length = 2352;
             m_cd_read_format.sector_length_out = 2352;
         }
+        else if (trackinfo.track_mode == CUETrack_MODE2_2352 && main_channel == 0x10)
+        {
+            m_cd_read_format.sector_length_file = 2352;
+            m_cd_read_format.sector_data_skip = 24;
+            m_cd_read_format.sector_data_length = 2048;
+            m_cd_read_format.sector_length_out = 2048;
+        }
         else
         {
             dbgmsg("---- Unsupported channel request for track type ", (int)trackinfo.track_mode);
@@ -1494,7 +1501,8 @@ bool IDECDROMDevice::loadAndValidateCueSheet(FsFile *dir, const char *cuesheetna
 
         if (trackinfo->track_mode != CUETrack_AUDIO &&
             trackinfo->track_mode != CUETrack_MODE1_2048 &&
-            trackinfo->track_mode != CUETrack_MODE1_2352)
+            trackinfo->track_mode != CUETrack_MODE1_2352 &&
+            trackinfo->track_mode != CUETrack_MODE2_2352)
         {
             logmsg("---- Warning: track ", trackinfo->track_number, " has unsupported mode ", (int)trackinfo->track_mode);
         }
@@ -1601,6 +1609,7 @@ void IDECDROMDevice::insert_media(IDEImage *image)
             m_removable.ejected = false;
             set_image(&g_ide_imagefile);
             set_esn_event(esn_event_t::MNewMedia);
+            set_not_ready(true);
         }
     }
     img_iterator.Cleanup();
