@@ -730,7 +730,7 @@ bool IDEATAPIDevice::atapi_cmd_error(uint8_t sense_key, uint16_t sense_asc)
     // a media change. This allows not ready to be emitted once and then goes to a normal state
     if (sense_key == ATAPI_SENSE_NOT_READY && m_atapi_state.not_ready && is_medium_present())
     {
-        m_atapi_state.not_ready = false;
+        set_not_ready(false);
     }
 
     if (m_atapi_state.data_state == ATAPI_DATA_WRITE)
@@ -783,7 +783,7 @@ bool IDEATAPIDevice::atapi_cmd_ok()
     regs.lba_mid = 0xFE;
     regs.lba_high = 0xFF;
     ide_phy_set_regs(&regs);
-    ide_phy_assert_irq(IDE_STATUS_DEVRDY);
+    ide_phy_assert_irq(IDE_STATUS_DEVRDY | IDE_STATUS_DSC);
 
     return true;
 }
@@ -1362,7 +1362,7 @@ void IDEATAPIDevice::insert_media(IDEImage *image)
         {
             set_image(image);
             m_removable.ejected = false;
-            m_atapi_state.not_ready = true;
+            set_not_ready(true);
         }
         else if (m_removable.ejected)
         {
@@ -1396,7 +1396,7 @@ void IDEATAPIDevice::insert_media(IDEImage *image)
                     set_image(&g_ide_imagefile);
                     logmsg("-- Device loading media: \"", img_iterator.Get().GetFilename().c_str(), "\"");
                     m_removable.ejected = false;
-                    m_atapi_state.not_ready = true;
+                    set_not_ready(true);
                 }
             }
             img_iterator.Cleanup();
@@ -1430,4 +1430,10 @@ void IDEATAPIDevice::set_inquiry_strings(const char* default_vendor, const char*
     memset(input_str, ' ', 4);
     input_len = ini_gets("IDE","atapi_version", default_version, input_str, 5, CONFIGFILE);
     memcpy(m_devinfo.atapi_version, input_str, input_len);
+}
+
+void IDEATAPIDevice::set_not_ready(bool not_ready)
+{
+    if (ini_getbool("IDE", "set_not_ready_on_insert", 0, CONFIGFILE))
+        m_atapi_state.not_ready = not_ready;
 }
