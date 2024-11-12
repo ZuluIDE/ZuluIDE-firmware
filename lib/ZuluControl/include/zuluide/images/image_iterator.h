@@ -50,7 +50,7 @@ namespace zuluide::images {
     bool MoveLast();
     // Sets Interator to file
     // return true if successful
-    bool MoveToFile(char *filename);
+    bool MoveToFile(const char *filename);
     bool IsEmpty();
     int GetFileCount();
     void Reset();

@@ -201,7 +201,7 @@ bool ImageIterator::MoveLast()
   return false;
 }
 
-bool ImageIterator::MoveToFile(char *filename)
+bool ImageIterator::MoveToFile(const char *filename)
 {
   if (currentFile.open(&root, filename, O_RDONLY))
   {

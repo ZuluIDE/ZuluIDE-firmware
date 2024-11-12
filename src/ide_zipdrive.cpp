@@ -452,7 +452,7 @@ bool IDEZipDrive::atapi_inquiry(const uint8_t *cmd)
 
     if (m_removable.reinsert_media_on_inquiry)
     {
-        insert_media();
+        insert_next_media(m_image);
     }
 
     return atapi_cmd_ok();

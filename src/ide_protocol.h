@@ -73,8 +73,11 @@ public:
     // Called when an SD card is reinserted
     virtual void sd_card_inserted() = 0;
 
-    // For removable media devices
+    // For removable media devices - insert current
     virtual void insert_media(IDEImage *image = nullptr) = 0;
+
+    // For removable media devices - insert next
+    virtual void insert_next_media(IDEImage *image = nullptr) = 0;
 
 
 protected:

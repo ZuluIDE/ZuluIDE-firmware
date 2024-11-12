@@ -66,7 +66,9 @@ public:
 
     virtual void eject_media();
 
-    virtual void insert_media(IDEImage *image = nullptr);
+    virtual void insert_media(IDEImage *image = nullptr) override;
+
+    virtual void insert_next_media(IDEImage *image = nullptr) override;
 
     virtual void sd_card_inserted() override;
 

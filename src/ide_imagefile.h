@@ -50,6 +50,9 @@ public:
     // Return filename or false if not file-backed
     virtual bool get_filename(char *buf, size_t buflen) = 0;
 
+    // Get the filename or folder name of the image depending on is_folder
+    virtual bool get_image_name(char *buf, size_t buflen) = 0;
+
     // Return image size in bytes
     virtual uint64_t capacity() = 0;
 
@@ -108,6 +111,7 @@ public:
     void close();
 
     virtual bool get_filename(char *buf, size_t buflen);
+    virtual bool get_image_name(char *buf, size_t buflen);
     virtual uint64_t capacity();
     virtual uint64_t file_position();
     virtual bool is_open();
