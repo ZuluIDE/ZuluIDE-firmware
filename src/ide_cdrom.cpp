@@ -1588,7 +1588,7 @@ void IDECDROMDevice::insert_media(IDEImage *image)
             set_image(image);
             set_esn_event(esn_event_t::MNewMedia);
             m_removable.ejected = false;
-            m_atapi_state.not_ready = true;
+            set_not_ready(true);
         }
         else if (m_removable.ejected)
         {
@@ -1624,7 +1624,7 @@ void IDECDROMDevice::insert_media(IDEImage *image)
                     logmsg("-- Device loading media: \"", img_iterator.Get().GetFilename().c_str(), "\"");
                     set_esn_event(esn_event_t::MNewMedia);
                     m_removable.ejected = false;
-                    m_atapi_state.not_ready = true;
+                    set_not_ready(true);
                 }
             }
             img_iterator.Cleanup();
