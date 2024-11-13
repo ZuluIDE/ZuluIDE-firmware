@@ -27,7 +27,7 @@
 #include <ZuluIDE_config.h>
 #include <CUEParser.h>
 
-#define MAX_CUE_SHEET_SIZE 1024
+#define MAX_CUE_SHEET_SIZE 4096
 
 namespace zuluide::images {
 
