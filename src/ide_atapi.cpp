@@ -870,9 +870,9 @@ bool IDEATAPIDevice::atapi_inquiry(const uint8_t *cmd)
     inquiry[ATAPI_INQUIRY_REMOVABLE_MEDIA] = m_devinfo.removable ? 0x80 : 0;
     inquiry[ATAPI_INQUIRY_ATAPI_VERSION] = 0x21;
     inquiry[ATAPI_INQUIRY_EXTRA_LENGTH] = count - 5;
-    strncpy((char*)&inquiry[ATAPI_INQUIRY_VENDOR], m_devinfo.atapi_vendor, 8);
-    strncpy((char*)&inquiry[ATAPI_INQUIRY_PRODUCT], m_devinfo.atapi_product, 16);
-    strncpy((char*)&inquiry[ATAPI_INQUIRY_REVISION], m_devinfo.atapi_version, 4);
+    memcpy(&inquiry[ATAPI_INQUIRY_VENDOR], m_devinfo.atapi_vendor, 8);
+    memcpy(&inquiry[ATAPI_INQUIRY_PRODUCT], m_devinfo.atapi_product, 16);
+    memcpy(&inquiry[ATAPI_INQUIRY_REVISION], m_devinfo.atapi_version, 4);
 
     if (req_bytes < count) count = req_bytes;
     atapi_send_data(inquiry, count);
@@ -1444,17 +1444,23 @@ void IDEATAPIDevice::set_inquiry_strings(const char* default_vendor, const char*
     char input_str[17];
     uint8_t input_len;
 
-    memset(input_str, ' ', 16);
+    memset(input_str, '\0', 17);
     input_len = ini_gets("IDE", "atapi_product", default_product, input_str, 17, CONFIGFILE);
+    if (input_len > 16) input_len = 16;
     memcpy(m_devinfo.atapi_product, input_str, input_len);
+    formatDriveInfoField(m_devinfo.atapi_product, 16, false);
 
-    memset(input_str, ' ', 8);
+    memset(input_str, '\0', 9);
     input_len = ini_gets("IDE","atapi_vendor", default_vendor, input_str, 9, CONFIGFILE);
+    if (input_len > 8) input_len = 8;
     memcpy(m_devinfo.atapi_vendor, input_str, input_len);
+    formatDriveInfoField(m_devinfo.atapi_vendor, 8, false);
 
-    memset(input_str, ' ', 4);
+    memset(input_str, '\0', 5);
     input_len = ini_gets("IDE","atapi_version", default_version, input_str, 5, CONFIGFILE);
+    if (input_len > 16) input_len = 4;
     memcpy(m_devinfo.atapi_version, input_str, input_len);
+    formatDriveInfoField(m_devinfo.atapi_version, 4, false);
 }
 
 void IDEATAPIDevice::set_not_ready(bool not_ready)

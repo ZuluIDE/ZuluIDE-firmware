@@ -351,12 +351,9 @@ bool IDEZipDrive::atapi_inquiry(const uint8_t *cmd)
         inquiry[5] = 0x00;
         inquiry[6] = 0x00;
         inquiry[7] = 0x00;
-        // Vendor ID
-        memcpy(inquiry + 8, m_devinfo.atapi_vendor, sizeof(m_devinfo.atapi_vendor));
-        // Product ID
-        memcpy(inquiry + 15, m_devinfo.atapi_product, sizeof(m_devinfo.atapi_product));
-        // Product Revision
-        memcpy(inquiry + 32, m_devinfo.atapi_version, sizeof(m_devinfo.atapi_version));
+        memcpy(&inquiry[ATAPI_INQUIRY_VENDOR], m_devinfo.atapi_vendor, 8);
+        memcpy(&inquiry[ATAPI_INQUIRY_PRODUCT], m_devinfo.atapi_product, 16);
+        memcpy(&inquiry[ATAPI_INQUIRY_REVISION], m_devinfo.atapi_version, 4);
         // vendor specific data
         inquiry[36] = 0x30;
         inquiry[37] = 0x39;
@@ -404,13 +401,9 @@ bool IDEZipDrive::atapi_inquiry(const uint8_t *cmd)
         inquiry[1]   = 0x80;
         inquiry[3]   = 0x01;
         inquiry[4]   = 0x75;
-        // Vendor ID
-        memcpy(inquiry + 8, m_devinfo.atapi_vendor, sizeof(m_devinfo.atapi_vendor));
-        // Product ID
-        memcpy(inquiry + 15, m_devinfo.atapi_product, sizeof(m_devinfo.atapi_product));
-        // Product Revision
-        memcpy(inquiry + 32, m_devinfo.atapi_version, sizeof(m_devinfo.atapi_version));
-        // vendor specific data
+        memcpy(&inquiry[ATAPI_INQUIRY_VENDOR], m_devinfo.atapi_vendor, 8);
+        memcpy(&inquiry[ATAPI_INQUIRY_PRODUCT], m_devinfo.atapi_product, 16);
+        memcpy(&inquiry[ATAPI_INQUIRY_REVISION], m_devinfo.atapi_version, 4);
         inquiry[36]  = 0x30;
         inquiry[37]  = 0x38;
         inquiry[38]  = 0x2F;
