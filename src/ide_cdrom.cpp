@@ -290,6 +290,8 @@ void IDECDROMDevice::initialize(int devidx)
     m_devinfo.current_profile = ATAPI_PROFILE_CDROM;
 
     set_esn_event(esn_event_t::NoChange);
+
+    clear_cached_track_info();
 #if ENABLE_AUDIO_OUTPUT
 #endif // ENABLE_AUDIO_OUTPUT
 }
@@ -304,6 +306,7 @@ void IDECDROMDevice::set_image(IDEImage *image)
 {
     char filename[MAX_FILE_PATH];
     bool valid = false;
+    clear_cached_track_info();
 
     IDEATAPIDevice::set_image(image);
     m_selected_file_index = -1;
@@ -1725,9 +1728,16 @@ uint32_t IDECDROMDevice::getLeadOutLBA(const CUETrackInfo* lasttrack)
 // Fetch track info based on LBA
 CUETrackInfo IDECDROMDevice::getTrackFromLBA(uint32_t lba)
 {
+
+    if (lba >= m_cached_track_result.track_start && lba < m_cached_end_lba)
+        return m_cached_track_result;
+    else
+        clear_cached_track_info();
+
     CUETrackInfo result = {};
     const CUETrackInfo *tmptrack;
     uint64_t prev_capacity = 0;
+
     m_cueparser.restart();
     while ((tmptrack = m_cueparser.next_track(prev_capacity)) != NULL)
     {
@@ -1743,8 +1753,31 @@ CUETrackInfo IDECDROMDevice::getTrackFromLBA(uint32_t lba)
         selectBinFileForTrack(tmptrack);
         prev_capacity = m_image->capacity();
     }
+    m_cached_track_result = result;
+    if (tmptrack != NULL)
+    {
+        m_cached_end_lba = tmptrack->track_start;
+    }
+    else
+    {
 
+        if (selectBinFileForTrack(&m_cached_track_result))
+        {
+            uint64_t filesize = m_image->capacity();
+            if (m_cached_track_result.file_offset <= filesize)
+            {
+                m_cached_end_lba =  ((filesize - m_cached_track_result.file_offset) / m_cached_track_result.sector_length)
+                                    + m_cached_track_result.data_start;
+            }
+        }
+    }
     return result;
+}
+
+void IDECDROMDevice::clear_cached_track_info()
+{
+    m_cached_end_lba = 0;
+    memset(&m_cached_track_result, 0, sizeof(m_cached_track_result));
 }
 
 // Check if we need to switch the data .bin file when track changes.
