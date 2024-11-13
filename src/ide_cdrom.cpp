@@ -46,6 +46,7 @@
 #endif
 
 extern zuluide::status::StatusController g_StatusController;
+extern zuluide::status::SystemStatus g_previous_controller_status;
 
 static const uint8_t DiscInformation[] =
 {
@@ -293,7 +294,7 @@ void IDECDROMDevice::initialize(int devidx)
 #endif // ENABLE_AUDIO_OUTPUT
 }
 
-void IDECDROMDevice::reset() 
+void IDECDROMDevice::reset()
 {
     IDEATAPIDevice::reset();
     set_esn_event(esn_event_t::NoChange);
@@ -350,7 +351,7 @@ void IDECDROMDevice::set_image(IDEImage *image)
             image = nullptr;
         }
 #ifdef ENABLE_AUDIO_OUTPUT
-        else 
+        else
             audio_set_cue_parser(&m_cueparser, folder);
 #endif // ENABLE_AUDIO_OUTPUT
     }
@@ -721,14 +722,14 @@ bool IDECDROMDevice::atapi_get_event_status_notification(const uint8_t *cmd)
         buf[4] = 0x02; // Operational state has changed
         buf[5] = 0x00; // Power status
         buf[6] = 0x00; // Start slot
-        buf[7] = 0x01; // End slot 
+        buf[7] = 0x01; // End slot
         esn_next_event();
     }
     // Media class request
     else if (cmd[4] & 0x10)
     {
-        if (m_esn.request == IDECDROMDevice::esn_class_request_t::Media && 
-            (   
+        if (m_esn.request == IDECDROMDevice::esn_class_request_t::Media &&
+            (
                 m_esn.event == esn_event_t::MNewMedia
                 || m_esn.event == esn_event_t::MEjectRequest
                 || m_esn.event == esn_event_t::MMediaRemoval
@@ -746,7 +747,7 @@ bool IDECDROMDevice::atapi_get_event_status_notification(const uint8_t *cmd)
                 buf[1] = 6; // EventDataLength
                 buf[2] = m_esn.request; // Media status events
                 buf[3] = 0x12; // Supported events
-                if (m_esn.current_event == esn_event_t::MEjectRequest) 
+                if (m_esn.current_event == esn_event_t::MEjectRequest)
                     buf[4] = 0x01; // Eject Request
                 else if (m_esn.current_event == esn_event_t::MNewMedia)
                     buf[4] = 0x02; // New Media
@@ -776,7 +777,7 @@ bool IDECDROMDevice::atapi_get_event_status_notification(const uint8_t *cmd)
             }
         }
         // output media no change
-        else 
+        else
         {
             // Report media status events
             buf[0] = 0;
@@ -1569,7 +1570,7 @@ void IDECDROMDevice::eject_media()
     audio_stop();
 #endif
     char filename[MAX_FILE_PATH+1];
-    m_image->get_filename(filename, sizeof(filename));
+    m_image->get_image_name(filename, sizeof(filename));
     logmsg("Device ejecting media: \"", filename, "\"");
     set_esn_event(esn_event_t::NoChange);
     m_removable.ejected = true;
@@ -1589,55 +1590,76 @@ void IDECDROMDevice::insert_media(IDEImage *image)
 #endif
     zuluide::images::ImageIterator img_iterator;
     char filename[MAX_FILE_PATH+1];
-    if (m_devinfo.removable) 
+
+    img_iterator.Reset();
+    if (!img_iterator.IsEmpty())
     {
-        if (image != nullptr)
+        if (image && image->get_image_name(filename, sizeof(filename)))
         {
-            set_image(image);
-            set_esn_event(esn_event_t::MNewMedia);
+            if (!img_iterator.MoveToFile(filename))
+                img_iterator.MoveNext();
+        }
+        else
+            img_iterator.MoveNext();
+
+        g_ide_imagefile.clear();
+        if (g_ide_imagefile.open_file(img_iterator.Get().GetFilename().c_str(), true))
+        {
+            logmsg("-- Device loading media: \"", img_iterator.Get().GetFilename().c_str(), "\"");
             m_removable.ejected = false;
+            set_image(&g_ide_imagefile);
+            set_esn_event(esn_event_t::MNewMedia);
             set_not_ready(true);
         }
-        else if (m_removable.ejected)
-        {
-            img_iterator.Reset();
-            if (!img_iterator.IsEmpty())
-            {
-                if (m_image)
-                {
-                    m_image->get_filename(filename, sizeof(filename));
-                    if (!img_iterator.MoveToFile(filename))
-                    {
-                        img_iterator.MoveNext();
-                    }
-                }
-                else
-                {
-                    img_iterator.MoveNext();
-                }
+    }
+    img_iterator.Cleanup();
+}
 
-                if (img_iterator.IsLast())
-                {
-                    img_iterator.MoveFirst();
-                }
-                else
+void IDECDROMDevice::insert_next_media(IDEImage *image)
+{
+#if ENABLE_AUDIO_OUTPUT
+    audio_stop();
+#endif
+    zuluide::images::ImageIterator img_iterator;
+    char filename[MAX_FILE_PATH+1];
+    if (m_devinfo.removable && m_removable.ejected)
+    {
+        img_iterator.Reset();
+        if (!img_iterator.IsEmpty())
+        {
+            if (image && image->get_image_name(filename, sizeof(filename)))
+            {
+                if (!img_iterator.MoveToFile(filename))
                 {
                     img_iterator.MoveNext();
-                }
-            
-                g_ide_imagefile.clear();
-                if (g_ide_imagefile.open_file(img_iterator.Get().GetFilename().c_str(), true))
-                {
-                    set_image(&g_ide_imagefile);
-                    logmsg("-- Device loading media: \"", img_iterator.Get().GetFilename().c_str(), "\"");
-                    set_esn_event(esn_event_t::MNewMedia);
-                    m_removable.ejected = false;
-                    set_not_ready(true);
                 }
             }
-            img_iterator.Cleanup();
+            else
+            {
+                img_iterator.MoveNext();
+            }
+
+            if (img_iterator.IsLast())
+            {
+                img_iterator.MoveFirst();
+            }
+            else
+            {
+                img_iterator.MoveNext();
+            }
+
+            g_ide_imagefile.clear();
+            if (g_ide_imagefile.open_file(img_iterator.Get().GetFilename().c_str(), true))
+            {
+                m_removable.ejected = false;
+                g_previous_controller_status = g_StatusController.GetStatus();
+                g_StatusController.LoadImage(img_iterator.Get());
+                set_esn_event(esn_event_t::MNewMedia);
+            }
         }
+        img_iterator.Cleanup();
     }
+
 }
 
 void IDECDROMDevice::set_esn_event(esn_event_t event)
@@ -1775,8 +1797,8 @@ size_t IDECDROMDevice::atapi_get_configuration(uint8_t return_type, uint16_t fea
 
 #ifdef ENABLE_AUDIO_OUTPUT
     // CD audio feature (0x103, 259)
-    if (feature == ATAPI_FEATURE_CDAUDIO 
-        && (return_type == ATAPI_RT_SINGLE 
+    if (feature == ATAPI_FEATURE_CDAUDIO
+        && (return_type == ATAPI_RT_SINGLE
             || return_type == ATAPI_RT_ALL
             || (return_type == ATAPI_RT_ALL_CURRENT && !m_removable.ejected)))
     {

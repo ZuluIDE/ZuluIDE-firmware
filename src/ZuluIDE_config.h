@@ -27,8 +27,8 @@
 #include <ZuluIDE_platform.h>
 
 // Use variables for version number
-#define FW_VER_NUM      "2024.11.08"
-#define FW_VER_SUFFIX   "release"
+#define FW_VER_NUM      "2024.11.12"
+#define FW_VER_SUFFIX   "dev"
 #define ZULU_FW_VERSION FW_VER_NUM "-" FW_VER_SUFFIX
 
 // Configuration and log file paths
@@ -36,6 +36,7 @@
 #define LOGFILE     "zululog.txt"
 #define CRASHFILE   "zuluerr.txt"
 #define LICENSEFILE "zuluide.lic"
+#define LASTFILE    "zululast.txt"
 
 // Maximum path length for files on SD card
 #define MAX_FILE_PATH 255

@@ -139,6 +139,14 @@ bool IDEImageFile::get_filename(char *buf, size_t buflen)
     }
 }
 
+bool IDEImageFile::get_image_name(char *buf, size_t buflen)
+{
+    if (is_folder())
+        return get_foldername(buf, buflen);
+    else
+        return get_filename(buf, buflen);
+}
+
 bool IDEImageFile::is_folder()
 {
     return m_is_folder;

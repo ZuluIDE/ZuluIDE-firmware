@@ -66,6 +66,8 @@ public:
 
     virtual void insert_media(IDEImage *image = nullptr) {;}
 
+    virtual void insert_next_media(IDEImage *image = nullptr) {;}
+
 protected:
     IDEImage *m_image;
 
