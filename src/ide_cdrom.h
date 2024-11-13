@@ -118,6 +118,11 @@ protected:
     bool getFirstLastTrackInfo(CUETrackInfo &first, CUETrackInfo &last);
     uint32_t getLeadOutLBA(const CUETrackInfo* lasttrack);
     CUETrackInfo getTrackFromLBA(uint32_t lba);
+    void clear_cached_track_info();
+    CUETrackInfo m_cached_track_result;
+    uint32_t m_cached_end_lba;
+
+
 
     // If the .cue file has data split across multiple files,
     // this function will reopen m_imagefile when track is changed.

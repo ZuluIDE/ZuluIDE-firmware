@@ -289,11 +289,13 @@ void IDECDROMDevice::initialize(int devidx)
     m_devinfo.current_profile = ATAPI_PROFILE_CDROM;
 
     set_esn_event(esn_event_t::NoChange);
+
+    clear_cached_track_info();
 #if ENABLE_AUDIO_OUTPUT
 #endif // ENABLE_AUDIO_OUTPUT
 }
 
-void IDECDROMDevice::reset() 
+void IDECDROMDevice::reset()
 {
     IDEATAPIDevice::reset();
     set_esn_event(esn_event_t::NoChange);
@@ -303,6 +305,7 @@ void IDECDROMDevice::set_image(IDEImage *image)
 {
     char filename[MAX_FILE_PATH];
     bool valid = false;
+    clear_cached_track_info();
 
     IDEATAPIDevice::set_image(image);
     m_selected_file_index = -1;
@@ -350,7 +353,7 @@ void IDECDROMDevice::set_image(IDEImage *image)
             image = nullptr;
         }
 #ifdef ENABLE_AUDIO_OUTPUT
-        else 
+        else
             audio_set_cue_parser(&m_cueparser, folder);
 #endif // ENABLE_AUDIO_OUTPUT
     }
@@ -721,14 +724,14 @@ bool IDECDROMDevice::atapi_get_event_status_notification(const uint8_t *cmd)
         buf[4] = 0x02; // Operational state has changed
         buf[5] = 0x00; // Power status
         buf[6] = 0x00; // Start slot
-        buf[7] = 0x01; // End slot 
+        buf[7] = 0x01; // End slot
         esn_next_event();
     }
     // Media class request
     else if (cmd[4] & 0x10)
     {
-        if (m_esn.request == IDECDROMDevice::esn_class_request_t::Media && 
-            (   
+        if (m_esn.request == IDECDROMDevice::esn_class_request_t::Media &&
+            (
                 m_esn.event == esn_event_t::MNewMedia
                 || m_esn.event == esn_event_t::MEjectRequest
                 || m_esn.event == esn_event_t::MMediaRemoval
@@ -746,7 +749,7 @@ bool IDECDROMDevice::atapi_get_event_status_notification(const uint8_t *cmd)
                 buf[1] = 6; // EventDataLength
                 buf[2] = m_esn.request; // Media status events
                 buf[3] = 0x12; // Supported events
-                if (m_esn.current_event == esn_event_t::MEjectRequest) 
+                if (m_esn.current_event == esn_event_t::MEjectRequest)
                     buf[4] = 0x01; // Eject Request
                 else if (m_esn.current_event == esn_event_t::MNewMedia)
                     buf[4] = 0x02; // New Media
@@ -776,7 +779,7 @@ bool IDECDROMDevice::atapi_get_event_status_notification(const uint8_t *cmd)
             }
         }
         // output media no change
-        else 
+        else
         {
             // Report media status events
             buf[0] = 0;
@@ -1589,7 +1592,7 @@ void IDECDROMDevice::insert_media(IDEImage *image)
 #endif
     zuluide::images::ImageIterator img_iterator;
     char filename[MAX_FILE_PATH+1];
-    if (m_devinfo.removable) 
+    if (m_devinfo.removable)
     {
         if (image != nullptr)
         {
@@ -1624,7 +1627,7 @@ void IDECDROMDevice::insert_media(IDEImage *image)
                 {
                     img_iterator.MoveNext();
                 }
-            
+
                 g_ide_imagefile.clear();
                 if (g_ide_imagefile.open_file(img_iterator.Get().GetFilename().c_str(), true))
                 {
@@ -1703,9 +1706,16 @@ uint32_t IDECDROMDevice::getLeadOutLBA(const CUETrackInfo* lasttrack)
 // Fetch track info based on LBA
 CUETrackInfo IDECDROMDevice::getTrackFromLBA(uint32_t lba)
 {
+
+    if (lba >= m_cached_track_result.track_start && lba < m_cached_end_lba)
+        return m_cached_track_result;
+    else
+        clear_cached_track_info();
+
     CUETrackInfo result = {};
     const CUETrackInfo *tmptrack;
     uint64_t prev_capacity = 0;
+
     m_cueparser.restart();
     while ((tmptrack = m_cueparser.next_track(prev_capacity)) != NULL)
     {
@@ -1721,8 +1731,32 @@ CUETrackInfo IDECDROMDevice::getTrackFromLBA(uint32_t lba)
         selectBinFileForTrack(tmptrack);
         prev_capacity = m_image->capacity();
     }
-
+    m_cached_track_result = result;
+    if (tmptrack != NULL)
+    {
+        m_cached_end_lba = tmptrack->track_start;
+    }
+    else
+    {
+        FsFile last_track_file = SD.open(m_cached_track_result.filename, O_RDONLY);
+        if (last_track_file.isOpen())
+        {
+            uint64_t filesize = last_track_file.size();
+            if (m_cached_track_result.file_offset <= filesize)
+            {
+                m_cached_end_lba =  ((filesize - m_cached_track_result.file_offset) / m_cached_track_result.sector_length)
+                                    + m_cached_track_result.data_start;
+            }
+        }
+        last_track_file.close();
+    }
     return result;
+}
+
+void IDECDROMDevice::clear_cached_track_info()
+{
+    m_cached_end_lba = 0;
+    memset(&m_cached_track_result, 0, sizeof(m_cached_track_result));
 }
 
 // Check if we need to switch the data .bin file when track changes.
@@ -1775,8 +1809,8 @@ size_t IDECDROMDevice::atapi_get_configuration(uint8_t return_type, uint16_t fea
 
 #ifdef ENABLE_AUDIO_OUTPUT
     // CD audio feature (0x103, 259)
-    if (feature == ATAPI_FEATURE_CDAUDIO 
-        && (return_type == ATAPI_RT_SINGLE 
+    if (feature == ATAPI_FEATURE_CDAUDIO
+        && (return_type == ATAPI_RT_SINGLE
             || return_type == ATAPI_RT_ALL
             || (return_type == ATAPI_RT_ALL_CURRENT && !m_removable.ejected)))
     {
