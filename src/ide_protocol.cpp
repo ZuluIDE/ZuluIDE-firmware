@@ -470,19 +470,19 @@ void IDEDevice::set_ident_strings(const char* default_model, const char* default
     char input_str[41];
     uint16_t input_len;
 
-    memset(m_devconfig.ata_model, '\0', 41);
+    memset(input_str, '\0', 41);
     input_len = ini_gets("IDE", "ide_model", default_model, input_str, 41, CONFIGFILE);
     if (input_len > 40) input_len = 40;
     memcpy(m_devconfig.ata_model, input_str, input_len);
     formatDriveInfoField(m_devconfig.ata_model, 40, false);
 
-    memset(m_devconfig.ata_serial, '\0', 21);
+    memset(input_str, '\0', 21);
     input_len = ini_gets("IDE","ide_serial", default_serial, input_str, 21, CONFIGFILE);
     if (input_len > 20) input_len = 20;
     memcpy(m_devconfig.ata_serial, input_str, input_len);
     formatDriveInfoField(m_devconfig.ata_serial, 20, false);
 
-    memset(m_devconfig.ata_revision, '\0', 9);
+    memset(input_str, '\0', 9);
     input_len = ini_gets("IDE","ide_revision", default_revision, input_str, 9, CONFIGFILE);
     if (input_len > 8) input_len = 8;
     memcpy(m_devconfig.ata_revision, input_str, input_len);
