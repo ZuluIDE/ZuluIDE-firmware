@@ -26,6 +26,10 @@
 #include "ZuluIDE_config.h"
 #include <minIni.h>
 #include <zuluide/images/image_iterator.h>
+#include <status/status_controller.h>
+
+extern zuluide::status::StatusController g_StatusController;
+extern zuluide::status::SystemStatus g_previous_controller_status;
 
 // Map from command index for command name for logging
 static const char *get_atapi_command_name(uint8_t cmd)
@@ -362,7 +366,7 @@ bool IDEATAPIDevice::set_device_signature(uint8_t error, bool was_reset)
         // Command complete
         if (error == IDE_ERROR_ABORT)
             ide_phy_assert_irq(IDE_STATUS_DEVRDY | IDE_STATUS_ERR);
-        else 
+        else
             ide_phy_assert_irq(IDE_STATUS_DEVRDY);
 
     }
@@ -790,17 +794,16 @@ bool IDEATAPIDevice::atapi_cmd_ok()
 
 bool IDEATAPIDevice::atapi_test_unit_ready(const uint8_t *cmd)
 {
-    if (!has_image())
-    {
-        return atapi_cmd_not_ready_error();
-    }
-
     if (m_devinfo.removable && m_removable.ejected)
     {
         if (m_removable.reinsert_media_after_eject)
         {
-            insert_media();
+            insert_next_media(m_image);
         }
+        // return atapi_cmd_not_ready_error();
+    }
+    else if (!has_image())
+    {
         return atapi_cmd_not_ready_error();
     }
 
@@ -833,7 +836,7 @@ bool IDEATAPIDevice::atapi_start_stop_unit(const uint8_t *cmd)
         // Load condition
         else
         {
-            insert_media();
+            insert_next_media(m_image);
         }
     }
     return atapi_cmd_ok();
@@ -876,7 +879,7 @@ bool IDEATAPIDevice::atapi_inquiry(const uint8_t *cmd)
 
     if (m_removable.reinsert_media_on_inquiry)
     {
-        insert_media();
+        insert_next_media(m_image);
     }
 
     return atapi_cmd_ok();
@@ -1327,7 +1330,7 @@ void IDEATAPIDevice::eject_button_poll(bool immediate)
             //m_atapi_state.unit_attention = true;
             dbgmsg("Ejection button pressed");
             if (m_removable.ejected)
-                insert_media();
+                insert_next_media(m_image);
             else
             {
                 button_eject_media();
@@ -1346,61 +1349,83 @@ void IDEATAPIDevice::button_eject_media()
 void IDEATAPIDevice::eject_media()
 {
     char filename[MAX_FILE_PATH+1];
-    m_image->get_filename(filename, sizeof(filename));
+    m_image->get_image_name(filename, sizeof(filename));
     logmsg("Device ejecting media: \"", filename, "\"");
     m_removable.ejected = true;
 }
 
 void IDEATAPIDevice::insert_media(IDEImage *image)
 {
-    zuluide::images::ImageIterator img_iterator;
-    char filename[MAX_FILE_PATH+1];
-
     if (m_devinfo.removable)
     {
-        if (image != nullptr)
-        {
-            set_image(image);
-            m_removable.ejected = false;
-            set_not_ready(true);
-        }
-        else if (m_removable.ejected)
-        {
-            img_iterator.Reset();
-            if (!img_iterator.IsEmpty())
-            {
-                if (m_image)
-                {
-                    m_image->get_filename(filename, sizeof(filename));
-                    if (!img_iterator.MoveToFile(filename))
-                    {
-                        img_iterator.MoveNext();
-                    }
-                }
-                else
-                {
-                    img_iterator.MoveNext();
-                }
+        zuluide::images::ImageIterator img_iterator;
+        char filename[MAX_FILE_PATH+1];
 
-                if (img_iterator.IsLast())
-                {
-                    img_iterator.MoveFirst();
-                }
-                else
+        img_iterator.Reset();
+        if (!img_iterator.IsEmpty())
+        {
+            if (image && image->get_image_name(filename, sizeof(filename)))
+            {
+                if (!img_iterator.MoveToFile(filename))
+                    img_iterator.MoveNext();
+            }
+            else
+                img_iterator.MoveNext();
+
+            g_ide_imagefile.clear();
+            if (g_ide_imagefile.open_file(img_iterator.Get().GetFilename().c_str()))
+            {
+                logmsg("-- Device loading media: \"", img_iterator.Get().GetFilename().c_str(), "\"");
+                m_removable.ejected = false;
+                set_image(&g_ide_imagefile);
+                m_atapi_state.unit_attention = true;
+                m_atapi_state.sense_asc = ATAPI_ASC_MEDIUM_CHANGE;
+                set_not_ready(true);
+            }
+        }
+        img_iterator.Cleanup();
+    }
+}
+
+void IDEATAPIDevice::insert_next_media(IDEImage *image)
+{
+    zuluide::images::ImageIterator img_iterator;
+    char filename[MAX_FILE_PATH+1];
+    if (m_devinfo.removable && m_removable.ejected)
+    {
+        img_iterator.Reset();
+        if (!img_iterator.IsEmpty())
+        {
+            if (image && image->get_image_name(filename, sizeof(filename)))
+            {
+                if (!img_iterator.MoveToFile(filename))
                 {
                     img_iterator.MoveNext();
-                }
-                g_ide_imagefile.clear();
-                if (g_ide_imagefile.open_file(img_iterator.Get().GetFilename().c_str(), false))
-                {
-                    set_image(&g_ide_imagefile);
-                    logmsg("-- Device loading media: \"", img_iterator.Get().GetFilename().c_str(), "\"");
-                    m_removable.ejected = false;
-                    set_not_ready(true);
                 }
             }
-            img_iterator.Cleanup();
+            else
+            {
+                img_iterator.MoveNext();
+            }
+
+            if (img_iterator.IsLast())
+            {
+                img_iterator.MoveFirst();
+            }
+            else
+            {
+                img_iterator.MoveNext();
+            }
+
+            g_ide_imagefile.clear();
+            if (g_ide_imagefile.open_file(img_iterator.Get().GetFilename().c_str(), true))
+            {
+                m_removable.ejected = false;
+                g_StatusController.LoadImage(img_iterator.Get());
+                g_previous_controller_status = g_StatusController.GetStatus();
+            }
         }
+        img_iterator.Cleanup();
     }
 }
 
@@ -1410,7 +1435,7 @@ void IDEATAPIDevice::sd_card_inserted()
         && m_removable.reinsert_media_after_sd_insert
         && m_removable.ejected)
     {
-        insert_media();
+        insert_next_media(m_image);
     }
 }
 

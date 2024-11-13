@@ -46,6 +46,7 @@
 #endif
 
 extern zuluide::status::StatusController g_StatusController;
+extern zuluide::status::SystemStatus g_previous_controller_status;
 
 static const uint8_t DiscInformation[] =
 {
@@ -1572,7 +1573,7 @@ void IDECDROMDevice::eject_media()
     audio_stop();
 #endif
     char filename[MAX_FILE_PATH+1];
-    m_image->get_filename(filename, sizeof(filename));
+    m_image->get_image_name(filename, sizeof(filename));
     logmsg("Device ejecting media: \"", filename, "\"");
     set_esn_event(esn_event_t::NoChange);
     m_removable.ejected = true;
@@ -1592,55 +1593,76 @@ void IDECDROMDevice::insert_media(IDEImage *image)
 #endif
     zuluide::images::ImageIterator img_iterator;
     char filename[MAX_FILE_PATH+1];
-    if (m_devinfo.removable)
+
+    img_iterator.Reset();
+    if (!img_iterator.IsEmpty())
     {
-        if (image != nullptr)
+        if (image && image->get_image_name(filename, sizeof(filename)))
         {
-            set_image(image);
-            set_esn_event(esn_event_t::MNewMedia);
+            if (!img_iterator.MoveToFile(filename))
+                img_iterator.MoveNext();
+        }
+        else
+            img_iterator.MoveNext();
+
+        g_ide_imagefile.clear();
+        if (g_ide_imagefile.open_file(img_iterator.Get().GetFilename().c_str(), true))
+        {
+            logmsg("-- Device loading media: \"", img_iterator.Get().GetFilename().c_str(), "\"");
             m_removable.ejected = false;
+            set_image(&g_ide_imagefile);
+            set_esn_event(esn_event_t::MNewMedia);
             set_not_ready(true);
         }
-        else if (m_removable.ejected)
+    }
+    img_iterator.Cleanup();
+}
+
+void IDECDROMDevice::insert_next_media(IDEImage *image)
+{
+#if ENABLE_AUDIO_OUTPUT
+    audio_stop();
+#endif
+    zuluide::images::ImageIterator img_iterator;
+    char filename[MAX_FILE_PATH+1];
+    if (m_devinfo.removable && m_removable.ejected)
+    {
+        img_iterator.Reset();
+        if (!img_iterator.IsEmpty())
         {
-            img_iterator.Reset();
-            if (!img_iterator.IsEmpty())
+            if (image && image->get_image_name(filename, sizeof(filename)))
             {
-                if (m_image)
-                {
-                    m_image->get_filename(filename, sizeof(filename));
-                    if (!img_iterator.MoveToFile(filename))
-                    {
-                        img_iterator.MoveNext();
-                    }
-                }
-                else
+                if (!img_iterator.MoveToFile(filename))
                 {
                     img_iterator.MoveNext();
-                }
-
-                if (img_iterator.IsLast())
-                {
-                    img_iterator.MoveFirst();
-                }
-                else
-                {
-                    img_iterator.MoveNext();
-                }
-
-                g_ide_imagefile.clear();
-                if (g_ide_imagefile.open_file(img_iterator.Get().GetFilename().c_str(), true))
-                {
-                    set_image(&g_ide_imagefile);
-                    logmsg("-- Device loading media: \"", img_iterator.Get().GetFilename().c_str(), "\"");
-                    set_esn_event(esn_event_t::MNewMedia);
-                    m_removable.ejected = false;
-                    set_not_ready(true);
                 }
             }
-            img_iterator.Cleanup();
+            else
+            {
+                img_iterator.MoveNext();
+            }
+
+            if (img_iterator.IsLast())
+            {
+                img_iterator.MoveFirst();
+            }
+            else
+            {
+                img_iterator.MoveNext();
+            }
+
+            g_ide_imagefile.clear();
+            if (g_ide_imagefile.open_file(img_iterator.Get().GetFilename().c_str(), true))
+            {
+                m_removable.ejected = false;
+                g_previous_controller_status = g_StatusController.GetStatus();
+                g_StatusController.LoadImage(img_iterator.Get());
+                set_esn_event(esn_event_t::MNewMedia);
+            }
         }
+        img_iterator.Cleanup();
     }
+
 }
 
 void IDECDROMDevice::set_esn_event(esn_event_t event)

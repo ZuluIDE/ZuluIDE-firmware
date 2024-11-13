@@ -61,7 +61,7 @@ static bool loadedFirstImage = false;
 zuluide::status::StatusController g_StatusController;
 zuluide::control::StdDisplayController g_DisplayController(&g_StatusController);
 zuluide::control::ControlInterface g_ControlInterface;
-zuluide::status::SystemStatus previous;
+zuluide::status::SystemStatus g_previous_controller_status;
 void status_observer(const zuluide::status::SystemStatus& current);
 void loadFirstImage();
 void load_image(const zuluide::images::Image& toLoad, bool insert = true);
@@ -376,16 +376,44 @@ void setupStatusController()
 
 void loadFirstImage() {
   zuluide::images::ImageIterator imgIterator;
-  imgIterator.Reset();
-  if (!imgIterator.IsEmpty() && imgIterator.MoveNext()) {
-    logmsg("Loading first image ", imgIterator.Get().GetFilename().c_str()); 
-    g_StatusController.LoadImage(imgIterator.Get());
-    previous = g_StatusController.GetStatus();
-    loadedFirstImage = true;
-    load_image(imgIterator.Get(), false);
-  } else {
-    logmsg("No image files found");
-    blinkStatus(BLINK_ERROR_NO_IMAGES);
+  volatile bool success = false;
+  if (ini_getbool("IDE", "init_with_last_used_image", 1, CONFIGFILE))
+  {
+    imgIterator.Reset();
+    FsFile last_saved = SD.open(LASTFILE, O_RDONLY);
+    if (last_saved.isOpen())
+    {
+      String image_name = last_saved.readStringUntil('\n');
+      last_saved.close();
+      if (imgIterator.MoveToFile(image_name.c_str()))
+      {
+        logmsg("Loading last used image: \"", image_name.c_str(), "\"");
+        g_StatusController.LoadImage(imgIterator.Get());
+        g_previous_controller_status = g_StatusController.GetStatus();
+        loadedFirstImage = true;
+        load_image(imgIterator.Get(), false);
+        success = true;
+      }
+      if (!success)
+      {
+        logmsg("Last used image \"", image_name.c_str(), "\" not found");
+      }
+    }
+  }
+
+  if (!success)
+  {
+    imgIterator.Reset();
+    if (!imgIterator.IsEmpty() && imgIterator.MoveNext()) {
+      logmsg("Loading first image ", imgIterator.Get().GetFilename().c_str());
+      g_StatusController.LoadImage(imgIterator.Get());
+      g_previous_controller_status = g_StatusController.GetStatus();
+      loadedFirstImage = true;
+      load_image(imgIterator.Get(), false);
+    } else {
+      logmsg("No image files found");
+      blinkStatus(BLINK_ERROR_NO_IMAGES);
+    }
   }
 
   imgIterator.Cleanup();
@@ -412,7 +440,7 @@ void clear_image() {
 
 void status_observer(const zuluide::status::SystemStatus& current) {
   // We need to check and see what changes have occured.
-  if (loadedFirstImage && !current.LoadedImagesAreEqual(previous)) {
+  if (loadedFirstImage && !current.LoadedImagesAreEqual(g_previous_controller_status)) {
     // The current image has changed.
     if (current.HasLoadedImage()) {
       load_image(current.GetLoadedImage());
@@ -420,7 +448,7 @@ void status_observer(const zuluide::status::SystemStatus& current) {
       clear_image();
   }
 
-  previous = current;
+  g_previous_controller_status = current;
 }
 
 void load_image(const zuluide::images::Image& toLoad, bool insert)
@@ -434,6 +462,14 @@ void load_image(const zuluide::images::Image& toLoad, bool insert)
       g_ide_device->insert_media(&g_ide_imagefile);
     else
       g_ide_device->set_image(&g_ide_imagefile);
+  }
+
+  if (ini_getbool("IDE", "init_with_last_used_image", 1, CONFIGFILE))
+  {
+      FsFile last_file = SD.open(LASTFILE, O_WRONLY | O_CREAT | O_TRUNC);
+      if (last_file.isOpen())
+        last_file.write(toLoad.GetFilename().c_str());
+      last_file.close();
   }
 
   blinkStatus(BLINK_STATUS_OK);
@@ -520,7 +556,7 @@ void zuluide_main_loop(void)
     platform_poll();
     g_ide_device->eject_button_poll(true);
     blink_poll();
-  
+
     g_StatusController.ProcessUpdates();
 
     save_logfile();

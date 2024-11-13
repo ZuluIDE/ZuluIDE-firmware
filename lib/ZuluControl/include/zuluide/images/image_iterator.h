@@ -27,7 +27,7 @@
 #include <ZuluIDE_config.h>
 #include <CUEParser.h>
 
-#define MAX_CUE_SHEET_SIZE 1024
+#define MAX_CUE_SHEET_SIZE 4096
 
 namespace zuluide::images {
 
@@ -50,7 +50,7 @@ namespace zuluide::images {
     bool MoveLast();
     // Sets Interator to file
     // return true if successful
-    bool MoveToFile(char *filename);
+    bool MoveToFile(const char *filename);
     bool IsEmpty();
     int GetFileCount();
     void Reset();

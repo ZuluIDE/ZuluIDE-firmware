@@ -43,6 +43,8 @@ public:
     virtual void button_eject_media() override;
 
     virtual void insert_media(IDEImage *image = nullptr) override;
+
+    virtual void insert_next_media(IDEImage *image = nullptr) override;
     
     // esn - event status notification
     enum class esn_event_t 
@@ -112,7 +114,7 @@ protected:
     virtual ssize_t read_callback(const uint8_t *data, size_t blocksize, size_t num_blocks);
 
     // Access data from CUE sheet, or dummy data if no cue sheet provided
-    char m_cuesheet[1024];
+    char m_cuesheet[4096];
     CUEParser m_cueparser;
     bool loadAndValidateCueSheet(FsFile *dir, const char *cuesheetname);
     bool getFirstLastTrackInfo(CUETrackInfo &first, CUETrackInfo &last);

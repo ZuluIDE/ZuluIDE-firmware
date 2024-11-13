@@ -259,7 +259,7 @@ void platform_set_display_controller(zuluide::Observable<zuluide::control::Displ
 }
 
 void platform_set_input_interface(zuluide::control::InputReceiver* inputReceiver) {
-  logmsg("Inialized platform controller with input receiver.");
+  logmsg("Initialized platform controller with input receiver.");
   g_rotary_input.SetReciever(inputReceiver);
   g_rotary_input.StartSendingEvents();
 }
