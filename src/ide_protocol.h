@@ -95,7 +95,7 @@ protected:
 
     // PHY capabilities limited by active device configuration
     ide_phy_capabilities_t m_phy_caps;
-
+    void formatDriveInfoField(char *field, int fieldsize, bool align_right);
     void set_ident_strings(const char* default_model, const char* default_serial, const char* default_revision);
 };
 

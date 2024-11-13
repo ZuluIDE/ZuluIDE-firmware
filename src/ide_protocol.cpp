@@ -428,31 +428,66 @@ void ide_protocol_poll()
     }
 }
 
+void IDEDevice::formatDriveInfoField(char *field, int fieldsize, bool align_right)
+{
+    if (align_right)
+    {
+        // Right align and trim spaces on either side
+        int dst = fieldsize - 1;
+        for (int src = fieldsize - 1; src >= 0; src--)
+        {
+            char c = field[src];
+            if (c < 0x20 || c > 0x7E) c = 0x20;
+            if (c != 0x20 || dst != fieldsize - 1)
+            {
+                field[dst--] = c;
+            }
+        }
+        while (dst >= 0)
+        {
+            field[dst--] = 0x20;
+        }
+    }
+    else
+    {
+        // Left align, preserve spaces in case config tries to manually right-align
+        int dst = 0;
+        for (int src = 0; src < fieldsize; src++)
+        {
+            char c = field[src];
+            if (c < 0x20 || c > 0x7E) c = 0x20;
+            field[dst++] = c;
+        }
+        while (dst < fieldsize)
+        {
+            field[dst++] = 0x20;
+        }
+    }
+}
+
 void IDEDevice::set_ident_strings(const char* default_model, const char* default_serial, const char* default_revision)
 {
     char input_str[41];
     uint16_t input_len;
 
-    memset(m_devconfig.ata_model, ' ', 40);
+    memset(m_devconfig.ata_model, '\0', 41);
     input_len = ini_gets("IDE", "ide_model", default_model, input_str, 41, CONFIGFILE);
-    if (input_len > 40)
-        memcpy(m_devconfig.ata_model, input_str, 40);
-    else 
-        memcpy(m_devconfig.ata_model, input_str, input_len);
+    if (input_len > 40) input_len = 40;
+    memcpy(m_devconfig.ata_model, input_str, input_len);
+    formatDriveInfoField(m_devconfig.ata_model, 40, false);
 
-    memset(m_devconfig.ata_serial, ' ', 20);
+    memset(m_devconfig.ata_serial, '\0', 21);
     input_len = ini_gets("IDE","ide_serial", default_serial, input_str, 21, CONFIGFILE);
-    if (input_len > 20)
-        memcpy(m_devconfig.ata_serial, input_str, 20);
-    else
-        memcpy(m_devconfig.ata_serial, input_str, input_len);
+    if (input_len > 20) input_len = 20;
+    memcpy(m_devconfig.ata_serial, input_str, input_len);
+    formatDriveInfoField(m_devconfig.ata_serial, 20, false);
 
-    memset(m_devconfig.ata_revision, ' ', 8);
+    memset(m_devconfig.ata_revision, '\0', 9);
     input_len = ini_gets("IDE","ide_revision", default_revision, input_str, 9, CONFIGFILE);
-    if (input_len > 8)
-        memcpy(m_devconfig.ata_revision, input_str, 8);
-    else
-        memcpy(m_devconfig.ata_revision, input_str, input_len);
+    if (input_len > 8) input_len = 8;
+    memcpy(m_devconfig.ata_revision, input_str, input_len);
+    formatDriveInfoField(m_devconfig.ata_revision, 8, false);
+
 }
 
 void IDEDevice::initialize(int devidx)
