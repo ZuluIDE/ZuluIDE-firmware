@@ -1738,17 +1738,16 @@ CUETrackInfo IDECDROMDevice::getTrackFromLBA(uint32_t lba)
     }
     else
     {
-        FsFile last_track_file = SD.open(m_cached_track_result.filename, O_RDONLY);
-        if (last_track_file.isOpen())
+
+        if (selectBinFileForTrack(&m_cached_track_result))
         {
-            uint64_t filesize = last_track_file.size();
+            uint64_t filesize = m_image->capacity();
             if (m_cached_track_result.file_offset <= filesize)
             {
                 m_cached_end_lba =  ((filesize - m_cached_track_result.file_offset) / m_cached_track_result.sector_length)
                                     + m_cached_track_result.data_start;
             }
         }
-        last_track_file.close();
     }
     return result;
 }
