@@ -19,22 +19,27 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
 **/
 
-#pragma once
+#include "eject_prevented_widget.h"
+#include "ZuluIDE_log.h"
 
-#include <zuluide/images/image.h>
+#define EJECT_MENU_TEXT "-- Host Eject Only --"
+#define MENU_OFFSET 1
 
-namespace zuluide::status {
+using namespace zuluide;
 
-  /***
-      Provides multi-core safe interface for changing state of the device. Any changes from a UI running on a concurrent core should go through
-      this interface instead of directly through the status controller. The status control is the final point through which all device status updates
-      should go into. From there they go back out to observers.
-   **/
-  class DeviceControlSafe {
-  public:
-    virtual void LoadImageSafe(zuluide::images::Image i) = 0;
-    virtual void EjectImageSafe() = 0;
-    virtual bool IsPreventRemovable() = 0;
-    virtual bool IsDeferred() = 0;
-  };    
+EjectPreventedWidget::EjectPreventedWidget(Adafruit_SSD1306 *g, Rectangle b, Size cb) :
+  Widget(g, b)
+{
+  charBounds = cb;
+}
+
+void EjectPreventedWidget::Display () {
+  graph->setTextColor(WHITE, BLACK);
+
+  DrawCenteredTextAt (EJECT_MENU_TEXT, 0);
+
+  const char* selectMenuText = " Back ";
+  graph->setTextColor(BLACK, WHITE);
+  DrawCenteredTextAt (selectMenuText, 16 + MENU_OFFSET);
+  graph->setTextColor(WHITE, BLACK);
 }

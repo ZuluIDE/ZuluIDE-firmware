@@ -35,6 +35,7 @@ namespace zuluide::control {
     void DecreaseImageNameOffset();
     void ResetImageNameOffset();
     void ChangeToMenu();
+    void ChangeToMenuPreventRem();
     void Reset(const StatusState& state);
   private:
     StdDisplayController* controller;

@@ -79,6 +79,10 @@ public:
     // For removable media devices - insert next
     virtual void insert_next_media(IDEImage *image = nullptr) = 0;
 
+    // Deferred loading status
+    virtual bool set_load_deferred(const char* image_name) = 0;
+    virtual bool is_load_deferred() = 0;
+
 
 protected:
     struct {

@@ -60,14 +60,16 @@ public:
 
     virtual void fill_device_signature(ide_registers_t *regs) override;
 
-    virtual void eject_button_poll(bool immediate) {;}
+    virtual inline void eject_button_poll(bool immediate) override {;}
 
-    virtual void sd_card_inserted() {;}
+    virtual inline void sd_card_inserted() override {;}
 
-    virtual void insert_media(IDEImage *image = nullptr) {;}
+    virtual inline void insert_media(IDEImage *image = nullptr) override {;}
 
-    virtual void insert_next_media(IDEImage *image = nullptr) {;}
+    virtual inline void insert_next_media(IDEImage *image = nullptr) override {;}
 
+    virtual inline bool set_load_deferred(const char* image_name) override {return false;}
+    virtual inline bool is_load_deferred() override {return false;}
 protected:
     IDEImage *m_image;
 

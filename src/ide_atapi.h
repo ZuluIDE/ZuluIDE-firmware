@@ -25,6 +25,7 @@
 
 #include "ide_protocol.h"
 #include "ide_imagefile.h"
+#include "ZuluIDE_config.h"
 #include <stddef.h>
 
 #define ATAPI_AUDIO_CD_SECTOR_SIZE 2352
@@ -69,6 +70,9 @@ public:
     virtual void insert_media(IDEImage *image = nullptr) override;
 
     virtual void insert_next_media(IDEImage *image = nullptr) override;
+
+    virtual inline bool set_load_deferred(const char* image_name) override {return false;}
+    virtual inline bool is_load_deferred() override {return false;}
 
     virtual void sd_card_inserted() override;
 
@@ -132,6 +136,8 @@ protected:
         bool prevent_removable;
         bool prevent_persistent;
         bool ignore_prevent_removal;
+        bool is_load_deferred;
+        char deferred_image_name[MAX_FILE_PATH+1];
     } m_removable;
 
     // Buffer used for responses, ide_phy code benefits from this being aligned to 32 bits

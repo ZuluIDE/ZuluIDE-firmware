@@ -114,7 +114,7 @@ void ControlInterface::RotaryButtonPressed() {
   logmsg("Rotary Button Pressed");
   switch(currentDisplayMode) {
   case Mode::Status: {
-    displayController->GetStatusController().ChangeToMenu();
+      displayController->GetStatusController().ChangeToMenu();
     break;
   }
 
@@ -125,6 +125,11 @@ void ControlInterface::RotaryButtonPressed() {
 
   case Mode::Eject: {
     displayController->GetEjectController().DoSelectedEntry();
+    break;
+  }
+
+  case Mode::EjectPrevented: {
+    displayController->GetEjectPreventedController().GoBack();
     break;
   }
 
@@ -153,7 +158,7 @@ void ControlInterface::PrimaryButtonPressed() {
     break;
   }
   default:
-    break;      
+    break;
   }
 }
 
@@ -167,7 +172,10 @@ void ControlInterface::SecondaryButtonPressed() {
 
   case Mode::Status: {
     if (currentStatus.HasLoadedImage()) {
-      displayController->SetMode(Mode::Eject);
+      if(statusController->IsPreventRemovable())
+        displayController->SetMode(Mode::EjectPrevented);
+      else
+        displayController->SetMode(Mode::Eject);
     }
     
     break;

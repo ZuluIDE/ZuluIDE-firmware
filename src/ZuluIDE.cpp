@@ -75,6 +75,7 @@ void load_image(const zuluide::images::Image& toLoad, bool insert = true);
 /************************************/
 
 #define BLINK_STATUS_OK 1
+#define BLINK_DEFFERED_LOADING 2
 #define BLINK_ERROR_NO_IMAGES    3
 #define BLINK_ERROR_NO_SD_CARD 5
 
@@ -338,10 +339,15 @@ void setupStatusController()
     break;
   }
 
+  g_StatusController.SetIsPreventRemovable(false);
+  g_StatusController.SetIsDeferred(false);
+
   if (isPrimary)
       ide_protocol_init(g_ide_device, NULL); // Primary device
   else
       ide_protocol_init(NULL, g_ide_device); // Secondary device
+
+
 
   if (device) {
     g_StatusController.SetIsPrimary(isPrimary);
@@ -442,10 +448,15 @@ void status_observer(const zuluide::status::SystemStatus& current) {
   // We need to check and see what changes have occured.
   if (loadedFirstImage && !current.LoadedImagesAreEqual(g_previous_controller_status)) {
     // The current image has changed.
-    if (current.HasLoadedImage()) {
+    if (current.HasLoadedImage()) 
+    {
       load_image(current.GetLoadedImage());
-    } else
-      clear_image();
+    } 
+    else
+    {
+      if (!g_ide_device->is_load_deferred())
+        clear_image();
+    }
   }
 
   g_previous_controller_status = current;
@@ -453,8 +464,12 @@ void status_observer(const zuluide::status::SystemStatus& current) {
 
 void load_image(const zuluide::images::Image& toLoad, bool insert)
 {
-  clear_image();
 
+  if (loadedFirstImage && g_ide_device->set_load_deferred(toLoad.GetFilename().c_str()))
+    return blinkStatus(BLINK_DEFFERED_LOADING);
+  
+  clear_image();
+   
   logmsg("Loading image \"", toLoad.GetFilename().c_str(), "\"");
   g_ide_imagefile.open_file(toLoad.GetFilename().c_str(), false);
   if (g_ide_device) {

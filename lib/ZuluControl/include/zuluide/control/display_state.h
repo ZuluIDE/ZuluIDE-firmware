@@ -25,6 +25,7 @@
 #include "status_state.h"
 #include "menu_state.h"
 #include "eject_state.h"
+#include "eject_prevented_state.h"
 #include "select_state.h"
 #include "new_image_state.h"
 #include "info_state.h"
@@ -32,7 +33,7 @@
 using namespace zuluide::images;
 
 namespace zuluide::control {
-  enum class Mode { Status, Menu, Eject, Select, Info, NewImage };
+  enum class Mode { Status, LoadDeferred, Menu, Eject, EjectPrevented, Select, Info, NewImage };
 
   class DisplayState {
   public:
@@ -41,6 +42,7 @@ namespace zuluide::control {
     DisplayState(SelectState &state);
     DisplayState(NewImageState &state);
     DisplayState(EjectState &state);
+    DisplayState(EjectPreventedState &state);
     DisplayState(InfoState &state);
     DisplayState();
     DisplayState(const DisplayState& state);
@@ -49,6 +51,7 @@ namespace zuluide::control {
     Mode GetCurrentMode() const;
     const MenuState& GetMenuState() const;
     const EjectState& GetEjectState() const;
+    const EjectPreventedState& GetEjectPreventedState() const;
     const SelectState& GetSelectState() const;
     const StatusState& GetStatusState() const;
     const InfoState& GetInfoState() const;
@@ -59,6 +62,7 @@ namespace zuluide::control {
     SelectState selectState;
     NewImageState newImageState;
     EjectState ejectState;
+    EjectPreventedState ejectPreventedState;
     InfoState infoState;
   };
 }

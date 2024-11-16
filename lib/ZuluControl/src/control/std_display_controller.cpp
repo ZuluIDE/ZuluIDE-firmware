@@ -51,11 +51,18 @@ void StdDisplayController::SetMode(Mode newMode)
     menuController->Reset(empty);
     break;
   }
-    
+
   case Mode::Eject: {
     EjectState empty;
     UpdateState(empty);
     ejectController->Reset(empty);
+    break;
+  }
+
+  case Mode::EjectPrevented: {
+    EjectPreventedState empty;
+    UpdateState(empty);
+    ejectPreventedController->Reset(empty);
     break;
   }
     
@@ -117,6 +124,13 @@ void StdDisplayController::UpdateState(EjectState& newState)
   notifyObservers();
 }
 
+void StdDisplayController::UpdateState(EjectPreventedState& newState)
+{
+  // Copy the new state into a new memory location.
+  currentState = std::move(DisplayState(newState));
+  notifyObservers();
+}
+
 void StdDisplayController::UpdateState(InfoState& newState)
 {
   // Copy the new state into a new memory location.
@@ -146,6 +160,10 @@ EjectController& StdDisplayController::GetEjectController() {
   return *ejectController;
 }
 
+EjectPreventedController& StdDisplayController::GetEjectPreventedController() {
+  return *ejectPreventedController;
+}
+
 SelectController& StdDisplayController::GetSelectController() {
   return *selectController;
 }
@@ -160,8 +178,9 @@ InfoController& StdDisplayController::GetInfoController() {
 
 StdDisplayController::StdDisplayController(zuluide::status::StatusController* statCtrlr) : statController(statCtrlr) {
   statusController = std::make_unique<StatusController>(this);
-  menuController = std::make_unique<MenuController>(this);
+  menuController = std::make_unique<MenuController>(this, statController);
   ejectController = std::make_unique<EjectController>(this, statController);
+  ejectPreventedController = std::make_unique<EjectPreventedController>(this, statController);
   selectController = std::make_unique<SelectController>(this, statController);
   newController = std::make_unique<NewController>(this, statController);
   infoController = std::make_unique<InfoController>(this);

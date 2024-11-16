@@ -22,7 +22,7 @@
 #pragma once
 
 #include <zuluide/control/display_state.h>
-
+#include <status/status_controller.h>
 namespace zuluide::control {
   class StdDisplayController;
   /**
@@ -30,13 +30,14 @@ namespace zuluide::control {
    */
   class MenuController {
   public:
-    MenuController(StdDisplayController* cntrlr);
+    MenuController(StdDisplayController* cntrlr, zuluide::status::DeviceControlSafe* statCtrlr);
     void MoveToNextEntry();
     void MoveToPreviousEntry();
     void ChangeToSelectedEntry();
     void Reset(const MenuState& state);
   private:
     StdDisplayController* controller;
+    zuluide::status::DeviceControlSafe *statusController;
     MenuState state;
   };
 }

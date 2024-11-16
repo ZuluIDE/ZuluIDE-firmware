@@ -29,6 +29,7 @@
 #include "status_controller.h"
 #include "menu_controller.h"
 #include "eject_controller.h"
+#include "eject_prevented_controller.h"
 #include "select_controller.h"
 #include "new_controller.h"
 #include "info_controller.h"
@@ -40,9 +41,10 @@ namespace zuluide::control {
     StdDisplayController(zuluide::status::StatusController* statCtrlr);
     void AddObserver(std::function<void(const DisplayState& current)> callback);
     Mode GetMode() const;
-    zuluide::control::StatusController& GetStatusController();
+    StatusController& GetStatusController();
     MenuController& GetMenuController();
     EjectController& GetEjectController();
+    EjectPreventedController& GetEjectPreventedController();
     SelectController& GetSelectController();
     NewController& GetNewController();
     InfoController& GetInfoController();
@@ -50,6 +52,7 @@ namespace zuluide::control {
     void UpdateState(MenuState& newState);
     void UpdateState(SelectState& newState);
     void UpdateState(EjectState& newState);
+    void UpdateState(EjectPreventedState& newState);
     void UpdateState(NewImageState& newState);
     void UpdateState(InfoState& newState);
     void SetMode(Mode value);
@@ -60,6 +63,7 @@ namespace zuluide::control {
     std::unique_ptr<zuluide::control::StatusController> statusController;
     std::unique_ptr<MenuController> menuController;
     std::unique_ptr<EjectController> ejectController;
+    std::unique_ptr<EjectPreventedController> ejectPreventedController;
     std::unique_ptr<SelectController> selectController;
     std::unique_ptr<NewController> newController;
     zuluide::status::StatusController* statController;

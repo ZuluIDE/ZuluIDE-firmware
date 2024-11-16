@@ -54,6 +54,11 @@ DisplayState::DisplayState(EjectState& state) :
 {}
 
 
+DisplayState::DisplayState(EjectPreventedState& state) :
+  currentMode(Mode::EjectPrevented),
+  ejectPreventedState(state)
+{}
+
 DisplayState::DisplayState(const DisplayState& state) :
   currentMode(state.currentMode),
   statusState(state.statusState),
@@ -61,6 +66,7 @@ DisplayState::DisplayState(const DisplayState& state) :
   selectState(state.selectState),
   newImageState(state.newImageState),
   ejectState(state.ejectState),
+  ejectPreventedState(state.ejectPreventedState),
   infoState(state.infoState)
 {}
 
@@ -71,6 +77,7 @@ DisplayState& DisplayState::operator=(DisplayState&& src) {
   selectState = std::move(src.selectState);
   newImageState = std::move(src.newImageState);
   ejectState = std::move(src.ejectState);
+  ejectPreventedState = std::move(src.ejectPreventedState);
   infoState = std::move(src.infoState);
   return *this;
 }
@@ -83,6 +90,7 @@ DisplayState::DisplayState(DisplayState&& src) :
   selectState = std::move(src.selectState);
   newImageState = std::move(src.newImageState);
   ejectState = std::move(src.ejectState);
+  ejectPreventedState = std::move(src.ejectPreventedState);
 }
 
 DisplayState::DisplayState(InfoState &state) :
@@ -100,6 +108,11 @@ const MenuState& DisplayState::GetMenuState() const {
 const EjectState& DisplayState::GetEjectState() const {
   return ejectState;
 }
+
+const EjectPreventedState& DisplayState::GetEjectPreventedState() const {
+  return ejectPreventedState;
+}
+
 
 const SelectState& DisplayState::GetSelectState() const {
   return selectState;

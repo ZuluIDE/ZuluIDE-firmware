@@ -31,6 +31,7 @@
 #include "status_widget.h"
 #include "info_widget.h"
 #include "eject_widget.h"
+#include "eject_prevented_widget.h"
 #include "menu_widget.h"
 #include "select_widget.h"
 

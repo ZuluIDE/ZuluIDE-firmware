@@ -84,8 +84,16 @@ void DisplaySSD1306::HandleUpdate(const zuluide::control::DisplayState& current)
       currentWidget = std::make_unique<zuluide::StatusWidget>(&graph, Rectangle{{0,0}, {WIDTH, HEIGHT}}, wBounds);
       break;
     }
+    case zuluide::control::Mode::LoadDeferred: {
+      currentWidget = std::make_unique<zuluide::StatusWidget>(&graph, Rectangle{{0,0}, {WIDTH, HEIGHT}}, wBounds);
+      break;
+    }
+
     case zuluide::control::Mode::Eject:
       currentWidget = std::make_unique<zuluide::EjectWidget>(&graph, Rectangle{{0,0}, {WIDTH, HEIGHT}}, wBounds);
+      break;
+    case zuluide::control::Mode::EjectPrevented:
+      currentWidget = std::make_unique<zuluide::EjectPreventedWidget>(&graph, Rectangle{{0,0}, {WIDTH, HEIGHT}}, wBounds);
       break;
     case zuluide::control::Mode::Info: {
       currentWidget = std::make_unique<zuluide::InfoWidget>(&graph, Rectangle{{0,0}, {WIDTH, HEIGHT}}, wBounds);

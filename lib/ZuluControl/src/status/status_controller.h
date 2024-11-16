@@ -51,10 +51,14 @@ namespace zuluide::status {
     void SetFirmwareVersion(std::string firmwareVersion);
     const SystemStatus& GetStatus();
     void Reset();
-    virtual void LoadImageSafe(zuluide::images::Image i);
-    virtual void EjectImageSafe();
+    virtual void LoadImageSafe(zuluide::images::Image i) override;
+    virtual void EjectImageSafe() override;
+    virtual bool IsPreventRemovable() override;
+    virtual bool IsDeferred() override;
     void ProcessUpdates();
     void SetIsCardPresent(bool value);
+    void SetIsPreventRemovable(bool prevent);
+    void SetIsDeferred(bool defer);
   private:
     bool isUpdating;
     void notifyObservers();
@@ -65,7 +69,7 @@ namespace zuluide::status {
      **/
     std::vector<queue_t*> observerQueues;
     /***
-        Stores updates that come from another thread. These are processed through calss to ProcessUpdates.
+        Stores updates that come from another thread. These are processed through class to ProcessUpdates.
      **/
     queue_t updateQueue;
 
