@@ -123,7 +123,43 @@ static void reclock_for_audio() {
     // reset UART for the new clock speed
     uart_init(uart0, 1000000);
 }
+
+
 #endif
+
+static void reclock_to_default()
+{
+    // ensure UART is fully drained before we mess up its clock
+    uart_tx_wait_blocking(uart0);
+    // switch clk_sys and clk_peri to pll_usb
+    // see code in 2.15.6.1 of the datasheet for useful comments
+    clock_configure(clk_sys,
+            CLOCKS_CLK_SYS_CTRL_SRC_VALUE_CLKSRC_CLK_SYS_AUX,
+            CLOCKS_CLK_SYS_CTRL_AUXSRC_VALUE_CLKSRC_PLL_USB,
+            48 * MHZ,
+            48 * MHZ);
+    clock_configure(clk_peri,
+            0,
+            CLOCKS_CLK_PERI_CTRL_AUXSRC_VALUE_CLKSRC_PLL_USB,
+            48 * MHZ,
+            48 * MHZ);
+    // reset PLL for 135.428571MHz
+    pll_init(pll_sys, 1, 1500000000, 6, 2);
+    // switch clocks back to pll_sys
+    clock_configure(clk_sys,
+            CLOCKS_CLK_SYS_CTRL_SRC_VALUE_CLKSRC_CLK_SYS_AUX,
+            CLOCKS_CLK_SYS_CTRL_AUXSRC_VALUE_CLKSRC_PLL_SYS,
+            125000000,
+            125000000);
+    clock_configure(clk_peri,
+            0,
+            CLOCKS_CLK_PERI_CTRL_AUXSRC_VALUE_CLKSRC_PLL_SYS,
+            125000000,
+            125000000);
+    // reset UART for the new clock speed
+    uart_init(uart0, 1000000);
+
+}
 
 void platform_init()
 {
@@ -682,6 +718,8 @@ bool install_license(char *buf)
         return true;
     }
 
+
+    reclock_to_default();
     // Make a test run with the license key and wait for FPGA to validate it
     logmsg("---- Testing new license key..");
     fpga_init(true, false);
@@ -695,6 +733,10 @@ bool install_license(char *buf)
     // Check validation results
     uint8_t status;
     fpga_rdcmd(FPGA_CMD_LICENSE_CHECK, &status, 1);
+
+#ifdef ENABLE_AUDIO_OUTPUT
+    reclock_for_audio();
+#endif
 
     if (status < 0x80 || status > 0x84)
     {
