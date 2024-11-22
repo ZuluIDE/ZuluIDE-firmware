@@ -498,8 +498,6 @@ void IDEDevice::initialize(int devidx)
 
     m_devconfig.dev_index = devidx;
 
-    g_log_debug = ini_getbool("IDE", "debug", 0, CONFIGFILE);
-
     m_phy_caps = *ide_phy_get_capabilities();
     m_devconfig.max_pio_mode = ini_getl("IDE", "max_pio", 3, CONFIGFILE);
     m_devconfig.max_udma_mode = ini_getl("IDE", "max_udma", 0, CONFIGFILE);

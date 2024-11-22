@@ -498,7 +498,8 @@ static void zuluide_setup_sd_card()
         if (g_sdcard_present)
         {
             init_logfile();
-
+            g_log_debug = ini_getbool("IDE", "debug", g_log_debug, CONFIGFILE);
+            dbgmsg("Enabling debug via ", CONFIGFILE, " setting");
             if (ini_getbool("IDE", "DisableStatusLED", false, CONFIGFILE))
             {
                 platform_disable_led();
@@ -593,7 +594,8 @@ void zuluide_main_loop(void)
         if (g_sdcard_present)
         {
             logmsg("SD card reinit succeeded");
-            g_log_debug = ini_getbool("IDE", "debug", 0, CONFIGFILE);
+            g_log_debug = ini_getbool("IDE", "debug", g_log_debug, CONFIGFILE);
+            dbgmsg("Enabling debug via ", CONFIGFILE, " setting after SD card reinit");
             print_sd_info();
 
             init_logfile();
