@@ -593,6 +593,7 @@ void zuluide_main_loop(void)
         if (g_sdcard_present)
         {
             logmsg("SD card reinit succeeded");
+            g_log_debug = ini_getbool("IDE", "debug", 0, CONFIGFILE);
             print_sd_info();
 
             init_logfile();

@@ -135,6 +135,8 @@ void ide_protocol_init(IDEDevice *primary, IDEDevice *secondary)
 
     do_phy_reset();
     g_ide_reset_after_init_done = false;
+
+
 }
 
 
@@ -495,6 +497,8 @@ void IDEDevice::initialize(int devidx)
     memset(&m_devconfig, 0, sizeof(m_devconfig));
 
     m_devconfig.dev_index = devidx;
+
+    g_log_debug = ini_getbool("IDE", "debug", 0, CONFIGFILE);
 
     m_phy_caps = *ide_phy_get_capabilities();
     m_devconfig.max_pio_mode = ini_getl("IDE", "max_pio", 3, CONFIGFILE);
