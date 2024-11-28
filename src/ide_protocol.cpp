@@ -514,3 +514,13 @@ void IDEDevice::initialize(int devidx)
     m_phy_caps.max_pio_mode = std::min(m_phy_caps.max_pio_mode, m_devconfig.max_pio_mode);
     m_phy_caps.max_blocksize = std::min<int>(m_phy_caps.max_blocksize, m_devconfig.max_blocksize);
 }
+
+void IDEDevice::AddObserver(std::function<void(const zuluide::DeviceActions& current)> callback) {
+    deviceActionObservers.push_back(callback);
+}
+
+void IDEDevice::notifyObservers(const zuluide::DeviceActions& action) {
+    std::for_each(deviceActionObservers.begin(), deviceActionObservers.end(), [action](auto observer) {      
+      observer(action);
+    });
+}

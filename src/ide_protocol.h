@@ -27,9 +27,11 @@
 #include "ide_constants.h"
 #include "ide_phy.h"
 #include "ide_imagefile.h"
+#include "ide_actions.h"
+#include <zuluide/observable.h>
 
 // This interface is used for implementing emulated IDE devices
-class IDEDevice
+class IDEDevice : public zuluide::Observable<zuluide::DeviceActions>
 {
 public:
     // Loads configuration
@@ -79,6 +81,7 @@ public:
     // For removable media devices - insert next
     virtual void insert_next_media(IDEImage *image = nullptr) = 0;
 
+    virtual void AddObserver(std::function<void(const zuluide::DeviceActions& current)> callback);
 
 protected:
     struct {
@@ -97,6 +100,14 @@ protected:
     ide_phy_capabilities_t m_phy_caps;
     void formatDriveInfoField(char *field, int fieldsize, bool align_right);
     void set_ident_strings(const char* default_model, const char* default_serial, const char* default_revision);
+
+    /// @brief Notifies all observers that an action has occured.
+    /// @param  action The action that has occured
+    void notifyObservers(const zuluide::DeviceActions& action);
+
+private:
+    /// @brief Stores the observer callbacks for actions.
+    std::vector<std::function<void(const zuluide::DeviceActions&)>> deviceActionObservers;
 };
 
 // Initialize the protocol layer with devices
