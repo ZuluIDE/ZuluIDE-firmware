@@ -28,8 +28,8 @@
 #include <zuluide/images/image_iterator.h>
 #include <status/status_controller.h>
 
-extern zuluide::status::StatusController g_StatusController;
-extern zuluide::status::SystemStatus g_previous_controller_status;
+//extern zuluide::status::StatusController g_StatusController;
+//extern zuluide::status::SystemStatus g_previous_controller_status;
 
 // Map from command index for command name for logging
 static const char *get_atapi_command_name(uint8_t cmd)
@@ -794,15 +794,9 @@ bool IDEATAPIDevice::atapi_cmd_ok()
 
 bool IDEATAPIDevice::atapi_test_unit_ready(const uint8_t *cmd)
 {
-    if (m_devinfo.removable && m_removable.ejected)
-    {
-        if (m_removable.reinsert_media_after_eject)
-        {
-            insert_next_media(m_image);
-        }
-        // return atapi_cmd_not_ready_error();
-    }
-    else if (!has_image())
+    notifyObservers(zuluide::DeviceActions::INQUERY);
+
+    if (!has_image())
     {
         return atapi_cmd_not_ready_error();
     }
@@ -836,7 +830,7 @@ bool IDEATAPIDevice::atapi_start_stop_unit(const uint8_t *cmd)
         // Load condition
         else
         {
-            insert_next_media(m_image);
+	    notifyObservers(zuluide::DeviceActions::LOAD_REQUEST);
         }
     }
     return atapi_cmd_ok();
@@ -877,10 +871,7 @@ bool IDEATAPIDevice::atapi_inquiry(const uint8_t *cmd)
     if (req_bytes < count) count = req_bytes;
     atapi_send_data(inquiry, count);
 
-    if (m_removable.reinsert_media_on_inquiry)
-    {
-        insert_next_media(m_image);
-    }
+    notifyObservers(zuluide::DeviceActions::INQUERY);
 
     return atapi_cmd_ok();
 }
@@ -1328,13 +1319,8 @@ void IDEATAPIDevice::eject_button_poll(bool immediate)
         if (ejectors)
         {
             //m_atapi_state.unit_attention = true;
-            dbgmsg("Ejection button pressed");
-            if (m_removable.ejected)
-                insert_next_media(m_image);
-            else
-            {
-                button_eject_media();
-            }
+            dbgmsg("Ejection button pressed");            
+	    button_eject_media();            
         }
         return;
     }
@@ -1352,6 +1338,7 @@ void IDEATAPIDevice::eject_media()
     m_image->get_image_name(filename, sizeof(filename));
     logmsg("Device ejecting media: \"", filename, "\"");
     m_removable.ejected = true;
+    notifyObservers(zuluide::DeviceActions::EJECT);
 }
 
 void IDEATAPIDevice::insert_media(IDEImage *image)
@@ -1364,6 +1351,7 @@ void IDEATAPIDevice::insert_media(IDEImage *image)
         img_iterator.Reset();
         if (!img_iterator.IsEmpty())
         {
+  	    // TODO: Why would image ever be NULL?
             if (image && image->get_image_name(filename, sizeof(filename)))
             {
                 if (!img_iterator.MoveToFile(filename))
@@ -1381,6 +1369,7 @@ void IDEATAPIDevice::insert_media(IDEImage *image)
                 m_atapi_state.unit_attention = true;
                 m_atapi_state.sense_asc = ATAPI_ASC_MEDIUM_CHANGE;
                 set_not_ready(true);
+		notifyObservers(zuluide::DeviceActions::IMAGE_LOAD_COMPLETE);
             }
         }
         img_iterator.Cleanup();
@@ -1389,44 +1378,44 @@ void IDEATAPIDevice::insert_media(IDEImage *image)
 
 void IDEATAPIDevice::insert_next_media(IDEImage *image)
 {
-    zuluide::images::ImageIterator img_iterator;
-    char filename[MAX_FILE_PATH+1];
-    if (m_devinfo.removable && m_removable.ejected)
-    {
-        img_iterator.Reset();
-        if (!img_iterator.IsEmpty())
-        {
-            if (image && image->get_image_name(filename, sizeof(filename)))
-            {
-                if (!img_iterator.MoveToFile(filename))
-                {
-                    img_iterator.MoveNext();
-                }
-            }
-            else
-            {
-                img_iterator.MoveNext();
-            }
+    // zuluide::images::ImageIterator img_iterator;
+    // char filename[MAX_FILE_PATH+1];
+    // if (m_devinfo.removable && m_removable.ejected)
+    // {
+    //     img_iterator.Reset();
+    //     if (!img_iterator.IsEmpty())
+    //     {
+    //         if (image && image->get_image_name(filename, sizeof(filename)))
+    //         {
+    //             if (!img_iterator.MoveToFile(filename))
+    //             {
+    //                 img_iterator.MoveNext();
+    //             }
+    //         }
+    //         else
+    //         {
+    //             img_iterator.MoveNext();
+    //         }
 
-            if (img_iterator.IsLast())
-            {
-                img_iterator.MoveFirst();
-            }
-            else
-            {
-                img_iterator.MoveNext();
-            }
+    //         if (img_iterator.IsLast())
+    //         {
+    //             img_iterator.MoveFirst();
+    //         }
+    //         else
+    //         {
+    //             img_iterator.MoveNext();
+    //         }
 
-            g_ide_imagefile.clear();
-            if (g_ide_imagefile.open_file(img_iterator.Get().GetFilename().c_str(), true))
-            {
-                m_removable.ejected = false;
-                g_StatusController.LoadImage(img_iterator.Get());
-                g_previous_controller_status = g_StatusController.GetStatus();
-            }
-        }
-        img_iterator.Cleanup();
-    }
+    //         g_ide_imagefile.clear();
+    //         if (g_ide_imagefile.open_file(img_iterator.Get().GetFilename().c_str(), true))
+    //         {
+    //             m_removable.ejected = false;
+    //             g_StatusController.LoadImage(img_iterator.Get());
+    //             g_previous_controller_status = g_StatusController.GetStatus();
+    //         }
+    //     }
+    //     img_iterator.Cleanup();
+    // }
 }
 
 void IDEATAPIDevice::sd_card_inserted()

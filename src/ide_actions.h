@@ -19,17 +19,36 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  **/
 
-#pragma once
+#ifndef IDE_ACTIONS_H
+#define IDE_ACTIONS_H
 
 namespace zuluide {
 
-/***
- * Models an IDE device's state changes of interest to an external component. 
- */
-enum class DeviceActions {
+  /***
+   * Models an IDE device's state changes of interest to an external component. 
+   */
+  enum class DeviceActions {
     INQUERY,
     EJECT,
-    IMAGE_LOAD_COMPLETE
-};
+    IMAGE_LOAD_COMPLETE,
+    LOAD_REQUEST
+  };
+  
+  inline const char* ToString(const DeviceActions& value) {
+    switch (value) {
+    case DeviceActions::INQUERY:
+      return "INQUERY";
+    case DeviceActions::EJECT:
+      return "EJECT";
+    case DeviceActions::IMAGE_LOAD_COMPLETE:
+      return "IMAGE_LOAD_COMPLETE";
+    case DeviceActions::LOAD_REQUEST:
+      return "LOAD_REQUEST";
+    default:
+      return "UNKNOWN";
+    }
+  }
 
 }
+
+#endif

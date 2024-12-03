@@ -65,6 +65,7 @@ zuluide::status::SystemStatus g_previous_controller_status;
 void status_observer(const zuluide::status::SystemStatus& current);
 void loadFirstImage();
 void load_image(const zuluide::images::Image& toLoad, bool insert = true);
+void handleDeviceChange(const zuluide::DeviceActions& current);
 
 #ifndef SD_SPEED_CLASS_WARN_BELOW
 #define SD_SPEED_CLASS_WARN_BELOW 10
@@ -350,6 +351,7 @@ void setupStatusController()
 
   g_StatusController.AddObserver(status_observer);
   platform_set_device_control(&g_StatusController);
+  g_ide_device->AddObserver(handleDeviceChange);
 
   if (platform_check_for_controller())
   {
@@ -372,6 +374,10 @@ void setupStatusController()
   }
 
   loadFirstImage();
+}
+
+void handleDeviceChange(const zuluide::DeviceActions& current) {
+  logmsg("Action ", ToString(current));
 }
 
 void loadFirstImage() {
