@@ -1577,7 +1577,7 @@ void IDECDROMDevice::eject_media()
     logmsg("Device ejecting media: \"", filename, "\"");
     set_esn_event(esn_event_t::NoChange);
     m_removable.ejected = true;
-
+    notifyObservers(zuluide::DeviceActions::EJECT);
 }
 
 void IDECDROMDevice::button_eject_media()

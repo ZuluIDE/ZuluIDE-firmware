@@ -794,7 +794,7 @@ bool IDEATAPIDevice::atapi_cmd_ok()
 
 bool IDEATAPIDevice::atapi_test_unit_ready(const uint8_t *cmd)
 {
-    notifyObservers(zuluide::DeviceActions::INQUERY);
+    notifyObservers(zuluide::DeviceActions::TEST_READY);
 
     if (!has_image())
     {
@@ -871,6 +871,7 @@ bool IDEATAPIDevice::atapi_inquiry(const uint8_t *cmd)
     if (req_bytes < count) count = req_bytes;
     atapi_send_data(inquiry, count);
 
+    logmsg("atapi_inquiry");
     notifyObservers(zuluide::DeviceActions::INQUERY);
 
     return atapi_cmd_ok();

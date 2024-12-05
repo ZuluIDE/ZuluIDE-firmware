@@ -31,7 +31,8 @@ namespace zuluide {
     INQUERY,
     EJECT,
     IMAGE_LOAD_COMPLETE,
-    LOAD_REQUEST
+    LOAD_REQUEST,
+    TEST_READY
   };
   
   inline const char* ToString(const DeviceActions& value) {
@@ -44,6 +45,8 @@ namespace zuluide {
       return "IMAGE_LOAD_COMPLETE";
     case DeviceActions::LOAD_REQUEST:
       return "LOAD_REQUEST";
+    case DeviceActions::TEST_READY:
+      return "TEST_READY";
     default:
       return "UNKNOWN";
     }
