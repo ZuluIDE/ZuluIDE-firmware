@@ -269,6 +269,7 @@ void platform_late_init()
 
 bool platform_check_for_controller()
 {
+  g_wire.setClock(100000);
   g_rotary_input.SetI2c(&g_wire);
   bool hasHardwareUI = g_rotary_input.CheckForDevice();
   bool hasI2CServer = g_I2cServer.CheckForDevice();
@@ -418,6 +419,13 @@ static void usb_log_poll();
 
 void platform_emergency_log_save()
 {
+    volatile uint core_num = get_core_num();
+    if (core_num != 0)
+    {
+        logmsg("Only core 0 may attempt 'platform_emergency_log_save()'");
+        return;
+    }
+
     platform_set_sd_callback(NULL, NULL);
 
     SD.begin(SD_CONFIG_CRASH);

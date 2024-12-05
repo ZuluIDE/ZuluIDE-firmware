@@ -136,7 +136,7 @@ bool ImageIterator::Move(bool forward) {
     if (currentFile.isDirectory()) {
       // Indicates probable multi-part bin/cue.
       if(!FetchSizeFromCueFile()) {
-	logmsg("Failed to fetch bin/cue size.");
+        logmsg("Failed to fetch bin/cue size.");
       }
     } else {
       candidateSizeInBytes = currentFile.fileSize();
@@ -163,7 +163,7 @@ bool ImageIterator::MoveFirst()
     if (currentFile.isDirectory()) {
       // Indicates probable multi-part bin/cue.
       if(!FetchSizeFromCueFile()) {
-	logmsg("Failed to fetch bin/cue size.");
+  logmsg("Failed to fetch bin/cue size.");
       }
     } else {
       candidateSizeInBytes = currentFile.fileSize();
@@ -186,7 +186,7 @@ bool ImageIterator::MoveLast()
     if (currentFile.isDirectory()) {
       // Indicates probable multi-part bin/cue.
       if(!FetchSizeFromCueFile()) {
-	logmsg("Failed to fetch bin/cue size.");
+  logmsg("Failed to fetch bin/cue size.");
       }
     } else {
       candidateSizeInBytes = currentFile.fileSize();
@@ -209,7 +209,7 @@ bool ImageIterator::MoveToFile(const char *filename)
     if (currentFile.isDirectory()) {
       // Indicates probable multi-part bin/cue.
       if(!FetchSizeFromCueFile()) {
-	logmsg("Failed to fetch bin/cue size.");
+        logmsg("Failed to fetch bin/cue size.");
       }
     } else {
       candidateSizeInBytes = currentFile.fileSize();
@@ -236,6 +236,7 @@ void ImageIterator::Cleanup() {
 
 void ImageIterator::Reset() {
   Cleanup();
+  fileCount = 0;
 
   if (!root.open("/")) {
     logmsg("Failed to open root directory.");
@@ -249,6 +250,8 @@ void ImageIterator::Reset() {
     char curFilePath[MAX_FILE_PATH+1];
     char firstFilename[MAX_FILE_PATH+1] = {0};
     char lastFilename[MAX_FILE_PATH+1] = {0};
+    memcpy(candidate, 0, sizeof(candidate));
+
     // Walk the directory to count the number of files.
     while (curFile.openNext(&root, O_RDONLY)) {
       fileCount++;
@@ -298,10 +301,11 @@ static bool folderContainsCueSheet(FsFile &dir)
     if (file.getName(filename, sizeof(filename)) &&
         (strncasecmp(filename + strlen(filename) - 4, ".cue", 4) == 0))
     {
+      file.close();
       return true;
     }
   }
-
+  file.close();
   return false;
 }
 
@@ -368,27 +372,28 @@ static bool is_valid_filename(const char *name)
 }
 
 bool tryReadQueueSheet(FsFile &cuesheetfile, char* cuesheet) {
-    if (!cuesheetfile.isOpen()) {
-      logmsg("---- Failed to load CUE sheet.");
-      return false;
-    }
-    
-    if (cuesheetfile.size() > MAX_CUE_SHEET_SIZE) {
-        logmsg("---- WARNING: CUE sheet length ", (int)cuesheetfile.size(), " exceeds maximum ",
-	       (int)sizeof(cuesheet), " bytes");
-	return false;
-    }
+  if (!cuesheetfile.isOpen()) {
+    logmsg("---- Failed to load CUE sheet.");
+    return false;
+  }
+  
+  if (cuesheetfile.size() > MAX_CUE_SHEET_SIZE) {
+    logmsg("---- WARNING: CUE sheet length ", (int)cuesheetfile.size(), " exceeds maximum ",
+      (int)sizeof(cuesheet), " bytes");
+    return false;
+  }
 
-    cuesheetfile.read(cuesheet, MAX_CUE_SHEET_SIZE);
-    return true;
+  cuesheetfile.read(cuesheet, MAX_CUE_SHEET_SIZE);
+  return true;
 }
 
 bool searchForCueSheetFile(FsFile *directory, FsFile &outputFile) {
   while (outputFile.openNext(directory, O_RDONLY)) {
     char filename[MAX_FILE_PATH + 1];
     if (outputFile.getName(filename, sizeof(filename)) &&
-	strncasecmp(filename + strlen(filename) - 4, ".cue", 4) == 0) {
-      return true;    
+      strncasecmp(filename + strlen(filename) - 4, ".cue", 4) == 0) {
+
+      return true;
     }
 
     outputFile.close();
@@ -425,12 +430,12 @@ bool ImageIterator::FetchSizeFromCueFile() {
       // This track file has not be summed yet.
       FsFile trackFile;
       if (trackFile.open(&currentFile, current->filename, O_RDONLY)) {
-	totalSize += trackFile.fileSize();
-	trackFile.close();
-	currentfilename = current->filename;
+        totalSize += trackFile.fileSize();
+        trackFile.close();
+        currentfilename = current->filename;
       } else {
-	// If we cannot open a track file, we cannot proceed in a meaningful way.
-	return false;
+        // If we cannot open a track file, we cannot proceed in a meaningful way.
+        return false;
       }
     }
     
