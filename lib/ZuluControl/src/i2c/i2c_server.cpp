@@ -21,7 +21,6 @@
 
 #include <zuluide/i2c/i2c_server.h>
 #include <sstream>
-#include <zuluide/images/utils.h>
 #include "ZuluIDE_log.h"
 #include "ZuluIDE_platform.h"
 
@@ -170,13 +169,19 @@ void I2CServer::Poll() {
           toRecv--;
         }
       }
-
-      logmsg("Client requested the current image be set to:", buffer);
-
-      // Load the image.
-      zuluide::images::Image toLoad(std::string(), 0);
-      if (zuluide::images::LoadImageByFileName(buffer, &toLoad)) {
-        deviceControl->LoadImageSafe(toLoad);
+      if (buffer[0] != '\0')
+      {
+        logmsg("Client requested the current image be set to:", buffer);
+        mutex_enter_blocking(platform_get_log_mutex());  
+        iterator.Reset();
+        bool found_file = iterator.MoveToFile(buffer);
+        zuluide::images::Image toLoad(std::string(), 0);
+        toLoad = iterator.Get();
+        iterator.Cleanup();
+        mutex_exit(platform_get_log_mutex());
+        if (found_file) {
+          deviceControl->LoadImageSafe(toLoad);
+        }
       }
 
       delete[] buffer;

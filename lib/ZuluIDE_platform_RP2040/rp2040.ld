@@ -49,12 +49,11 @@ SECTIONS
         *(.eh_frame*)
         . = ALIGN(4);
         /* Putting these functions in SRAM to increase IDE throughput */
-        EXCLUDE_FILE (*libZuluIDE_platform_RP2040.a: *libSdFat.a:) *(.text .text*)
+        EXCLUDE_FILE (*libZuluIDE_platform_RP2040.a: *libSdFat.a: *ide*cpp.o *ZuluIDE*cpp.o) *(.text .text*)
     } > FLASH
     .rodata : {
         . = ALIGN(4);
         *(SORT_BY_ALIGNMENT(SORT_BY_NAME(.flashdata*)))
-        EXCLUDE_FILE (*libFrameworkArduino.a: *libSdFat.a:) *(.rodata .rodata*)
         *(.rodata)
         *(.rodata*)
         . = ALIGN(4);
@@ -89,6 +88,8 @@ SECTIONS
         . = ALIGN(4);
         *libZuluIDE_platform_RP2040.a:(.text .text*)
         *libSdFat.a:*(.text .text*)
+        *ide*cpp.o(.text .text*)
+        *ZuluIDE*cpp.o(.text .text*)
         . = ALIGN(4);
         *(.data*)
         . = ALIGN(4);
