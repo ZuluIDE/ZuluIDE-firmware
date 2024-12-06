@@ -270,6 +270,11 @@ void platform_late_init()
 bool platform_check_for_controller()
 {
   g_wire.setClock(100000);
+  // Setting the drive strength seems to help the I2C bus with the Pico W controller and the controller OLED display
+  // to communicate and handshake properly
+  gpio_set_drive_strength(GPIO_I2C_SCL, GPIO_DRIVE_STRENGTH_12MA);
+  gpio_set_drive_strength(GPIO_I2C_SDA, GPIO_DRIVE_STRENGTH_12MA);
+
   g_rotary_input.SetI2c(&g_wire);
   bool hasHardwareUI = g_rotary_input.CheckForDevice();
   bool hasI2CServer = g_I2cServer.CheckForDevice();
