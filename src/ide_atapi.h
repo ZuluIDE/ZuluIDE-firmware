@@ -56,6 +56,8 @@ public:
 
     virtual bool has_image() { return m_image != nullptr; }
 
+    virtual bool get_image_name(char *buf, size_t buflen);
+
     virtual uint64_t capacity() { return (m_image ? m_image->capacity() : 0); }
 
     virtual uint64_t capacity_lba() { return capacity() / m_devinfo.bytes_per_sector; }

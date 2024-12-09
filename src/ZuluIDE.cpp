@@ -376,8 +376,69 @@ void setupStatusController()
   loadFirstImage();
 }
 
+/***
+    When the IDE device has a change, we act upon in here.
+ **/
 void handleDeviceChange(const zuluide::DeviceActions& current) {
-  logmsg("Action ", ToString(current));
+  switch (current) {
+  case zuluide::DeviceActions::EJECT: {
+    // TODO: Check if we are to reload on an EJECT
+    char filename[MAX_FILE_PATH +1 ];
+    if (g_ide_device.get_image_name(filename, sizeof(filename))) {
+      zuluide::images::ImageIterator imgIterator;
+      imgIterator.Reset();
+      if (!imgIterator.MoveToFile(filename)) {
+	imgIterator.MoveNext();
+      }
+    }
+    
+    break;
+  }
+    
+  case zuluide::DeviceActions::INQUERY: {
+    break;
+  }
+    
+  case zuluide::DeviceActions::SD_CARD_MOUNTED: {
+    break;
+  }
+  }
+}
+
+void loadNextImage() {
+  img_iterator.Reset();
+    //     if (!img_iterator.IsEmpty())
+    //     {
+    //         if (image && image->get_image_name(filename, sizeof(filename)))
+    //         {
+    //             if (!img_iterator.MoveToFile(filename))
+    //             {
+    //                 img_iterator.MoveNext();
+    //             }
+    //         }
+    //         else
+    //         {
+    //             img_iterator.MoveNext();
+    //         }
+
+    //         if (img_iterator.IsLast())
+    //         {
+    //             img_iterator.MoveFirst();
+    //         }
+    //         else
+    //         {
+    //             img_iterator.MoveNext();
+    //         }
+
+    //         g_ide_imagefile.clear();
+    //         if (g_ide_imagefile.open_file(img_iterator.Get().GetFilename().c_str(), true))
+    //         {
+    //             m_removable.ejected = false;
+    //             g_StatusController.LoadImage(img_iterator.Get());
+    //             g_previous_controller_status = g_StatusController.GetStatus();
+    //         }
+    //     }
+    //     img_iterator.Cleanup();
 }
 
 void loadFirstImage() {
@@ -607,7 +668,7 @@ void zuluide_main_loop(void)
             init_logfile();
 
             g_StatusController.SetIsCardPresent(true);
-            loadFirstImage();
+	    //            loadFirstImage();
             g_ide_device->sd_card_inserted();
         }
         else

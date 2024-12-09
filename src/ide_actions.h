@@ -32,7 +32,8 @@ namespace zuluide {
     EJECT,
     IMAGE_LOAD_COMPLETE,
     LOAD_REQUEST,
-    TEST_READY
+    TEST_READY,
+    SD_CARD_MOUNTED
   };
   
   inline const char* ToString(const DeviceActions& value) {

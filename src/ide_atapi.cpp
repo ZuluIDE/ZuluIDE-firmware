@@ -1421,12 +1421,14 @@ void IDEATAPIDevice::insert_next_media(IDEImage *image)
 
 void IDEATAPIDevice::sd_card_inserted()
 {
-    if (m_devinfo.removable
-        && m_removable.reinsert_media_after_sd_insert
-        && m_removable.ejected)
-    {
-        insert_next_media(m_image);
-    }
+    notifyObservers(zuluide::DeviceActions::SD_CARD_MOUNTED);
+    
+    // if (m_devinfo.removable
+    //     && m_removable.reinsert_media_after_sd_insert
+    //     && m_removable.ejected)
+    // {
+    //     insert_next_media(m_image);
+    // }
 }
 
 void IDEATAPIDevice::set_inquiry_strings(const char* default_vendor, const char* default_product, const char* default_version)
@@ -1457,4 +1459,14 @@ void IDEATAPIDevice::set_not_ready(bool not_ready)
 {
     if (ini_getbool("IDE", "set_not_ready_on_insert", 0, CONFIGFILE))
         m_atapi_state.not_ready = not_ready;
+}
+
+bool IDEATAPIDevice::get_image_name(char *buf, size_t buflen)
+{
+  if (has_image()) {
+    return m_image.get_image_name(buf, buflen);
+  } else {
+    memset(buf, 0, buflen);
+    return false;
+  }
 }

@@ -49,6 +49,10 @@ public:
     // device medium is present
     virtual bool is_medium_present() = 0;
 
+    // If an image is loaded it copies the name into buf and returns true
+    // If no image is loaded it clears the buf and returns false
+    virtual bool get_image_name(char *buf, size_t buflen) = 0;
+
     // tests if an image is open
     virtual bool has_image() = 0;
 
