@@ -403,6 +403,9 @@ bool searchForCueSheetFile(FsFile *directory, FsFile &outputFile) {
 }
 
 bool ImageIterator::FetchSizeFromCueFile() {
+  candidateSizeInBytes = 0;
+  return true;
+  
   if (!parseMultiPartBinCueSize) {
     return false;
   }
