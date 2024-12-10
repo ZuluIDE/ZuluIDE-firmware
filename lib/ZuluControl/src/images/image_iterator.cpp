@@ -383,7 +383,13 @@ bool tryReadQueueSheet(FsFile &cuesheetfile, char* cuesheet) {
     return false;
   }
 
-  cuesheetfile.read(cuesheet, MAX_CUE_SHEET_SIZE);
+  auto bytesread = cuesheetfile.read(cuesheet, MAX_CUE_SHEET_SIZE);
+  if (bytesread < 0) {
+    logmsg("---- Failed to read CUE sheet");
+    return false;
+  } else if (bytesread < MAX_CUE_SHEET_SIZE) {
+    cuesheet[bytesread+1] = 0;
+  }
   return true;
 }
 
@@ -418,6 +424,8 @@ bool ImageIterator::FetchSizeFromCueFile() {
     file.close();
     return false;
   }
+  char dirname[MAX_FILE_PATH + 1];
+  currentFile.getName(dirname, sizeof(dirname));
   
   CUEParser parser(cuesheet);
   parser.restart();
@@ -434,6 +442,7 @@ bool ImageIterator::FetchSizeFromCueFile() {
         trackFile.close();
         currentfilename = current->filename;
       } else {
+        logmsg("Failed to read \"", dirname, "/", current->filename, "\"");
         // If we cannot open a track file, we cannot proceed in a meaningful way.
         return false;
       }
