@@ -47,7 +47,7 @@ bool ImageIterator::IsEmpty() {
     requires: Previous call to MoveNext to have returned true.
  */
 Image ImageIterator::Get() {
-  return Image(std::string(candidate), candidateSizeInBytes);
+  return Image(std::string(candidate), candidateImageType, candidateSizeInBytes);
 }
 
 bool ImageIterator::MoveNext()
@@ -251,6 +251,7 @@ void ImageIterator::Reset() {
     char firstFilename[MAX_FILE_PATH+1] = {0};
     char lastFilename[MAX_FILE_PATH+1] = {0};
     memcpy(candidate, 0, sizeof(candidate));
+    candidateImageType = Image::ImageType::unknown;
 
     // Walk the directory to count the number of files.
     while (curFile.openNext(&root, O_RDONLY)) {
@@ -451,6 +452,7 @@ bool ImageIterator::FetchSizeFromCueFile() {
     current = parser.next_track(totalSize);
   }
     
+  candidateImageType = Image::ImageType::cdrom;
   candidateSizeInBytes = totalSize;
   file.close();
   return true;

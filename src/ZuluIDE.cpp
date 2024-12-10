@@ -236,26 +236,32 @@ drive_type_t searchForDriveType() {
   zuluide::images::ImageIterator imgIter;
   imgIter.Reset();
   while(imgIter.MoveNext()) {
-    auto image = imgIter.Get().GetFilename().substr(0,4).c_str();
-    if (strncasecmp(image, "cdrm", sizeof("cdrm")) == 0) {
-      g_ide_imagefile.set_prefix(image);
-      return DRIVE_TYPE_CDROM;
-    } else if (strncasecmp(image, "zipd", sizeof("zipd")) == 0) {
-      g_ide_imagefile.set_prefix(image);
-      return DRIVE_TYPE_ZIP100;
-    } else if (strncasecmp(image, "z100", sizeof("z100")) == 0) {
-      g_ide_imagefile.set_prefix(image);
-      return DRIVE_TYPE_ZIP100;
-    } else if (strncasecmp(image, "z250", sizeof("z250")) == 0) {
-      g_ide_imagefile.set_prefix(image);
-      return DRIVE_TYPE_ZIP250;
-    } else if (strncasecmp(image, "remv", sizeof("remv")) == 0) {
-      g_ide_imagefile.set_prefix(image);
-      return DRIVE_TYPE_REMOVABLE;
+    Image image = imgIter.Get();
+
+    switch (image.GetImageType()) {
+        case Image::ImageType::cdrom: {
+            return DRIVE_TYPE_CDROM;
+        }
     }
-    else if (strncasecmp(image, "hddr", sizeof("hddr")) == 0)
-    {
-      g_ide_imagefile.set_prefix(image);
+
+    auto prefix = image.GetFilename().substr(0,4).c_str();
+    if (strncasecmp(prefix, "cdrm", sizeof("cdrm")) == 0) {
+      g_ide_imagefile.set_prefix(prefix);
+      return DRIVE_TYPE_CDROM;
+    } else if (strncasecmp(prefix, "zipd", sizeof("zipd")) == 0) {
+      g_ide_imagefile.set_prefix(prefix);
+      return DRIVE_TYPE_ZIP100;
+    } else if (strncasecmp(prefix, "z100", sizeof("z100")) == 0) {
+      g_ide_imagefile.set_prefix(prefix);
+      return DRIVE_TYPE_ZIP100;
+    } else if (strncasecmp(prefix, "z250", sizeof("z250")) == 0) {
+      g_ide_imagefile.set_prefix(prefix);
+      return DRIVE_TYPE_ZIP250;
+    } else if (strncasecmp(prefix, "remv", sizeof("remv")) == 0) {
+      g_ide_imagefile.set_prefix(prefix);
+      return DRIVE_TYPE_REMOVABLE;
+    } else if (strncasecmp(prefix, "hddr", sizeof("hddr")) == 0) {
+      g_ide_imagefile.set_prefix(prefix);
       return DRIVE_TYPE_RIGID;
     }
   }
