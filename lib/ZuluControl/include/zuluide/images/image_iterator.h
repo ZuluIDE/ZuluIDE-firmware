@@ -69,6 +69,7 @@ namespace zuluide::images {
     FsFile root;
     char candidate[MAX_FILE_PATH + 1];
     uint64_t candidateSizeInBytes;
+    Image::ImageType candidateImageType;
     bool isOnImageFile;
     int fileCount;
     bool rotateIterator;
