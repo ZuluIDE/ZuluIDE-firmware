@@ -90,7 +90,10 @@ protected:
         char ata_model[40];
         char ata_revision[8];
         char ata_serial[20];
-
+        int ide_cylinders;
+        int ide_heads;
+        int ide_sectors;
+        int access_delay;
     } m_devconfig;
 
     // PHY capabilities limited by active device configuration

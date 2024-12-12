@@ -344,11 +344,6 @@ void setupStatusController()
     break;
   }
 
-  if (isPrimary)
-      ide_protocol_init(g_ide_device, NULL); // Primary device
-  else
-      ide_protocol_init(NULL, g_ide_device); // Secondary device
-
   if (device) {
     g_StatusController.SetIsPrimary(isPrimary);
     g_StatusController.UpdateDeviceStatus(std::move(device));
@@ -378,6 +373,11 @@ void setupStatusController()
   }
 
   loadFirstImage();
+
+  if (isPrimary)
+    ide_protocol_init(g_ide_device, NULL); // Primary device
+  else
+    ide_protocol_init(NULL, g_ide_device); // Secondary device
 }
 
 void loadFirstImage() {

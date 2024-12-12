@@ -70,9 +70,22 @@ void IDERigidDevice::initialize(int devidx)
     uint64_t lba = capacity_lba();
 
     bool found_chs = false;
-    if (cap <= IDE_CHS_528MB_LIMIT_BYTES)
+    const char *method = "";
+
+    if (m_devconfig.ide_sectors &&
+        m_devconfig.ide_heads &&
+        m_devconfig.ide_cylinders)
+    {
+        m_devinfo.cylinders = m_devconfig.ide_cylinders;
+        m_devinfo.heads = m_devconfig.ide_heads;
+        m_devinfo.sectors_per_track = m_devconfig.ide_sectors;
+        found_chs = true;
+        method = "INI config";
+    }
+    else if (cap <= IDE_CHS_528MB_LIMIT_BYTES)
     {
         found_chs = find_chs_capacity(lba, 1024, 1, m_devinfo.cylinders, m_devinfo.heads, m_devinfo.sectors_per_track);
+        method = "image";
     }
     else if (cap <= IDE_CHS_8GB_WITH_GAP_LIMIT_BYTES)
     {
@@ -81,18 +94,20 @@ void IDERigidDevice::initialize(int devidx)
             found_chs = find_chs_capacity(lba, 32767, 5, m_devinfo.cylinders, m_devinfo.heads, m_devinfo.sectors_per_track);
         if (!found_chs)
             found_chs = find_chs_capacity(lba, 65535, 1, m_devinfo.cylinders, m_devinfo.heads, m_devinfo.sectors_per_track);
+        method = "image";
     }
     else
     {
         m_devinfo.cylinders = 16383;
         m_devinfo.heads = 16;
         m_devinfo.sectors_per_track = 63;
+        method = "defaults for large image";
     }
 
     m_devinfo.current_cylinders = m_devinfo.cylinders;
     m_devinfo.current_heads = m_devinfo.heads;
     m_devinfo.current_sectors = m_devinfo.sectors_per_track;
-    dbgmsg("Derived Cylinders/Heads/Sectors from ", (int) (capacity() / 1000000), "MB (total sectors = ", (int)lba,") is C: ", (int) m_devinfo.cylinders,
+    logmsg("Selected Cylinders/Heads/Sectors settings from ", method, " with size ", (int) (capacity() / 1000000), "MB (total sectors = ", (int)lba,") as C: ", (int) m_devinfo.cylinders,
         " H: ",(int) m_devinfo.heads,
         " S: ", (int) m_devinfo.sectors_per_track);
     m_devinfo.writable = true;
@@ -119,6 +134,7 @@ void IDERigidDevice::set_image(IDEImage *image)
 
 bool IDERigidDevice::handle_command(ide_registers_t *regs)
 {
+    delay(m_devconfig.access_delay);
 
     switch (regs->command)
     {
@@ -130,9 +146,10 @@ bool IDERigidDevice::handle_command(ide_registers_t *regs)
         // Supported IDE commands
         case IDE_CMD_NOP: return cmd_nop(regs);
         case IDE_CMD_SET_FEATURES: return cmd_set_features(regs);
-        case IDE_CMD_READ_DMA: return cmd_read(regs, true);
+        case IDE_CMD_READ_DMA: return cmd_read(regs, true, false);
         case IDE_CMD_WRITE_DMA: return cmd_write(regs, true);
-        case IDE_CMD_READ_SECTORS: return cmd_read(regs, false);
+        case IDE_CMD_READ_SECTORS: return cmd_read(regs, false, false);
+        case IDE_CMD_READ_VERIFY_SECTORS: return cmd_read(regs, false, true);
         case IDE_CMD_WRITE_SECTORS: return cmd_write(regs, false);
         case IDE_CMD_READ_BUFFER: return cmd_read_buffer(regs);
         case IDE_CMD_WRITE_BUFFER: return cmd_write_buffer(regs);
@@ -241,7 +258,7 @@ static void copy_id_string(uint16_t *dst, size_t maxwords, const char *src)
     }
 }
 
-bool IDERigidDevice::cmd_read(ide_registers_t *regs, bool dma_transfer)
+bool IDERigidDevice::cmd_read(ide_registers_t *regs, bool dma_transfer, bool verify_only)
 {
     if (dma_transfer && m_phy_caps.max_udma_mode < 0)
         return false;
@@ -276,6 +293,7 @@ bool IDERigidDevice::cmd_read(ide_registers_t *regs, bool dma_transfer)
     // access out of bounds
     if (lba >= capacity_lba())
     {
+        logmsg("Read access out of bounds, lba = ", (int)lba, ", capacity ", (int)capacity_lba());
         lba = capacity_lba();
         regs->device = 0xF & (lba << 24);
         regs->lba_high = lba << 16;
@@ -285,6 +303,14 @@ bool IDERigidDevice::cmd_read(ide_registers_t *regs, bool dma_transfer)
         ide_phy_set_regs(regs);
         ide_phy_assert_irq(IDE_STATUS_DEVRDY | IDE_STATUS_DSC | IDE_STATUS_ERR);
     }
+    else if (verify_only)
+    {
+        // Report verify OK as long as the location is within range.
+        regs->error = 0;
+        ide_phy_set_regs(regs);
+        ide_phy_assert_irq(IDE_STATUS_DEVRDY | IDE_STATUS_DSC);
+        return true;
+    }
     else
     {
         bool status = m_image->read((uint64_t)lba * m_devinfo.bytes_per_sector, m_devinfo.bytes_per_sector, sector_count, this);
@@ -292,7 +318,6 @@ bool IDERigidDevice::cmd_read(ide_registers_t *regs, bool dma_transfer)
         m_ata_state.data_state = ATA_DATA_IDLE;
         if (status)
         {
-
             ide_phy_assert_irq(IDE_STATUS_DEVRDY | IDE_STATUS_DSC);
         }
         else
