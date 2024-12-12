@@ -223,6 +223,10 @@ void ide_protocol_poll()
             //     ide_phy_set_regs(&regs);
             //     ide_phy_assert_irq(IDE_STATUS_DEVRDY | IDE_STATUS_ERR);
             // }
+            else if (regs.error)
+            {
+                logmsg("-- Command ", get_ide_command_name(cmd), " completed with error status ", regs.error);
+            }
             else
             {
                 dbgmsg("-- Command complete");
@@ -504,6 +508,10 @@ void IDEDevice::initialize(int devidx)
     logmsg("-- Max PIO mode: ", m_devconfig.max_pio_mode, " (phy max ", m_phy_caps.max_pio_mode, ")");
     logmsg("-- Max UDMA mode: ", m_devconfig.max_udma_mode, " (phy max ", m_phy_caps.max_udma_mode, ")");
     logmsg("-- Max blocksize: ", m_devconfig.max_blocksize, " (phy max ", (int)m_phy_caps.max_blocksize, ")");
+    m_devconfig.ide_sectors = ini_getl("IDE", "sectors", 0, CONFIGFILE);
+    m_devconfig.ide_heads = ini_getl("IDE", "heads", 0, CONFIGFILE);
+    m_devconfig.ide_cylinders = ini_getl("IDE", "cylinders", 0, CONFIGFILE);
+    m_devconfig.access_delay = ini_getl("IDE", "access_delay", 0, CONFIGFILE);
 
     g_ignore_cmd_interrupt = ini_getl("IDE", "ignore_command_interrupt", 1, CONFIGFILE);
     if (!g_ignore_cmd_interrupt)

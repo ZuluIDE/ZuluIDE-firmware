@@ -74,6 +74,8 @@ void IDEATAPIDevice::set_image(IDEImage *image)
 
 bool IDEATAPIDevice::handle_command(ide_registers_t *regs)
 {
+    delay(m_devconfig.access_delay);
+
     switch (regs->command)
     {
         // Commands superseded by the ATAPI packet interface
