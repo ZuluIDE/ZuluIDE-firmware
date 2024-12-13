@@ -56,12 +56,8 @@ void DisplaySSD1306::init(TwoWire* wire) {
     wBounds = {h, w};
     graph.setTextWrap(false);
 
-    graph.clearDisplay();
-    graph.setTextColor(WHITE, BLACK);
-    graph.setCursor(0, HEIGHT / 2);
-    graph.print("Initializing");
-    graph.display();
-
+    currentWidget = std::make_unique<zuluide::SplashWidget>(&graph, Rectangle{{0,0}, {WIDTH, HEIGHT}});
+    updateDisplay();
   } else {
     logmsg("gfx.begin failed.");
   }
@@ -118,12 +114,12 @@ void DisplaySSD1306::HandleUpdate(const zuluide::control::DisplayState& current)
 }
 
 void DisplaySSD1306::updateDisplay() {
-  if (currentDispState && currentSysStatus) {
+  //if (currentDispState && currentSysStatus) {
     graph.clearDisplay();
     currentWidget->Display();
     graph.display();
     nextRefresh = make_timeout_time_ms(SCROLL_INTERVAL_MS);
-  }
+    //}
 }
 
 void DisplaySSD1306::Refresh() {
