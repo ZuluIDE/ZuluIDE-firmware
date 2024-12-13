@@ -928,3 +928,12 @@ ssize_t IDERigidDevice::write_callback(uint8_t *data, size_t blocksize, size_t n
     }
 }
 
+bool IDERigidDevice::get_image_name(char *buf, size_t buflen)
+{
+  if (has_image()) {
+    return m_image->get_image_name(buf, buflen);
+  } else {
+    memset(buf, 0, buflen);
+    return false;
+  }
+}

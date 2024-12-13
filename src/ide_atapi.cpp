@@ -1464,7 +1464,7 @@ void IDEATAPIDevice::set_not_ready(bool not_ready)
 bool IDEATAPIDevice::get_image_name(char *buf, size_t buflen)
 {
   if (has_image()) {
-    return m_image.get_image_name(buf, buflen);
+    return m_image->get_image_name(buf, buflen);
   } else {
     memset(buf, 0, buflen);
     return false;

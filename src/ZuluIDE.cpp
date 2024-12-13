@@ -384,7 +384,7 @@ void handleDeviceChange(const zuluide::DeviceActions& current) {
   case zuluide::DeviceActions::EJECT: {
     // TODO: Check if we are to reload on an EJECT
     char filename[MAX_FILE_PATH +1 ];
-    if (g_ide_device.get_image_name(filename, sizeof(filename))) {
+    if (g_ide_device->get_image_name(filename, sizeof(filename))) {
       zuluide::images::ImageIterator imgIterator;
       imgIterator.Reset();
       if (!imgIterator.MoveToFile(filename)) {
@@ -406,7 +406,7 @@ void handleDeviceChange(const zuluide::DeviceActions& current) {
 }
 
 void loadNextImage() {
-  img_iterator.Reset();
+  //  img_iterator.Reset();
     //     if (!img_iterator.IsEmpty())
     //     {
     //         if (image && image->get_image_name(filename, sizeof(filename)))
