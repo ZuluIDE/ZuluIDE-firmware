@@ -38,6 +38,11 @@ void StdDisplayController::AddObserver(std::function<void(const DisplayState& cu
 void StdDisplayController::SetMode(Mode newMode)
 {
   switch (newMode) {
+  case Mode::Splash: {
+    MoveToSplash();
+    break;
+  }
+    
   case Mode::Status: {
     StatusState empty;
     UpdateState(empty);
@@ -80,6 +85,11 @@ void StdDisplayController::SetMode(Mode newMode)
     break;
   }
   }
+}
+
+void StdDisplayController::MoveToSplash() {
+  currentState = std::move(DisplayState());
+  notifyObservers();
 }
 
 void StdDisplayController::UpdateState(StatusState& newState)
@@ -165,4 +175,8 @@ StdDisplayController::StdDisplayController(zuluide::status::StatusController* st
   selectController = std::make_unique<SelectController>(this, statController);
   newController = std::make_unique<NewController>(this, statController);
   infoController = std::make_unique<InfoController>(this);
+}
+
+zuluide::status::StatusController& StdDisplayController::GetStatController() {
+  return *statController;
 }

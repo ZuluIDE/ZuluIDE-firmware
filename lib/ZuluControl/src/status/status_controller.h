@@ -41,6 +41,7 @@ namespace zuluide::status {
   public:
     StatusController();
     void AddObserver(std::function<void(const SystemStatus& current)> callback);
+    void RemoveObserver(std::function<void(const SystemStatus& current)> callback);
     void AddObserver(queue_t* dest);
     void LoadImage(zuluide::images::Image i);
     void EjectImage();

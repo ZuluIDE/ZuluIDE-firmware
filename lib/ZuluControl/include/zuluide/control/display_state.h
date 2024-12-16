@@ -32,7 +32,7 @@
 using namespace zuluide::images;
 
 namespace zuluide::control {
-  enum class Mode { Status, Menu, Eject, Select, Info, NewImage };
+  enum class Mode { Splash, Status, Menu, Eject, Select, Info, NewImage };
 
   class DisplayState {
   public:

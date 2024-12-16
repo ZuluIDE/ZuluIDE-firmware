@@ -19,27 +19,18 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
 **/
 
-#include "splash_widget.h"
+#include "splash_controller.h"
+#include "std_display_controller.h"
 
-using namespace zuluide;
+using namespace zuluide::control;
 
-SplashWidget::SplashWidget(Adafruit_SSD1306 *g, Rectangle b) :
-  Widget(g, b)
-{
+SplashController::SplashController(StdDisplayController* cntrlr) :
+  controller(cntrlr) {
+  this->callback = [this](auto x) -> void { this->HandleStatusUpdate(x);};
+  controller->GetStatController().AddObserver(callback);
 }
 
-void SplashWidget::Update (const zuluide::status::SystemStatus &status) {  
-  Widget::Update(status);
-}
-
-void SplashWidget::Update (const zuluide::control::DisplayState &disp) {
-  Widget::Update(disp);
-}
-
-bool SplashWidget::Refresh () {
-  return false;
-}
-
-void SplashWidget::Display () {
-  graph->drawBitmap(0, 0, logo, 128, 32, WHITE);
+void SplashController::HandleStatusUpdate(const zuluide::status::SystemStatus& current) {
+  controller->GetStatController().RemoveObserver(callback);
+  controller->SetMode(Mode::Status);
 }

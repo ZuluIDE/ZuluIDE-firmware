@@ -76,6 +76,10 @@ void DisplaySSD1306::HandleUpdate(const zuluide::control::DisplayState& current)
   // Create the correct widget and assigned it to currentWidget, if there is a change in state..
   if (currentDispState->GetCurrentMode() != current.GetCurrentMode()) {
     switch (current.GetCurrentMode()) {
+    case zuluide::control::Mode::Splash: {
+      currentWidget = std::make_unique<zuluide::SplashWidget>(&graph, Rectangle{{0,0}, {WIDTH, HEIGHT}});
+      break;
+    }
     case zuluide::control::Mode::Status: {
       currentWidget = std::make_unique<zuluide::StatusWidget>(&graph, Rectangle{{0,0}, {WIDTH, HEIGHT}}, wBounds);
       break;
@@ -114,12 +118,10 @@ void DisplaySSD1306::HandleUpdate(const zuluide::control::DisplayState& current)
 }
 
 void DisplaySSD1306::updateDisplay() {
-  //if (currentDispState && currentSysStatus) {
     graph.clearDisplay();
     currentWidget->Display();
     graph.display();
     nextRefresh = make_timeout_time_ms(SCROLL_INTERVAL_MS);
-    //}
 }
 
 void DisplaySSD1306::Refresh() {

@@ -40,6 +40,7 @@ namespace zuluide::control {
     StdDisplayController(zuluide::status::StatusController* statCtrlr);
     void AddObserver(std::function<void(const DisplayState& current)> callback);
     Mode GetMode() const;
+    zuluide::status::StatusController& GetStatController();
     zuluide::control::StatusController& GetStatusController();
     MenuController& GetMenuController();
     EjectController& GetEjectController();
@@ -52,6 +53,7 @@ namespace zuluide::control {
     void UpdateState(EjectState& newState);
     void UpdateState(NewImageState& newState);
     void UpdateState(InfoState& newState);
+    void MoveToSplash();
     void SetMode(Mode value);
   private:
     void notifyObservers();    

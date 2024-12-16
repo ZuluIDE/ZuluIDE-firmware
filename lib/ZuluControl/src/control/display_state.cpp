@@ -44,7 +44,7 @@ DisplayState::DisplayState(NewImageState &state) :
 {}
 
 DisplayState::DisplayState() :
-  currentMode(Mode::Eject),
+  currentMode(Mode::Splash),
   ejectState(EjectState())
 {}
 

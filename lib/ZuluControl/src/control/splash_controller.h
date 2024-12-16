@@ -19,27 +19,24 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
 **/
 
-#include "splash_widget.h"
+#pragma once
 
-using namespace zuluide;
+#include <zuluide/control/display_state.h>
+#include <zuluide/status/system_status.h>
 
-SplashWidget::SplashWidget(Adafruit_SSD1306 *g, Rectangle b) :
-  Widget(g, b)
-{
-}
+#include <functional>
 
-void SplashWidget::Update (const zuluide::status::SystemStatus &status) {  
-  Widget::Update(status);
-}
-
-void SplashWidget::Update (const zuluide::control::DisplayState &disp) {
-  Widget::Update(disp);
-}
-
-bool SplashWidget::Refresh () {
-  return false;
-}
-
-void SplashWidget::Display () {
-  graph->drawBitmap(0, 0, logo, 128, 32, WHITE);
+namespace zuluide::control {
+  class StdDisplayController;
+  /**
+     Controls state when the UI is showing the menu.
+   */
+  class SplashController {
+  public:
+    SplashController(StdDisplayController* cntrlr);
+  private:
+    StdDisplayController* controller;
+    void HandleStatusUpdate(const zuluide::status::SystemStatus& current);
+    std::function<void(const zuluide::status::SystemStatus& current)> callback;
+  };
 }
