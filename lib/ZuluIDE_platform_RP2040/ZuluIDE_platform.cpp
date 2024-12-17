@@ -62,10 +62,12 @@ static uint64_t g_flash_unique_id;
 static zuluide::control::RotaryControl g_rotary_input;
 static TwoWire g_wire(i2c1, GPIO_I2C_SDA, GPIO_I2C_SCL);
 static zuluide::DisplaySSD1306 display;
-static queue_t g_status_update_queue;
 static uint8_t g_eject_buttons = 0;
 static zuluide::i2c::I2CServer g_I2cServer;
 static mutex_t logMutex;
+static zuluide::ObserverTransfer<zuluide::status::SystemStatus> *uiStatusController;
+
+void processStatusUpdate(const zuluide::status::SystemStatus &update);
 
 //void mbed_error_hook(const mbed_error_ctx * error_context);
 
@@ -288,11 +290,11 @@ bool platform_check_for_controller()
   return hasHardwareUI || hasI2CServer;
 }
 
-void platform_set_status_controller(zuluide::ObservableSafe<zuluide::status::SystemStatus>& statusController) {
+void platform_set_status_controller(zuluide::ObserverTransfer<zuluide::status::SystemStatus> *statusController) {
   logmsg("Initialized platform controller with the status controller.");
   display.init(&g_wire);
-  queue_init(&g_status_update_queue, sizeof(zuluide::status::SystemStatus*), 5);
-  statusController.AddObserver(&g_status_update_queue);
+  uiStatusController = statusController;
+  uiStatusController->AddObserver(processStatusUpdate);
 }
 
 void platform_set_display_controller(zuluide::Observable<zuluide::control::DisplayState>& displayController) {
@@ -1034,19 +1036,9 @@ void zuluide_main_loop1(void)
 {
     platform_poll_input();
 
-    // Look for device status updates.
-    zuluide::status::SystemStatus *currentStatus;
-    if (queue_try_remove(&g_status_update_queue, &currentStatus)) {
-      // Notify the hardware UI of updates.
-      display.HandleUpdate(*currentStatus);
-      
-      // Notify the I2C server of updates.
-      g_I2cServer.HandleUpdate(*currentStatus);
-
-      // Notify the 
-      delete(currentStatus);
-    } else {
-      // Only need to check refresh if there wasn't an update.
+    // Process status update, if any exist.
+    if (!uiStatusController->ProcessUpdate()) {
+      // If no updates happend, refresh the display (enables animation)
       display.Refresh();
     }
 
@@ -1068,4 +1060,12 @@ extern "C"
 
 mutex_t* platform_get_log_mutex() {
   return &logMutex;
+}
+
+void processStatusUpdate(const zuluide::status::SystemStatus &currentStatus) {
+  // Notify the hardware UI of updates.
+  display.HandleUpdate(currentStatus);
+  
+  // Notify the I2C server of updates.
+  g_I2cServer.HandleUpdate(currentStatus);
 }

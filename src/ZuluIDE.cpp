@@ -66,6 +66,8 @@ void status_observer(const zuluide::status::SystemStatus& current);
 void loadFirstImage();
 void load_image(const zuluide::images::Image& toLoad, bool insert = true);
 
+static zuluide::ObserverTransfer<zuluide::status::SystemStatus> uiSafeStatusUpdater(g_StatusController);
+
 #ifndef SD_SPEED_CLASS_WARN_BELOW
 #define SD_SPEED_CLASS_WARN_BELOW 10
 #endif
@@ -354,13 +356,16 @@ void setupStatusController()
 
   if (platform_check_for_controller())
   {
-    platform_set_status_controller(g_StatusController);
+    platform_set_status_controller(&uiSafeStatusUpdater);
     platform_set_display_controller(g_DisplayController);
 
     g_ControlInterface.SetDisplayController(&g_DisplayController);
-    g_ControlInterface.SetStatusController(&g_StatusController);
 
     platform_set_input_interface(&g_ControlInterface);
+
+    // Propogate updates to the control interface from the UI core.
+    uiSafeStatusUpdater.AddObserver([](zuluide::status::SystemStatus t) { g_DisplayController.ProcessSystemStatusUpdate(t); });
+    uiSafeStatusUpdater.AddObserver([g_ControlInterface](zuluide::status::SystemStatus t) { g_ControlInterface.HandleSystemStatusUpdate(t); });
 
     // Force an update.
     g_StatusController.EndUpdate();

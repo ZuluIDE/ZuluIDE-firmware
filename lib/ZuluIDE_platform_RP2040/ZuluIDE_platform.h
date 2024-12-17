@@ -29,6 +29,7 @@
 #include <Wire.h>
 #include <zuluide/observable.h>
 #include <zuluide/observable_safe.h>
+#include <zuluide/observer_transfer.h>
 #include <zuluide/control/input_interface.h>
 #include <zuluide/control/display_state.h>
 #include <zuluide/status/system_status.h>
@@ -107,9 +108,9 @@ void platform_set_sd_callback(sd_callback_t func, const uint8_t *buffer);
 bool platform_check_for_controller();
 
 /**
-   Sets the status controller, the component tracking the state of the system.
+   Sets the status controller connection used to process status events on the UI core.
  */
-void platform_set_status_controller(zuluide::ObservableSafe<zuluide::status::SystemStatus>& statusController);
+void platform_set_status_controller(zuluide::ObserverTransfer<zuluide::status::SystemStatus> *statusController);
 
 /**
    Sets the display controller, the component tracking the state of the user interface.

@@ -34,9 +34,29 @@ namespace zuluide {
   template <class T> class ObserverTransfer : public ObservableUISafe<T>
   {
   public:
-    ObserverTransfer(ObservableSafe<T> &toWatch);
-    virtual void AddObserver(std::function<void(const T& current)> callback);
-    void ProcessUpdate();
+    ObserverTransfer(ObservableSafe<T> &toWatch) {
+      queue_init(&updateQueue, sizeof(T*), 5);
+      toWatch.AddObserver(&updateQueue);
+    };
+    
+    virtual void AddObserver(std::function<void(const T& current)> callback) {
+      observers.push_back(callback);
+    };
+    
+    bool ProcessUpdate() {
+      T* item;
+      if (queue_try_remove(&updateQueue, &item)) {
+	
+	std::for_each(observers.begin(), observers.end(), [this, item](auto observer) {
+	  observer(*item);
+	});
+	
+	delete(item);
+	return true;
+      } else {
+	return false;
+      }
+    };
   private:
     queue_t updateQueue;
     std::vector<std::function<void(const T& current)>> observers;

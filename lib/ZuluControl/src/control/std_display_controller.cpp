@@ -180,3 +180,6 @@ StdDisplayController::StdDisplayController(zuluide::status::StatusController* st
 zuluide::status::StatusController& StdDisplayController::GetStatController() {
   return *statController;
 }
+
+void StdDisplayController::ProcessSystemStatusUpdate(zuluide::status::SystemStatus& currentStatus) {
+}
