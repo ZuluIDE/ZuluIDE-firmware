@@ -63,7 +63,7 @@ void DisplaySSD1306::init(TwoWire* wire) {
   }
 }
 
-void DisplaySSD1306::HandleUpdate(const SystemStatus& current) {
+void DisplaySSD1306::HandleUpdate(const SystemStatus& current) {  
   if (currentWidget) {
     currentWidget->Update(current);
   }

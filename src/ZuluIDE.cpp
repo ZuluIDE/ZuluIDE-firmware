@@ -365,7 +365,7 @@ void setupStatusController()
     // Force an update.
     g_StatusController.EndUpdate();
 
-    g_DisplayController.SetMode(zuluide::control::Mode::Status);
+    g_DisplayController.SetMode(zuluide::control::Mode::Splash);
   }
   else
   {

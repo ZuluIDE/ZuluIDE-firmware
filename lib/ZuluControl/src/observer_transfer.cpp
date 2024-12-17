@@ -19,23 +19,27 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
 **/
 
-#pragma once
+#include "observer_transfer.h"
 
-#include <zuluide/control/display_state.h>
-#include <zuluide/status/system_status.h>
+using namespace zuluide;
 
-#include <functional>
+template <class T> ObserverTransfer<T>::ObserverTransfer(ObservableSafe<T> &toWatch) {
+  queue_init(&updateQueue, sizeof(T*), 5);
+  toWatch.AddObserver(&updateQueue);
+}
 
-namespace zuluide::control {
-  class StdDisplayController;
-  /**
-     Controls state when the UI is showing the menu.
-   */
-  class SplashController {
-  public:
-    SplashController(StdDisplayController* cntrlr);
-  private:
-    StdDisplayController* controller;
-    void HandleStatusUpdate(const zuluide::status::SystemStatus& current);
-  };
+template <class T> void ObserverTransfer<T>::AddObserver(std::function<void(const T& current)> callback) {
+  observers.push_back(callback);
+}
+
+template <class T> void ObserverTransfer<T>::ProcessUpdate() {
+  T* item;
+  if (queue_try_remove(&updateQueue, &item)) {
+
+    std::for_each(observers.begin(), observers.end(), [this, item](auto observer) {
+      observer(*item);
+    });
+    
+    delete(item);
+  }
 }

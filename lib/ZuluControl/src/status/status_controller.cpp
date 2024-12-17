@@ -19,10 +19,6 @@ void StatusController::AddObserver(std::function<void(const SystemStatus&)> call
   observers.push_back(callback);
 }
 
-void StatusController::RemoveObserver(std::function<void(const SystemStatus& current)> callback) {
-  observers.erase(find(observers.begin(), observers.end(), callback));
-}
-
 void StatusController::EjectImage() {
   status.SetLoadedImage(nullptr);
   notifyObservers();

@@ -28,7 +28,8 @@ SplashWidget::SplashWidget(Adafruit_SSD1306 *g, Rectangle b) :
 {
 }
 
-void SplashWidget::Update (const zuluide::status::SystemStatus &status) {  
+void SplashWidget::Update (const zuluide::status::SystemStatus &status) {
+  
   Widget::Update(status);
 }
 

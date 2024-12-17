@@ -21,21 +21,24 @@
 
 #pragma once
 
-#include <zuluide/control/display_state.h>
-#include <zuluide/status/system_status.h>
-
 #include <functional>
+#include <pico/util/queue.h>
+#include <zuluide/observable_ui_safe.h>
+#include <zuluide/observable_safe.h>
 
-namespace zuluide::control {
-  class StdDisplayController;
-  /**
-     Controls state when the UI is showing the menu.
-   */
-  class SplashController {
+namespace zuluide {
+
+  /***
+      Resends updates to the
+   **/
+  template <class T> class ObserverTransfer : public ObservableUISafe<T>
+  {
   public:
-    SplashController(StdDisplayController* cntrlr);
+    ObserverTransfer(ObservableSafe<T> &toWatch);
+    virtual void AddObserver(std::function<void(const T& current)> callback);
+    void ProcessUpdate();
   private:
-    StdDisplayController* controller;
-    void HandleStatusUpdate(const zuluide::status::SystemStatus& current);
+    queue_t updateQueue;
+    std::vector<std::function<void(const T& current)>> observers;
   };
 }

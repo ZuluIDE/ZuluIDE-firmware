@@ -54,7 +54,7 @@ namespace zuluide::control {
     void UpdateState(NewImageState& newState);
     void UpdateState(InfoState& newState);
     void MoveToSplash();
-    void SetMode(Mode value);
+    void SetMode(Mode value);   
   private:
     void notifyObservers();    
     std::vector<std::function<void(const DisplayState& current)>> observers;
@@ -66,5 +66,6 @@ namespace zuluide::control {
     std::unique_ptr<NewController> newController;
     zuluide::status::StatusController* statController;
     std::unique_ptr<InfoController> infoController;
+    void systemStatusUpdated(const zuluide::status::SystemStatus& current);
   };
 }

@@ -21,21 +21,15 @@
 
 #pragma once
 
-#include <zuluide/control/display_state.h>
-#include <zuluide/status/system_status.h>
-
 #include <functional>
+#include "observable.h"
 
-namespace zuluide::control {
-  class StdDisplayController;
-  /**
-     Controls state when the UI is showing the menu.
-   */
-  class SplashController {
-  public:
-    SplashController(StdDisplayController* cntrlr);
-  private:
-    StdDisplayController* controller;
-    void HandleStatusUpdate(const zuluide::status::SystemStatus& current);
+namespace zuluide {
+  /***
+      Clients may assume that updates from this instance are executed on the UI thread.
+      This simply inherrits from Observable in order to allow the type checker to help
+      us know which thread we are processing updates from.
+   **/
+  template <class T> class ObservableUISafe : public Observable <T> {
   };
 }

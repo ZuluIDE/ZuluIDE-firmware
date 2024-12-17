@@ -25,12 +25,9 @@
 using namespace zuluide::control;
 
 SplashController::SplashController(StdDisplayController* cntrlr) :
-  controller(cntrlr) {
-  this->callback = [this](auto x) -> void { this->HandleStatusUpdate(x);};
-  controller->GetStatController().AddObserver(callback);
+  controller(cntrlr) {  
 }
 
 void SplashController::HandleStatusUpdate(const zuluide::status::SystemStatus& current) {
-  controller->GetStatController().RemoveObserver(callback);
   controller->SetMode(Mode::Status);
 }

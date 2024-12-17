@@ -1027,6 +1027,9 @@ void zuluide_setup1(void)
 
 }
 
+/***
+    Execution actions on the UI core.
+**/
 void zuluide_main_loop1(void)
 {
     platform_poll_input();
@@ -1039,6 +1042,8 @@ void zuluide_main_loop1(void)
       
       // Notify the I2C server of updates.
       g_I2cServer.HandleUpdate(*currentStatus);
+
+      // Notify the 
       delete(currentStatus);
     } else {
       // Only need to check refresh if there wasn't an update.
