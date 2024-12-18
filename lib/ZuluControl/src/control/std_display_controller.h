@@ -32,6 +32,7 @@
 #include "select_controller.h"
 #include "new_controller.h"
 #include "info_controller.h"
+#include "splash_controller.h"
 
 namespace zuluide::control {
   
@@ -67,5 +68,6 @@ namespace zuluide::control {
     std::unique_ptr<NewController> newController;
     zuluide::status::StatusController* statController;
     std::unique_ptr<InfoController> infoController;
+    std::unique_ptr<SplashController> splashController;
   };
 }

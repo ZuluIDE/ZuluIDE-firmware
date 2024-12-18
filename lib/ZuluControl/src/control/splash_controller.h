@@ -23,19 +23,21 @@
 
 #include <zuluide/control/display_state.h>
 #include <zuluide/status/system_status.h>
+#include "ui_controller_base.h"
 
 #include <functional>
 
 namespace zuluide::control {
   class StdDisplayController;
+  
+  class SplashState {};
+  
   /**
      Controls state when the UI is showing the menu.
    */
-  class SplashController {
+  class SplashController : public UIControllerBase<SplashState> {
   public:
     SplashController(StdDisplayController* cntrlr);
-  private:
-    StdDisplayController* controller;
-    void HandleStatusUpdate(const zuluide::status::SystemStatus& current);
+    virtual void SystemStatusUpdated(const zuluide::status::SystemStatus& status);    
   };
 }

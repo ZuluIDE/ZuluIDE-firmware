@@ -24,7 +24,7 @@
 
 using namespace zuluide::control;
 
-InfoController::InfoController(StdDisplayController* cntrlr) : controller(cntrlr) {
+InfoController::InfoController(StdDisplayController* cntrlr) : UIControllerBase<InfoState>(cntrlr) {
 }
 
 void InfoController::IncrementFirmwareOffset() {

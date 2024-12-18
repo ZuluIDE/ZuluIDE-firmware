@@ -21,13 +21,14 @@
 
 #include "splash_controller.h"
 #include "std_display_controller.h"
+#include "ui_controller_base.h"
 
 using namespace zuluide::control;
 
 SplashController::SplashController(StdDisplayController* cntrlr) :
-  controller(cntrlr) {  
+  UIControllerBase<SplashState>(cntrlr) {  
 }
 
-void SplashController::HandleStatusUpdate(const zuluide::status::SystemStatus& current) {
+void SplashController::SystemStatusUpdated(const zuluide::status::SystemStatus& status) {
   controller->SetMode(Mode::Status);
 }

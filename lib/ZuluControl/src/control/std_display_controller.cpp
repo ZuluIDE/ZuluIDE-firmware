@@ -39,7 +39,9 @@ void StdDisplayController::SetMode(Mode newMode)
 {
   switch (newMode) {
   case Mode::Splash: {
-    MoveToSplash();
+    SplashState empty;
+    UpdateState(empty);
+    splashController->Reset(empty);
     break;
   }
     
@@ -175,6 +177,7 @@ StdDisplayController::StdDisplayController(zuluide::status::StatusController* st
   selectController = std::make_unique<SelectController>(this, statController);
   newController = std::make_unique<NewController>(this, statController);
   infoController = std::make_unique<InfoController>(this);
+  splashController = std::make_unique<SplashController>(this);
 }
 
 zuluide::status::StatusController& StdDisplayController::GetStatController() {
@@ -182,4 +185,8 @@ zuluide::status::StatusController& StdDisplayController::GetStatController() {
 }
 
 void StdDisplayController::ProcessSystemStatusUpdate(zuluide::status::SystemStatus& currentStatus) {
+  if (currentState.GetCurrentMode() == Mode::Splash) {
+    SetMode(Mode::Status);
+  }
 }
+

@@ -22,21 +22,21 @@
 #pragma once
 
 #include <zuluide/control/display_state.h>
+#include "ui_controller_base.h"
 
 namespace zuluide::control {
   class StdDisplayController;
   /**
      Controls state when the UI is showing the menu.
    */
-  class MenuController {
+  class MenuController : public UIControllerBase<MenuState> {
   public:
     MenuController(StdDisplayController* cntrlr);
     void MoveToNextEntry();
     void MoveToPreviousEntry();
     void ChangeToSelectedEntry();
-    void Reset(const MenuState& state);
+    virtual void Reset(const MenuState& state);
   private:
-    StdDisplayController* controller;
     MenuState state;
   };
 }

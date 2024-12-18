@@ -32,7 +32,7 @@ void SelectController::Reset(const SelectState& newState) {
 }
 
 SelectController::SelectController(StdDisplayController* cntrlr, zuluide::status::DeviceControlSafe* statCtrlr) :
-  controller(cntrlr), statusController(statCtrlr), imgIterator() {
+  UIControllerBase<SelectState>(cntrlr), statusController(statCtrlr), imgIterator() {
 }
 
 void SelectController::IncrementImageNameOffset() {

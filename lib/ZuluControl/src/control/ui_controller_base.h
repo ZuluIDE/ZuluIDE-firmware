@@ -19,34 +19,23 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
 **/
 
-#include "eject_controller.h"
-#include "std_display_controller.h"
+#pragma once
 
-using namespace zuluide::control;
+#include "../status/status_controller.h"
+#include <zuluide/status/device_control_safe.h>
+#include <zuluide/control/display_state.h>
 
-EjectController::EjectController(StdDisplayController* cntrlr, zuluide::status::DeviceControlSafe* statCtrlr) :
-  UIControllerBase<EjectState>(cntrlr), statusController(statCtrlr) {
-}
-
-void EjectController::MoveToNextEntry() {
-  state.MoveToNextCurrentEntry();
-  controller->UpdateState(state);
-}
-
-void EjectController::MoveToPreviousEntry() {
-  // There are only two entries.
-  state.MoveToNextCurrentEntry();
-  controller->UpdateState(state);
-}
-
-void EjectController::DoSelectedEntry() {
-  if (state.GetCurrentEntry() == EjectState::Entry::Eject) {
-    statusController->EjectImageSafe();
-  }
-  
-  controller->SetMode(Mode::Status);
-}
-
-void EjectController::Reset(const EjectState& newState) {
-  state = newState;
+namespace zuluide::control {
+  class StdDisplayController;
+  /**
+     Base class for UI controllers. UI controllers update the system (both display state and the emulated device) when user or system events occur.
+   */
+  template <class T> class UIControllerBase {
+  public:
+    UIControllerBase(StdDisplayController* cntrlr) : controller(cntrlr) {};
+    virtual void Reset(const T& newState) = 0;
+    virtual void SystemStatusUpdated(const zuluide::status::SystemStatus& status) { };
+  protected:
+    StdDisplayController* controller;
+  };
 }
