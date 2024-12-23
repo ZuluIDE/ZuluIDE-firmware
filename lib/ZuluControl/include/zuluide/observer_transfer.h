@@ -34,23 +34,29 @@ namespace zuluide {
   template <class T> class ObserverTransfer : public ObservableUISafe<T>
   {
   public:
-    ObserverTransfer(ObservableSafe<T> &toWatch) {
+    ObserverTransfer(ObservableSafe<T> &toWatch, bool discardOldMsgs) : discardOldMessages(discardOldMsgs) {
       queue_init(&updateQueue, sizeof(T*), 5);
       toWatch.AddObserver(&updateQueue);
     };
-    
+
     virtual void AddObserver(std::function<void(const T& current)> callback) {
       observers.push_back(callback);
     };
-    
+
     bool ProcessUpdate() {
       T* item;
+
+      // Throw away outdated messages to get to the latest.
+      while (discardOldMessages && queue_get_level(&updateQueue) > 1 && queue_try_remove(&updateQueue, &item)) {
+	delete(item);
+      }
+
       if (queue_try_remove(&updateQueue, &item)) {
-	
+
 	std::for_each(observers.begin(), observers.end(), [this, item](auto observer) {
 	  observer(*item);
 	});
-	
+
 	delete(item);
 	return true;
       } else {
@@ -60,5 +66,6 @@ namespace zuluide {
   private:
     queue_t updateQueue;
     std::vector<std::function<void(const T& current)>> observers;
+    const bool discardOldMessages;
   };
 }

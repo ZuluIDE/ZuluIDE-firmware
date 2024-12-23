@@ -23,14 +23,14 @@
 
 #include <zuluide/status/device_control_safe.h>
 #include <zuluide/control/display_state.h>
-#include "ui_controller_base.h"
+#include "ui_resetable_controller_base.h"
 
 namespace zuluide::control {
   class StdDisplayController;
   /**
      Controls state when the UI is showing the menu.
    */
-  class EjectController : public UIControllerBase<EjectState> {
+  class EjectController : public UIResetableControllerBase<EjectState> {
   public:
     EjectController(StdDisplayController* cntrlr, zuluide::status::DeviceControlSafe* statCtrlr);
     void MoveToNextEntry();

@@ -24,7 +24,7 @@
 
 using namespace zuluide::control;
 
-MenuController::MenuController(StdDisplayController* cntrlr) : UIControllerBase<MenuState> (cntrlr) {
+MenuController::MenuController(StdDisplayController* cntrlr) : UIResetableControllerBase<MenuState> (cntrlr) {
 }
 
 void MenuController::MoveToNextEntry() {

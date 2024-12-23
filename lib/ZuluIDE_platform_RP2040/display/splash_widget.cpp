@@ -20,6 +20,7 @@
 **/
 
 #include "splash_widget.h"
+#include "ZuluIDE_log.h"
 
 using namespace zuluide;
 
@@ -29,7 +30,6 @@ SplashWidget::SplashWidget(Adafruit_SSD1306 *g, Rectangle b) :
 }
 
 void SplashWidget::Update (const zuluide::status::SystemStatus &status) {
-  
   Widget::Update(status);
 }
 

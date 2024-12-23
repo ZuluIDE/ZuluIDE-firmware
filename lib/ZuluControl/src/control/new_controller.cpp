@@ -25,7 +25,7 @@
 using namespace zuluide::control;
 
 NewController::NewController(StdDisplayController* cntrlr, zuluide::status::StatusController* statCtrlr) :
-  UIControllerBase<NewImageState>(cntrlr), statusController(statCtrlr) {
+  UIResetableControllerBase<NewImageState>(cntrlr), statusController(statCtrlr) {
 }
 
 void NewController::IncrementImageIndex() {

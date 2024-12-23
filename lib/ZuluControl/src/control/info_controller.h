@@ -23,14 +23,14 @@
 
 #include "../status/status_controller.h"
 #include <zuluide/control/display_state.h>
-#include "ui_controller_base.h"
+#include "ui_resetable_controller_base.h"
 
 namespace zuluide::control {
   class StdDisplayController;
   /**
      Controls state when the UI is selecting a new image..
    */
-  class InfoController : public UIControllerBase<InfoState> {
+  class InfoController : public UIResetableControllerBase<InfoState> {
   public:
     InfoController(StdDisplayController* cntrlr);
     void IncrementFirmwareOffset();

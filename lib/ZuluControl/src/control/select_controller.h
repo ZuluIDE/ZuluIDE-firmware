@@ -24,14 +24,14 @@
 #include "../status/status_controller.h"
 #include <zuluide/status/device_control_safe.h>
 #include <zuluide/control/display_state.h>
-#include "ui_controller_base.h"
+#include "ui_resetable_controller_base.h"
 
 namespace zuluide::control {
   class StdDisplayController;
   /**
      Controls state when the UI is selecting a new image.
    */
-  class SelectController : public UIControllerBase<SelectState> {
+  class SelectController : public UIResetableControllerBase<SelectState> {
   public:
     SelectController(StdDisplayController* cntrlr, zuluide::status::DeviceControlSafe* statCtrlr);
     void IncrementImageNameOffset();

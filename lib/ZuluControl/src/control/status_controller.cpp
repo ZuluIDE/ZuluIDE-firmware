@@ -25,7 +25,7 @@
 using namespace zuluide::control;
 
 StatusController:: StatusController(StdDisplayController* cntrlr) :
-  controller(cntrlr) { }
+  UIResetableControllerBase(cntrlr) { }
 
 void StatusController::IncrementImageNameOffset() {
   state.IncrementImageNameOffset();

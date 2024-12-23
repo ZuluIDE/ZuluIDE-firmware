@@ -23,14 +23,14 @@
 
 #include <zuluide/control/display_state.h>
 #include "../status/status_controller.h"
-#include "ui_controller_base.h"
+#include "ui_resetable_controller_base.h"
 
 namespace zuluide::control {
   class StdDisplayController;
   /**
      Controls state when the UI is creating a new image.
    */
-  class NewController : public UIControllerBase<NewImageState> {
+  class NewController : public UIResetableControllerBase<NewImageState> {
   public:
     NewController(StdDisplayController* cntrlr, zuluide::status::StatusController* statCtrlr);
     void IncrementImageIndex();

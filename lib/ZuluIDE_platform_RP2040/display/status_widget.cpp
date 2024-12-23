@@ -20,6 +20,7 @@
 **/
 
 #include "status_widget.h"
+#include "ZuluIDE_log.h"
 
 static std::string makeImageSizeStr(uint64_t size);
 
@@ -33,11 +34,11 @@ StatusWidget::StatusWidget(Adafruit_SSD1306 *g, Rectangle b, Size cb) :
 }
 
 void StatusWidget::Update (const zuluide::status::SystemStatus& status) {
-  if (!currentSysStatus || !currentSysStatus->LoadedImagesAreEqual(status)) {    
+  if (!currentSysStatus || !currentSysStatus->LoadedImagesAreEqual(status)) {
     const char* filename = status.HasLoadedImage() ? status.GetLoadedImage().GetFilename().c_str() : "";
     imagename.SetToDisplay(filename);
   }
-  
+
   Widget::Update(status);
 }
 
@@ -53,9 +54,12 @@ bool StatusWidget::Refresh () {
 void StatusWidget::Display () {
   graph->setTextColor(WHITE, BLACK);
 
+  if (!currentSysStatus) {
+    logmsg("currentSysStatus is null in the StatusWidget");
+  }
   if (currentSysStatus->HasLoadedImage()) {
     imagename.Display();
-    
+
     auto size = currentSysStatus->GetLoadedImage().GetFileSizeBytes();
     if (size != 0) {
       auto sizeStr = makeImageSizeStr(size);
@@ -74,7 +78,7 @@ void StatusWidget::Display () {
   } else {
     auto dev_icon = currentSysStatus->GetDeviceType() == drive_type_t::DRIVE_TYPE_ZIP100 ? zipdrive_empty : cdrom_empty;
     graph->drawBitmap(0, 0, dev_icon, 18, 9, WHITE);
-    
+
     DrawCenteredText("[NO IMAGE]");
   }
 

@@ -21,24 +21,19 @@
 
 #pragma once
 
+#include "../status/status_controller.h"
+#include <zuluide/status/device_control_safe.h>
 #include <zuluide/control/display_state.h>
-#include <zuluide/status/system_status.h>
-#include "ui_resetable_controller_base.h"
-
-#include <functional>
+#include "ui_controller_base.h"
 
 namespace zuluide::control {
   class StdDisplayController;
-
   /**
-     Controls state when the UI is showing the menu.
+     Base class for UI controllers. UI controllers update the system (both display state and the emulated device) when user or system events occur.
    */
-  class SplashController : public UIResetableControllerBase<SplashState> {
+  template <class T> class UIResetableControllerBase : public UIControllerBase {
   public:
-    SplashController(StdDisplayController* cntrlr);
-    virtual void SystemStatusUpdated(const zuluide::status::SystemStatus& status);
-    virtual void Reset(const SplashState& newState);
-  private:
-    bool isInitialized;
+    UIResetableControllerBase(StdDisplayController* cntrlr) : UIControllerBase(cntrlr) {};
+    virtual void Reset(const T& newState) = 0;
   };
 }

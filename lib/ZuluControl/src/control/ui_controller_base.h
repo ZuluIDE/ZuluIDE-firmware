@@ -30,10 +30,9 @@ namespace zuluide::control {
   /**
      Base class for UI controllers. UI controllers update the system (both display state and the emulated device) when user or system events occur.
    */
-  template <class T> class UIControllerBase {
+  class UIControllerBase {
   public:
     UIControllerBase(StdDisplayController* cntrlr) : controller(cntrlr) {};
-    virtual void Reset(const T& newState) = 0;
     virtual void SystemStatusUpdated(const zuluide::status::SystemStatus& status) { };
   protected:
     StdDisplayController* controller;

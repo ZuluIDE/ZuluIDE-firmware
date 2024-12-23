@@ -35,7 +35,7 @@
 #include "splash_controller.h"
 
 namespace zuluide::control {
-  
+
   class StdDisplayController : public Observable<DisplayState> {
   public:
     StdDisplayController(zuluide::status::StatusController* statCtrlr);
@@ -48,26 +48,28 @@ namespace zuluide::control {
     SelectController& GetSelectController();
     NewController& GetNewController();
     InfoController& GetInfoController();
+    SplashController& GetSplashController();
     void UpdateState(StatusState& newState);
     void UpdateState(MenuState& newState);
     void UpdateState(SelectState& newState);
     void UpdateState(EjectState& newState);
     void UpdateState(NewImageState& newState);
     void UpdateState(InfoState& newState);
-    void MoveToSplash();
+    void UpdateState(SplashState& newState);
     void SetMode(Mode value);
     void ProcessSystemStatusUpdate(zuluide::status::SystemStatus& currentStatus);
   private:
-    void notifyObservers();    
+    void notifyObservers();
     std::vector<std::function<void(const DisplayState& current)>> observers;
     DisplayState currentState;
-    std::unique_ptr<zuluide::control::StatusController> statusController;
-    std::unique_ptr<MenuController> menuController;
-    std::unique_ptr<EjectController> ejectController;
-    std::unique_ptr<SelectController> selectController;
-    std::unique_ptr<NewController> newController;
+    zuluide::control::StatusController statusController;
     zuluide::status::StatusController* statController;
-    std::unique_ptr<InfoController> infoController;
-    std::unique_ptr<SplashController> splashController;
+    UIControllerBase* current;
+    MenuController menuController;
+    EjectController ejectController;
+    SelectController selectController;
+    NewController newController;
+    InfoController infoController;
+    SplashController splashController;
   };
 }

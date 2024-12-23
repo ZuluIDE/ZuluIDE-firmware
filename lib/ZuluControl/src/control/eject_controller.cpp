@@ -25,7 +25,7 @@
 using namespace zuluide::control;
 
 EjectController::EjectController(StdDisplayController* cntrlr, zuluide::status::DeviceControlSafe* statCtrlr) :
-  UIControllerBase<EjectState>(cntrlr), statusController(statCtrlr) {
+  UIResetableControllerBase<EjectState>(cntrlr), statusController(statCtrlr) {
 }
 
 void EjectController::MoveToNextEntry() {
