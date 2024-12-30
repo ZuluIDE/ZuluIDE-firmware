@@ -1350,9 +1350,16 @@ void IDEATAPIDevice::button_eject_media()
 
 void IDEATAPIDevice::eject_media()
 {
-    char filename[MAX_FILE_PATH+1];
-    m_image->get_image_name(filename, sizeof(filename));
-    logmsg("Device ejecting media: \"", filename, "\"");
+    if (m_image)
+    {
+        char filename[MAX_FILE_PATH+1];
+        m_image->get_image_name(filename, sizeof(filename));
+        logmsg("Device ejecting media: \"", filename, "\"");
+    }
+    else
+    {
+        logmsg("Device ejecting media, image already cleared");
+    }
     m_removable.ejected = true;
 }
 
