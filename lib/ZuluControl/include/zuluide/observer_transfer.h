@@ -29,7 +29,9 @@
 namespace zuluide {
 
   /***
-      Resends updates to the
+      Resends updates to from one observable (via the observablesafe interface) and then resends the update to
+      oberservers of this instance when calls to ProcessUpdate execute. The purpose of this class to safely move updates from
+      one core to another.
    **/
   template <class T> class ObserverTransfer : public ObservableUISafe<T>
   {
@@ -43,6 +45,10 @@ namespace zuluide {
       observers.push_back(callback);
     };
 
+    /***
+	This function dispatches update to its observers. Calls should be made periodically from the thread upon which
+	you want the updates to execute.
+     **/
     bool ProcessUpdate() {
       T* item;
 

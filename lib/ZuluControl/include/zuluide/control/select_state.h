@@ -23,9 +23,11 @@
 
 #include <memory>
 
+#include "base_state.h"
+
 namespace zuluide::control {
 
-  class SelectState {
+  class SelectState : public BaseState {
   public:
     SelectState (int imageNameOffset = 0);
     SelectState (const SelectState& src);

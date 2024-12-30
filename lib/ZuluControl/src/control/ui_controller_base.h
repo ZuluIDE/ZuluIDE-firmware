@@ -34,6 +34,10 @@ namespace zuluide::control {
   public:
     UIControllerBase(StdDisplayController* cntrlr) : controller(cntrlr) {};
     virtual void SystemStatusUpdated(const zuluide::status::SystemStatus& status) { };
+    /***
+	Build a disaply state with the correct initial state for this controller and perform any reset operation needed.	
+    **/
+    virtual DisplayState Reset() = 0;
   protected:
     StdDisplayController* controller;
   };

@@ -35,65 +35,50 @@ void StdDisplayController::AddObserver(std::function<void(const DisplayState& cu
   observers.push_back(callback);
 }
 
-void StdDisplayController::SetMode(Mode newMode)
-{
-  switch (newMode) {
-  case Mode::Splash: {
-    SplashState empty;
-    UpdateState(empty);
-    current = &splashController;
-    splashController.Reset(empty);
-    break;
-  }
-
+UIControllerBase* StdDisplayController::getControllerByMode(const Mode mode) {
+  switch (mode) {  
   case Mode::Status: {
-    StatusState empty;
-    UpdateState(empty);
-    current = &statusController;
-    statusController.Reset(empty);
-    break;
+    return &statusController;
   }
 
   case Mode::Menu: {
-    MenuState empty(MenuState::Entry::Select);
-    UpdateState(empty);
-    current = &menuController;
-    menuController.Reset(empty);
-    break;
+    return &menuController;
   }
 
   case Mode::Eject: {
-    EjectState empty;
-    UpdateState(empty);
-    current = &ejectController;
-    ejectController.Reset(empty);
-    break;
+    return &ejectController;
   }
 
   case Mode::Select: {
-    SelectState empty;
-    UpdateState(empty);
-    current = &selectController;
-    selectController.Reset(empty);
-    break;
+    return &selectController;
   }
 
   case Mode::NewImage: {
-    NewImageState empty;
-    UpdateState(empty);
-    current = &newController;
-    newController.Reset(empty);
-    break;
+    return &newController;
   }
 
   case Mode::Info: {
-    InfoState empty;
-    UpdateState(empty);
-    current = &infoController;
-    infoController.Reset(empty);
-    break;
+    return &infoController;
+  }
+    
+  case Mode::Splash:
+  default: {
+    return &splashController;
   }
   }
+}
+
+void StdDisplayController::SetMode(Mode newMode)
+{
+  logmsg("H");
+  current = getControllerByMode(newMode);
+  logmsg("H1", (int)newMode);
+  auto x = current->Reset();
+  logmsg("H1.1");
+  currentState = std::move(x);
+  logmsg("H2");
+  notifyObservers();
+  logmsg("H3");
 }
 
 void StdDisplayController::UpdateState(StatusState& newState)

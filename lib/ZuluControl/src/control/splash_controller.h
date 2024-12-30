@@ -23,7 +23,7 @@
 
 #include <zuluide/control/display_state.h>
 #include <zuluide/status/system_status.h>
-#include "ui_resetable_controller_base.h"
+#include "ui_controller_base.h"
 
 #include <functional>
 
@@ -33,11 +33,11 @@ namespace zuluide::control {
   /**
      Controls state when the UI is showing the menu.
    */
-  class SplashController : public UIResetableControllerBase<SplashState> {
+  class SplashController : public UIControllerBase {
   public:
     SplashController(StdDisplayController* cntrlr);
     virtual void SystemStatusUpdated(const zuluide::status::SystemStatus& status);
-    virtual void Reset(const SplashState& newState);
+    virtual DisplayState Reset();
   private:
     bool isInitialized;
   };

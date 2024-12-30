@@ -22,21 +22,21 @@
 #pragma once
 
 #include <zuluide/control/display_state.h>
-#include "ui_resetable_controller_base.h"
+#include "ui_controller_base.h"
 
 namespace zuluide::control {
   class StdDisplayController;
   /**
      Controls state when the UI is in the status state.
    */
-  class StatusController : public UIResetableControllerBase<StatusState> {
+  class StatusController : public UIControllerBase {
   public:
     StatusController(StdDisplayController* cntrlr);
     void IncrementImageNameOffset();
     void DecreaseImageNameOffset();
     void ResetImageNameOffset();
     void ChangeToMenu();
-    void Reset(const StatusState& state);
+    virtual DisplayState Reset();
   private:
     StatusState state;
   };

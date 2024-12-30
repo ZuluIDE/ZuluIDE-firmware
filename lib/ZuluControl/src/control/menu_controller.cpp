@@ -24,7 +24,7 @@
 
 using namespace zuluide::control;
 
-MenuController::MenuController(StdDisplayController* cntrlr) : UIResetableControllerBase<MenuState> (cntrlr) {
+MenuController::MenuController(StdDisplayController* cntrlr) : UIControllerBase(cntrlr) {
 }
 
 void MenuController::MoveToNextEntry() {
@@ -66,6 +66,7 @@ void MenuController::ChangeToSelectedEntry() {
   }
 }
 
-void MenuController::Reset(const MenuState& newState) {
-  state = newState;
+DisplayState MenuController::Reset() {
+  state = MenuState();
+  return DisplayState(state);
 }

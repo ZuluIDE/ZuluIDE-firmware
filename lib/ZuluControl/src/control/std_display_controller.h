@@ -36,6 +36,9 @@
 
 namespace zuluide::control {
 
+  /***
+      Manages the user state of the user interface.
+   **/
   class StdDisplayController : public Observable<DisplayState> {
   public:
     StdDisplayController(zuluide::status::StatusController* statCtrlr);
@@ -71,5 +74,6 @@ namespace zuluide::control {
     NewController newController;
     InfoController infoController;
     SplashController splashController;
+    UIControllerBase* getControllerByMode(const Mode mode);
   };
 }

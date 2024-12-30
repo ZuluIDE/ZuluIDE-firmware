@@ -24,7 +24,7 @@
 
 using namespace zuluide::control;
 
-InfoController::InfoController(StdDisplayController* cntrlr) : UIResetableControllerBase<InfoState>(cntrlr) {
+InfoController::InfoController(StdDisplayController* cntrlr) : UIControllerBase(cntrlr) {
 }
 
 void InfoController::IncrementFirmwareOffset() {
@@ -46,6 +46,7 @@ void InfoController::ResetImageNameOffset() {
   controller->UpdateState(state);
 }
 
-void InfoController::Reset(const InfoState& newState) {
-  state = newState;
+DisplayState InfoController::Reset() {
+  state = InfoState();
+  return DisplayState(state);
 }

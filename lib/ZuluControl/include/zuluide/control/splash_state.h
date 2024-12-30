@@ -21,9 +21,11 @@
 
 #pragma once
 
+#include "base_state.h"
+
 namespace zuluide::control {
 
-  class SplashState {
+  class SplashState : public BaseState {
   };
   
 }

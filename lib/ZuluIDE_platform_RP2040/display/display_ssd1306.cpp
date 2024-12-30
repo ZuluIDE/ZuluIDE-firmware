@@ -56,8 +56,8 @@ void DisplaySSD1306::init(TwoWire* wire) {
     wBounds = {h, w};
     graph.setTextWrap(false);
 
-    currentWidget = std::make_unique<zuluide::SplashWidget>(&graph, Rectangle{{0,0}, {WIDTH, HEIGHT}});
-    updateDisplay();
+    //currentWidget = std::make_unique<zuluide::SplashWidget>(&graph, Rectangle{{0,0}, {WIDTH, HEIGHT}});
+    //updateDisplay();
   } else {
     logmsg("gfx.begin failed.");
   }

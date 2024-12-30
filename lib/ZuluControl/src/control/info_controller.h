@@ -23,20 +23,20 @@
 
 #include "../status/status_controller.h"
 #include <zuluide/control/display_state.h>
-#include "ui_resetable_controller_base.h"
+#include "ui_controller_base.h"
 
 namespace zuluide::control {
   class StdDisplayController;
   /**
      Controls state when the UI is selecting a new image..
    */
-  class InfoController : public UIResetableControllerBase<InfoState> {
+  class InfoController : public UIControllerBase {
   public:
     InfoController(StdDisplayController* cntrlr);
     void IncrementFirmwareOffset();
     void DecreaseFirmwareOffset();
     void ResetImageNameOffset();    
-    void Reset(const InfoState& newState);
+    virtual DisplayState Reset();
   private:
     InfoState state;
   };

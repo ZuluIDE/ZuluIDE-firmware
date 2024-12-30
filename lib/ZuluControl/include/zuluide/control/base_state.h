@@ -21,19 +21,9 @@
 
 #pragma once
 
-#include "../status/status_controller.h"
-#include <zuluide/status/device_control_safe.h>
-#include <zuluide/control/display_state.h>
-#include "ui_controller_base.h"
-
 namespace zuluide::control {
-  class StdDisplayController;
-  /**
-     Base class for UI controllers. UI controllers update the system (both display state and the emulated device) when user or system events occur.
-   */
-  template <class T> class UIResetableControllerBase : public UIControllerBase {
-  public:
-    UIResetableControllerBase(StdDisplayController* cntrlr) : UIControllerBase(cntrlr) {};
-    virtual void Reset(const T& newState) = 0;
+
+  class BaseState {
   };
+  
 }
