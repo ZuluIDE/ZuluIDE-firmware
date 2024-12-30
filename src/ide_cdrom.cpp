@@ -1572,12 +1572,18 @@ void IDECDROMDevice::eject_media()
 #if ENABLE_AUDIO_OUTPUT
     audio_stop();
 #endif
-    char filename[MAX_FILE_PATH+1];
-    m_image->get_image_name(filename, sizeof(filename));
-    logmsg("Device ejecting media: \"", filename, "\"");
+    if (m_image)
+    {
+        char filename[MAX_FILE_PATH+1];
+        m_image->get_image_name(filename, sizeof(filename));
+        logmsg("Device ejecting media: \"", filename, "\"");
+    }
+    else
+    {
+        logmsg("Device ejecting media, image already cleared");
+    }
     set_esn_event(esn_event_t::NoChange);
     m_removable.ejected = true;
-
 }
 
 void IDECDROMDevice::button_eject_media()
