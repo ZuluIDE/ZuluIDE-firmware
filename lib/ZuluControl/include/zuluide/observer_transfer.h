@@ -36,13 +36,20 @@ namespace zuluide {
   template <class T> class ObserverTransfer : public ObservableUISafe<T>
   {
   public:
-    ObserverTransfer(ObservableSafe<T> &toWatch, bool discardOldMsgs) : discardOldMessages(discardOldMsgs) {
+    ObserverTransfer() : discardOldMessages(false) {
       queue_init(&updateQueue, sizeof(T*), 5);
-      toWatch.AddObserver(&updateQueue);
     };
 
     virtual void AddObserver(std::function<void(const T& current)> callback) {
       observers.push_back(callback);
+    };
+
+    /***
+	Connects to the observable instance that is the source of items to send.
+     **/
+    void Initialize(ObservableSafe<T> &toWatch, bool discardOldMsgs = false) {
+      discardOldMessages = discardOldMsgs;
+      toWatch.AddObserver(&updateQueue);
     };
 
     /***
@@ -72,6 +79,6 @@ namespace zuluide {
   private:
     queue_t updateQueue;
     std::vector<std::function<void(const T& current)>> observers;
-    const bool discardOldMessages;
+    bool discardOldMessages;
   };
 }

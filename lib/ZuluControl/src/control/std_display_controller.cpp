@@ -70,15 +70,10 @@ UIControllerBase* StdDisplayController::getControllerByMode(const Mode mode) {
 
 void StdDisplayController::SetMode(Mode newMode)
 {
-  logmsg("H");
   current = getControllerByMode(newMode);
-  logmsg("H1", (int)newMode);
   auto x = current->Reset();
-  logmsg("H1.1");
   currentState = std::move(x);
-  logmsg("H2");
   notifyObservers();
-  logmsg("H3");
 }
 
 void StdDisplayController::UpdateState(StatusState& newState)
