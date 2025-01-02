@@ -32,37 +32,48 @@
 #include "select_controller.h"
 #include "new_controller.h"
 #include "info_controller.h"
+#include "splash_controller.h"
 
 namespace zuluide::control {
-  
+
+  /***
+      Manages the user state of the user interface.
+   **/
   class StdDisplayController : public Observable<DisplayState> {
   public:
     StdDisplayController(zuluide::status::StatusController* statCtrlr);
     void AddObserver(std::function<void(const DisplayState& current)> callback);
     Mode GetMode() const;
+    zuluide::status::StatusController& GetStatController();
     zuluide::control::StatusController& GetStatusController();
     MenuController& GetMenuController();
     EjectController& GetEjectController();
     SelectController& GetSelectController();
     NewController& GetNewController();
     InfoController& GetInfoController();
+    SplashController& GetSplashController();
     void UpdateState(StatusState& newState);
     void UpdateState(MenuState& newState);
     void UpdateState(SelectState& newState);
     void UpdateState(EjectState& newState);
     void UpdateState(NewImageState& newState);
     void UpdateState(InfoState& newState);
+    void UpdateState(SplashState& newState);
     void SetMode(Mode value);
+    void ProcessSystemStatusUpdate(zuluide::status::SystemStatus& currentStatus);
   private:
-    void notifyObservers();    
+    void notifyObservers();
     std::vector<std::function<void(const DisplayState& current)>> observers;
     DisplayState currentState;
-    std::unique_ptr<zuluide::control::StatusController> statusController;
-    std::unique_ptr<MenuController> menuController;
-    std::unique_ptr<EjectController> ejectController;
-    std::unique_ptr<SelectController> selectController;
-    std::unique_ptr<NewController> newController;
+    zuluide::control::StatusController statusController;
     zuluide::status::StatusController* statController;
-    std::unique_ptr<InfoController> infoController;
+    UIControllerBase* current;
+    MenuController menuController;
+    EjectController ejectController;
+    SelectController selectController;
+    NewController newController;
+    InfoController infoController;
+    SplashController splashController;
+    UIControllerBase* getControllerByMode(const Mode mode);
   };
 }

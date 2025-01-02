@@ -19,34 +19,26 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
 **/
 
-#include "info_controller.h"
-#include "std_display_controller.h"
+#pragma once
 
-using namespace zuluide::control;
+#include "../status/status_controller.h"
+#include <zuluide/status/device_control_safe.h>
+#include <zuluide/control/display_state.h>
 
-InfoController::InfoController(StdDisplayController* cntrlr) : UIControllerBase(cntrlr) {
-}
-
-void InfoController::IncrementFirmwareOffset() {
-  auto value = state.GetFirmwareOffset();
-  state.SetFirmwareOffset(value + 1);
-  controller->UpdateState(state);  
-}
-
-void InfoController::DecreaseFirmwareOffset() {
-  auto value = state.GetFirmwareOffset();
-  if (value > 0) {
-    state.SetFirmwareOffset(value - 1);
-    controller->UpdateState(state);
-  }
-}
-
-void InfoController::ResetImageNameOffset() {
-  state.SetFirmwareOffset(0);
-  controller->UpdateState(state);
-}
-
-DisplayState InfoController::Reset() {
-  state = InfoState();
-  return DisplayState(state);
+namespace zuluide::control {
+  class StdDisplayController;
+  /**
+     Base class for UI controllers. UI controllers update the system (both display state and the emulated device) when user or system events occur.
+   */
+  class UIControllerBase {
+  public:
+    UIControllerBase(StdDisplayController* cntrlr) : controller(cntrlr) {};
+    virtual void SystemStatusUpdated(const zuluide::status::SystemStatus& status) { };
+    /***
+	Build a disaply state with the correct initial state for this controller and perform any reset operation needed.	
+    **/
+    virtual DisplayState Reset() = 0;
+  protected:
+    StdDisplayController* controller;
+  };
 }

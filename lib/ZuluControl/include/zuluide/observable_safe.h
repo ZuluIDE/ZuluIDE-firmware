@@ -25,6 +25,9 @@
 #include <pico/util/queue.h>
 
 namespace zuluide {
+  /***
+      Allows one to subscribe to updates via a thread-safe queue that can be read from any thread.
+   **/
   template <class T> class ObservableSafe {
   public:
     virtual void AddObserver(queue_t* dest) = 0;

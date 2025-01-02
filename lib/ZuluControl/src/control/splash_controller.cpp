@@ -19,54 +19,20 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
 **/
 
-#include "menu_controller.h"
+#include "splash_controller.h"
 #include "std_display_controller.h"
+#include "ZuluIDE_log.h"
 
 using namespace zuluide::control;
 
-MenuController::MenuController(StdDisplayController* cntrlr) : UIControllerBase(cntrlr) {
+SplashController::SplashController(StdDisplayController* cntrlr) : UIControllerBase(cntrlr), isInitialized(false) {
 }
 
-void MenuController::MoveToNextEntry() {
-  state.MoveToNextEntry();
-  controller->UpdateState(state);
+void SplashController::SystemStatusUpdated(const zuluide::status::SystemStatus& status) {
+  controller->SetMode(Mode::Status);
 }
 
-void MenuController::MoveToPreviousEntry() {
-  state.MoveToPreviousEntry();
-  controller->UpdateState(state);
-}
-
-void MenuController::ChangeToSelectedEntry() {
-  switch (state.GetCurrentEntry()) {
-  case MenuState::Entry::Eject: {
-    controller->SetMode(Mode::Eject);
-    break;
-  }
-    
-  case MenuState::Entry::Select: {
-    controller->SetMode(Mode::Select);
-    break;
-  }
-
-  case MenuState::Entry::Info: {
-    controller->SetMode(Mode::Info);
-    break;
-  }
-    
-  case MenuState::Entry::New: {
-    controller->SetMode(Mode::NewImage);
-    break;
-  }
-    
-  case MenuState::Entry::Back: {
-    controller->SetMode(Mode::Status);
-    break;
-  }
-  }
-}
-
-DisplayState MenuController::Reset() {
-  state = MenuState();
+DisplayState SplashController::Reset() {
+  SplashState state;
   return DisplayState(state);
 }

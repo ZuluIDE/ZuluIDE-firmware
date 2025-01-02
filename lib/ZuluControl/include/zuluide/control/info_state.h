@@ -21,9 +21,11 @@
 
 #pragma once
 
+#include "base_state.h"
+
 namespace zuluide::control {
 
-  class InfoState {
+  class InfoState : public BaseState {
   public:
     InfoState ();
     InfoState (const InfoState& src);

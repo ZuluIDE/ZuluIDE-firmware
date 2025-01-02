@@ -21,9 +21,11 @@
 
 #pragma once
 
+#include "base_state.h"
+
 namespace zuluide::control {
 
-  class StatusState {
+  class StatusState : public BaseState {
   public:
     StatusState (int imgNameOffset = 0);
     StatusState (const StatusState& src);

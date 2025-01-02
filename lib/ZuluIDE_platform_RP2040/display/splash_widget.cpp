@@ -19,34 +19,28 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
 **/
 
-#include "info_controller.h"
-#include "std_display_controller.h"
+#include "splash_widget.h"
+#include "ZuluIDE_log.h"
 
-using namespace zuluide::control;
+using namespace zuluide;
 
-InfoController::InfoController(StdDisplayController* cntrlr) : UIControllerBase(cntrlr) {
+SplashWidget::SplashWidget(Adafruit_SSD1306 *g, Rectangle b) :
+  Widget(g, b)
+{
 }
 
-void InfoController::IncrementFirmwareOffset() {
-  auto value = state.GetFirmwareOffset();
-  state.SetFirmwareOffset(value + 1);
-  controller->UpdateState(state);  
+void SplashWidget::Update (const zuluide::status::SystemStatus &status) {
+  Widget::Update(status);
 }
 
-void InfoController::DecreaseFirmwareOffset() {
-  auto value = state.GetFirmwareOffset();
-  if (value > 0) {
-    state.SetFirmwareOffset(value - 1);
-    controller->UpdateState(state);
-  }
+void SplashWidget::Update (const zuluide::control::DisplayState &disp) {
+  Widget::Update(disp);
 }
 
-void InfoController::ResetImageNameOffset() {
-  state.SetFirmwareOffset(0);
-  controller->UpdateState(state);
+bool SplashWidget::Refresh () {
+  return false;
 }
 
-DisplayState InfoController::Reset() {
-  state = InfoState();
-  return DisplayState(state);
+void SplashWidget::Display () {
+  graph->drawBitmap(0, 0, logo, 128, 32, WHITE);
 }

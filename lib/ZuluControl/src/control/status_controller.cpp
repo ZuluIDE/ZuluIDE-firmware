@@ -25,7 +25,7 @@
 using namespace zuluide::control;
 
 StatusController:: StatusController(StdDisplayController* cntrlr) :
-  controller(cntrlr) { }
+  UIControllerBase(cntrlr) { }
 
 void StatusController::IncrementImageNameOffset() {
   state.IncrementImageNameOffset();
@@ -46,6 +46,7 @@ void StatusController::ChangeToMenu() {
   controller->SetMode(Mode::Menu);
 }
 
-void StatusController::Reset(const StatusState& newState) {
-  state = newState;
+DisplayState StatusController::Reset() {
+  state = StatusState();
+  return DisplayState(state);
 }

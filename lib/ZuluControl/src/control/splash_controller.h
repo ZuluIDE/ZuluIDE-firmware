@@ -19,34 +19,26 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
 **/
 
-#include "info_controller.h"
-#include "std_display_controller.h"
+#pragma once
 
-using namespace zuluide::control;
+#include <zuluide/control/display_state.h>
+#include <zuluide/status/system_status.h>
+#include "ui_controller_base.h"
 
-InfoController::InfoController(StdDisplayController* cntrlr) : UIControllerBase(cntrlr) {
-}
+#include <functional>
 
-void InfoController::IncrementFirmwareOffset() {
-  auto value = state.GetFirmwareOffset();
-  state.SetFirmwareOffset(value + 1);
-  controller->UpdateState(state);  
-}
+namespace zuluide::control {
+  class StdDisplayController;
 
-void InfoController::DecreaseFirmwareOffset() {
-  auto value = state.GetFirmwareOffset();
-  if (value > 0) {
-    state.SetFirmwareOffset(value - 1);
-    controller->UpdateState(state);
-  }
-}
-
-void InfoController::ResetImageNameOffset() {
-  state.SetFirmwareOffset(0);
-  controller->UpdateState(state);
-}
-
-DisplayState InfoController::Reset() {
-  state = InfoState();
-  return DisplayState(state);
+  /**
+     Controls state when the UI is showing the menu.
+   */
+  class SplashController : public UIControllerBase {
+  public:
+    SplashController(StdDisplayController* cntrlr);
+    virtual void SystemStatusUpdated(const zuluide::status::SystemStatus& status);
+    virtual DisplayState Reset();
+  private:
+    bool isInitialized;
+  };
 }

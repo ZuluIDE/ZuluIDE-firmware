@@ -178,14 +178,9 @@ void ControlInterface::SecondaryButtonPressed() {
   }
 }
 
-void ControlInterface::handleSystemStatusUpdate(const zuluide::status::SystemStatus& current) {
+void ControlInterface::HandleSystemStatusUpdate(const zuluide::status::SystemStatus& current) {
   // Make a copy and move into member.
   currentStatus = std::move(zuluide::status::SystemStatus(current));
-}
-
-void ControlInterface::SetStatusController(zuluide::status::StatusController* statController) {
-  statController->AddObserver([&](auto cur) { handleSystemStatusUpdate(cur); });
-  statusController = statController;
 }
 
 void ControlInterface::handleDisplayStateUpdate(const DisplayState& current) {

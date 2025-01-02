@@ -21,10 +21,11 @@
 
 #pragma once
 
+#include "base_state.h"
 
 namespace zuluide::control {
 
-  class NewImageState {
+  class NewImageState : public BaseState {
   public:
     NewImageState (int imgIndex = 0);
     NewImageState (const NewImageState& src);

@@ -25,14 +25,15 @@
 
 using namespace zuluide::control;
 
-void SelectController::Reset(const SelectState& newState) {
+DisplayState SelectController::Reset() {
   imgIterator.Reset();
-  state = newState;
+  state = SelectState();
   GetNextImageEntry();
+  return DisplayState(state);
 }
 
 SelectController::SelectController(StdDisplayController* cntrlr, zuluide::status::DeviceControlSafe* statCtrlr) :
-  controller(cntrlr), statusController(statCtrlr), imgIterator() {
+  UIControllerBase(cntrlr), statusController(statCtrlr), imgIterator() {
 }
 
 void SelectController::IncrementImageNameOffset() {

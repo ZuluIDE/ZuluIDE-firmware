@@ -24,8 +24,7 @@
 
 using namespace zuluide::control;
 
-EjectController::EjectController(StdDisplayController* cntrlr, zuluide::status::DeviceControlSafe* statCtrlr) :
-  controller(cntrlr), statusController(statCtrlr) {
+EjectController::EjectController(StdDisplayController* cntrlr, zuluide::status::DeviceControlSafe* statCtrlr) : UIControllerBase(cntrlr), statusController(statCtrlr) {
 }
 
 void EjectController::MoveToNextEntry() {
@@ -47,6 +46,7 @@ void EjectController::DoSelectedEntry() {
   controller->SetMode(Mode::Status);
 }
 
-void EjectController::Reset(const EjectState newState) {
-  state = newState;
+DisplayState EjectController::Reset() {
+  state = EjectState();
+  return DisplayState(state);
 }

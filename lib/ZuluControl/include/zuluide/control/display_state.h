@@ -28,11 +28,12 @@
 #include "select_state.h"
 #include "new_image_state.h"
 #include "info_state.h"
+#include "splash_state.h"
 
 using namespace zuluide::images;
 
 namespace zuluide::control {
-  enum class Mode { Status, Menu, Eject, Select, Info, NewImage };
+  enum class Mode { Splash, Status, Menu, Eject, Select, Info, NewImage };
 
   class DisplayState {
   public:
@@ -42,6 +43,7 @@ namespace zuluide::control {
     DisplayState(NewImageState &state);
     DisplayState(EjectState &state);
     DisplayState(InfoState &state);
+    DisplayState(SplashState &state);
     DisplayState();
     DisplayState(const DisplayState& state);
     DisplayState(DisplayState&& src);
@@ -60,5 +62,6 @@ namespace zuluide::control {
     NewImageState newImageState;
     EjectState ejectState;
     InfoState infoState;
+    SplashState splashState;
   };
 }

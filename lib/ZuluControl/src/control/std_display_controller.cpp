@@ -35,51 +35,45 @@ void StdDisplayController::AddObserver(std::function<void(const DisplayState& cu
   observers.push_back(callback);
 }
 
-void StdDisplayController::SetMode(Mode newMode)
-{
-  switch (newMode) {
+UIControllerBase* StdDisplayController::getControllerByMode(const Mode mode) {
+  switch (mode) {  
   case Mode::Status: {
-    StatusState empty;
-    UpdateState(empty);
-    statusController->Reset(empty);
-    break;
+    return &statusController;
   }
-    
+
   case Mode::Menu: {
-    MenuState empty(MenuState::Entry::Select);
-    UpdateState(empty);
-    menuController->Reset(empty);
-    break;
+    return &menuController;
   }
-    
+
   case Mode::Eject: {
-    EjectState empty;
-    UpdateState(empty);
-    ejectController->Reset(empty);
-    break;
+    return &ejectController;
   }
-    
+
   case Mode::Select: {
-    SelectState empty;
-    UpdateState(empty);
-    selectController->Reset(empty);
-    break;
+    return &selectController;
   }
-    
+
   case Mode::NewImage: {
-    NewImageState empty;
-    UpdateState(empty);
-    newController->Reset(empty);
-    break;
+    return &newController;
   }
 
   case Mode::Info: {
-    InfoState empty;
-    UpdateState(empty);
-    infoController->Reset(empty);
-    break;
+    return &infoController;
+  }
+    
+  case Mode::Splash:
+  default: {
+    return &splashController;
   }
   }
+}
+
+void StdDisplayController::SetMode(Mode newMode)
+{
+  current = getControllerByMode(newMode);
+  auto x = current->Reset();
+  currentState = std::move(x);
+  notifyObservers();
 }
 
 void StdDisplayController::UpdateState(StatusState& newState)
@@ -93,14 +87,14 @@ void StdDisplayController::UpdateState(MenuState& newState)
 {
   // Copy the new state into a new memory location.
   currentState = std::move(DisplayState(newState));
-  notifyObservers(); 
+  notifyObservers();
 }
 
 void StdDisplayController::UpdateState(SelectState& newState)
 {
   // Copy the new state into a new memory location.
   currentState = std::move(DisplayState(newState));
-  notifyObservers();  
+  notifyObservers();
 }
 
 void StdDisplayController::UpdateState(NewImageState& newState)
@@ -124,6 +118,13 @@ void StdDisplayController::UpdateState(InfoState& newState)
   notifyObservers();
 }
 
+void StdDisplayController::UpdateState(SplashState& newState)
+{
+  // Copy the new state into a new memory location.
+  currentState = std::move(DisplayState(newState));
+  notifyObservers();
+}
+
 void StdDisplayController::notifyObservers() {
   std::for_each(observers.begin(), observers.end(), [this](auto observer) {
     // Make a copy so observers cannot mutate system state.
@@ -131,38 +132,55 @@ void StdDisplayController::notifyObservers() {
     // and we do not mutate system state in observers. This could be easily
     // verified given this isn't a public API.
     observer(DisplayState(currentState));
-  });  
+  });
 }
 
 StatusController& StdDisplayController::GetStatusController() {
-  return *statusController;
+  return statusController;
 }
 
 MenuController& StdDisplayController::GetMenuController() {
-  return *menuController;
+  return menuController;
 }
 
 EjectController& StdDisplayController::GetEjectController() {
-  return *ejectController;
+  return ejectController;
 }
 
 SelectController& StdDisplayController::GetSelectController() {
-  return *selectController;
+  return selectController;
 }
 
 NewController& StdDisplayController::GetNewController() {
-  return *newController;
+  return newController;
 }
 
 InfoController& StdDisplayController::GetInfoController() {
-  return *infoController;
+  return infoController;
 }
 
-StdDisplayController::StdDisplayController(zuluide::status::StatusController* statCtrlr) : statController(statCtrlr) {
-  statusController = std::make_unique<StatusController>(this);
-  menuController = std::make_unique<MenuController>(this);
-  ejectController = std::make_unique<EjectController>(this, statController);
-  selectController = std::make_unique<SelectController>(this, statController);
-  newController = std::make_unique<NewController>(this, statController);
-  infoController = std::make_unique<InfoController>(this);
+SplashController& StdDisplayController::GetSplashController() {
+  return splashController;
 }
+
+StdDisplayController::StdDisplayController(zuluide::status::StatusController* statCtrlr) : statController(statCtrlr),
+											   current(NULL),
+											   menuController(this),
+											   ejectController(this, statController),
+											   selectController(this, statController),
+											   newController(this, statController),
+											   infoController(this),
+											   splashController(this),
+											   statusController(this) {
+}
+
+zuluide::status::StatusController& StdDisplayController::GetStatController() {
+  return *statController;
+}
+
+void StdDisplayController::ProcessSystemStatusUpdate(zuluide::status::SystemStatus& currentStatus) {
+  if (current) {
+    current->SystemStatusUpdated(currentStatus);
+  }
+}
+

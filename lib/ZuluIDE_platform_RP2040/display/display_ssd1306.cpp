@@ -56,12 +56,8 @@ void DisplaySSD1306::init(TwoWire* wire) {
     wBounds = {h, w};
     graph.setTextWrap(false);
 
-    graph.clearDisplay();
-    graph.setTextColor(WHITE, BLACK);
-    graph.setCursor(0, HEIGHT / 2);
-    graph.print("Initializing");
-    graph.display();
-
+    //currentWidget = std::make_unique<zuluide::SplashWidget>(&graph, Rectangle{{0,0}, {WIDTH, HEIGHT}});
+    //updateDisplay();
   } else {
     logmsg("gfx.begin failed.");
   }
@@ -78,8 +74,12 @@ void DisplaySSD1306::HandleUpdate(const SystemStatus& current) {
 
 void DisplaySSD1306::HandleUpdate(const zuluide::control::DisplayState& current) {
   // Create the correct widget and assigned it to currentWidget, if there is a change in state..
-  if (currentDispState->GetCurrentMode() != current.GetCurrentMode()) {
+  if (!currentDispState || currentDispState->GetCurrentMode() != current.GetCurrentMode()) {
     switch (current.GetCurrentMode()) {
+    case zuluide::control::Mode::Splash: {
+      currentWidget = std::make_unique<zuluide::SplashWidget>(&graph, Rectangle{{0,0}, {WIDTH, HEIGHT}});
+      break;
+    }
     case zuluide::control::Mode::Status: {
       currentWidget = std::make_unique<zuluide::StatusWidget>(&graph, Rectangle{{0,0}, {WIDTH, HEIGHT}}, wBounds);
       break;
@@ -118,12 +118,11 @@ void DisplaySSD1306::HandleUpdate(const zuluide::control::DisplayState& current)
 }
 
 void DisplaySSD1306::updateDisplay() {
-  if (currentDispState && currentSysStatus) {
-    graph.clearDisplay();
-    currentWidget->Display();
-    graph.display();
-    nextRefresh = make_timeout_time_ms(SCROLL_INTERVAL_MS);
-  }
+  graph.clearDisplay();
+
+  currentWidget->Display();
+  graph.display();
+  nextRefresh = make_timeout_time_ms(SCROLL_INTERVAL_MS);
 }
 
 void DisplaySSD1306::Refresh() {
@@ -136,6 +135,6 @@ void DisplaySSD1306::Refresh() {
   if (currentDispState && currentSysStatus && currentWidget->Refresh()) {
     graph.clearDisplay();
     currentWidget->Display();
-    graph.display();    
+    graph.display();
   }
 }

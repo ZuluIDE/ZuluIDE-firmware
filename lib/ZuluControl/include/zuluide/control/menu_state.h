@@ -21,9 +21,11 @@
 
 #pragma once
 
+#include "base_state.h"
+
 namespace zuluide::control {
 
-  class MenuState {
+  class MenuState : public BaseState {
   public:
     enum class Entry { Eject, Select, New, Back, Info };
     MenuState (Entry value = Entry::Eject);

@@ -44,13 +44,18 @@ DisplayState::DisplayState(NewImageState &state) :
 {}
 
 DisplayState::DisplayState() :
-  currentMode(Mode::Eject),
-  ejectState(EjectState())
+  currentMode(Mode::Splash),
+  splashState(SplashState())
 {}
 
 DisplayState::DisplayState(EjectState& state) :
   currentMode(Mode::Eject),
   ejectState(state)
+{}
+
+DisplayState::DisplayState(SplashState& state) :
+  currentMode(Mode::Splash),
+  splashState(state)
 {}
 
 
@@ -61,7 +66,8 @@ DisplayState::DisplayState(const DisplayState& state) :
   selectState(state.selectState),
   newImageState(state.newImageState),
   ejectState(state.ejectState),
-  infoState(state.infoState)
+  infoState(state.infoState),
+  splashState(state.splashState)
 {}
 
 DisplayState& DisplayState::operator=(DisplayState&& src) {
@@ -72,6 +78,7 @@ DisplayState& DisplayState::operator=(DisplayState&& src) {
   newImageState = std::move(src.newImageState);
   ejectState = std::move(src.ejectState);
   infoState = std::move(src.infoState);
+  splashState = std::move(src.splashState);
   return *this;
 }
 
@@ -83,6 +90,7 @@ DisplayState::DisplayState(DisplayState&& src) :
   selectState = std::move(src.selectState);
   newImageState = std::move(src.newImageState);
   ejectState = std::move(src.ejectState);
+  splashState = std::move(src.splashState);
 }
 
 DisplayState::DisplayState(InfoState &state) :

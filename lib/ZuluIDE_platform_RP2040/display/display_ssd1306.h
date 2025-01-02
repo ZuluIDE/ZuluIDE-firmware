@@ -33,6 +33,7 @@
 #include "eject_widget.h"
 #include "menu_widget.h"
 #include "select_widget.h"
+#include "splash_widget.h"
 
 using namespace zuluide::status;
 

@@ -32,14 +32,13 @@ namespace zuluide::control {
   class ControlInterface : public InputReceiver {
   public:
     void SetDisplayController(StdDisplayController* dispController);
-    void SetStatusController(zuluide::status::StatusController* statusController);
     virtual void RotaryUpdate(int offset);
     virtual void RotaryButtonPressed();
     virtual void PrimaryButtonPressed();
     virtual void SecondaryButtonPressed();
+    void HandleSystemStatusUpdate(const zuluide::status::SystemStatus& current);
   private:
-    StdDisplayController* displayController;
-    void handleSystemStatusUpdate(const zuluide::status::SystemStatus& current);
+    StdDisplayController* displayController;    
     void handleDisplayStateUpdate(const DisplayState& current);
     zuluide::status::SystemStatus currentStatus;
     zuluide::status::StatusController* statusController;
