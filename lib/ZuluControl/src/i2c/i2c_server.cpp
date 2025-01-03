@@ -30,15 +30,18 @@
 
 using namespace zuluide::i2c;
 
-I2CServer::I2CServer() : deviceControl(nullptr), isSubscribed(false), initialized(false), sendFiles(false), sendNextImage(false), isIterating(false), isPresent(false) {
+I2CServer::I2CServer() : deviceControl(nullptr), isSubscribed(false), devControlSet(false), sendFiles(false), sendNextImage(false), isIterating(false), isPresent(false) {
 }
 
-void I2CServer::Init(TwoWire* wireValue, DeviceControlSafe* devControl) {
+void I2CServer::SetI2c(TwoWire* wireValue) {
   wire = wireValue;
-  deviceControl = devControl;
-  initialized = true;
 }
 
+void I2CServer::SetDeviceControl(DeviceControlSafe* devControl) 
+{
+    deviceControl = devControl;
+    devControlSet = true;
+}
 bool writeLengthPrefacedString(TwoWire *wire, uint8_t reg, uint16_t length, const char* buffer) {
   wire->beginTransmission(CLIENT_ADDR);
   wire->write(reg);
@@ -86,7 +89,7 @@ static uint16_t ReadInLength(TwoWire *wire) {
 }
 
 void I2CServer::Poll() {
-  if (!initialized || !isPresent) {
+  if (!devControlSet || !isPresent) {
     return;
   }
 
@@ -229,7 +232,7 @@ void I2CServer::Poll() {
       logmsg("Length was not 0 for fetch ssid request.");
     }
 
-    if (!WifiCredentialsSet()) {
+    if (ssid.length() == 0) {
       logmsg("Client requested the WiFi SSID, but the SSID is not configured.");
     }
         
@@ -243,7 +246,7 @@ void I2CServer::Poll() {
       logmsg("Length was not 0 for fetch ssid pass request.");
     }
 
-    if (!WifiCredentialsSet()) {
+    if (password.length() == 0) {
       logmsg("Client requested SSID password, but the SSID password is not configured.");
     }
     

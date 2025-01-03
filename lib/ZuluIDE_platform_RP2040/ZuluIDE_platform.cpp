@@ -52,6 +52,9 @@
 #  include "audio.h"
 #endif // ENABLE_AUDIO_OUTPUT
 
+#define CONTROLLER_TYPE_BOARD 1
+#define CONTROLLER_TYPE_WIFI  2
+
 const char *g_platform_name = PLATFORM_NAME;
 static uint32_t g_flash_chip_size = 0;
 static bool g_uart_initialized = false;
@@ -266,11 +269,14 @@ void platform_late_init()
     // one-time control setup for DMA channels and second core
     audio_init();
 #endif
-
+    platform_check_for_controller();
 }
 
-bool platform_check_for_controller()
+uint8_t platform_check_for_controller()
 {
+  static bool checked = false;
+  static uint8_t controller_found = 0;
+  if (checked) return controller_found;
   g_wire.setClock(100000);
   // Setting the drive strength seems to help the I2C bus with the Pico W controller and the controller OLED display
   // to communicate and handshake properly
@@ -279,15 +285,13 @@ bool platform_check_for_controller()
 
   g_rotary_input.SetI2c(&g_wire);
   bool hasHardwareUI = g_rotary_input.CheckForDevice();
+  g_I2cServer.SetI2c(&g_wire);
   bool hasI2CServer = g_I2cServer.CheckForDevice();
   logmsg(hasHardwareUI ? "Hardware UI found." : "Hardware UI not found.");
   logmsg(hasI2CServer ? "I2C server found" : "I2C server not found");
-  if (hasI2CServer && !g_I2cServer.WifiCredentialsSet()) {
-    // The I2C server responded but we cannot configure wifi. This may cause issues.
-    logmsg("An I2C client was detected but the WIFI credentials are not configured. This will cause problems if the I2C client needs WIFI configuration data.");
-  }
-  
-  return hasHardwareUI || hasI2CServer;
+  controller_found = (hasHardwareUI ? CONTROLLER_TYPE_BOARD : 0) | (hasI2CServer ? CONTROLLER_TYPE_WIFI : 0);
+  checked = true;
+  return controller_found;
 }
 
 void platform_set_status_controller(zuluide::ObserverTransfer<zuluide::status::SystemStatus> *statusController) {
@@ -324,8 +328,13 @@ void platform_set_device_control(zuluide::status::DeviceControlSafe* deviceContr
     g_I2cServer.SetPassword(wifiPass);
     logmsg("Set PASSWORD from INI file.");
   }
-  
-  g_I2cServer.Init(&g_wire, deviceControl);
+
+  if ((platform_check_for_controller() & CONTROLLER_TYPE_WIFI) && !g_I2cServer.WifiCredentialsSet()) {
+    // The I2C server responded but we cannot configure wifi. This may cause issues.
+    logmsg("An I2C client was detected but the WIFI credentials are not configured. This will cause problems if the I2C client needs WIFI configuration data.");
+  }
+
+  g_I2cServer.SetDeviceControl(deviceControl);
 }
 
 void platform_poll_input() {

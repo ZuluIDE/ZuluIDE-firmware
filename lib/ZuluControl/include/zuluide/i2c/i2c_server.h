@@ -67,7 +67,9 @@ namespace zuluide::i2c {
        Default constructor.
      */
     I2CServer();
-    void Init(TwoWire* wire, DeviceControlSafe* deviceControl);
+    void SetI2c(TwoWire* wire);
+
+    void SetDeviceControl(DeviceControlSafe* deviceControl);
     /**
        Handle updates to the system status. In practice, if an I2C client is
        subscribed to updates, a JSON representation of the system state is built
@@ -93,14 +95,14 @@ namespace zuluide::i2c {
      */
     bool CheckForDevice();
     /**
-       True iff the SSID and and password have been set.
+       True if the SSID and and password have been set.
      */
     bool WifiCredentialsSet();
   private:
     TwoWire* wire;
     DeviceControlSafe* deviceControl;
     bool isSubscribed;
-    bool initialized;
+    bool devControlSet;
     bool sendFiles;
     bool sendNextImage;
     bool isIterating;

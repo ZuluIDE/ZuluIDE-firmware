@@ -105,7 +105,7 @@ void platform_set_sd_callback(sd_callback_t func, const uint8_t *buffer);
 /**
    Attempts to determine whether the hardware UI or the web service is attached to the device.
  */
-bool platform_check_for_controller();
+uint8_t platform_check_for_controller();
 
 /**
    Sets the status controller connection used to process status events on the UI core.
