@@ -802,7 +802,7 @@ bool IDEATAPIDevice::atapi_test_unit_ready(const uint8_t *cmd)
         {
             insert_next_media(m_image);
         }
-        // return atapi_cmd_not_ready_error();
+        return atapi_cmd_not_ready_error();
     }
     else if (!has_image())
     {
@@ -1346,6 +1346,8 @@ void IDEATAPIDevice::button_eject_media()
 {
     if (!m_removable.prevent_removable)
         eject_media();
+    else
+        dbgmsg("Attempted to eject media but host has set drive to prevent removable");
 }
 
 void IDEATAPIDevice::eject_media()

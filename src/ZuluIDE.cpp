@@ -517,7 +517,7 @@ static void zuluide_setup_sd_card()
             {
                 platform_disable_led();
             }
-            uint8_t eject_button = ini_getl("IDE", "eject_button", 0, CONFIGFILE);
+            uint8_t eject_button = ini_getl("IDE", "eject_button", 1, CONFIGFILE);
             platform_init_eject_button(eject_button);
         }
     }

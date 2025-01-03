@@ -775,8 +775,10 @@ bool IDECDROMDevice::atapi_get_event_status_notification(const uint8_t *cmd)
                 buf[5] = 0x02; // Media Present
                 buf[6] = 0; // Start slot
                 buf[7] = 0; // End slot
+                #if ENABLE_AUDIO_OUTPUT
+                  audio_stop();
+                #endif
                 esn_next_event();
-                eject_media();
             }
         }
         // output media no change
@@ -1582,14 +1584,18 @@ void IDECDROMDevice::eject_media()
     {
         logmsg("Device ejecting media, image already cleared");
     }
-    set_esn_event(esn_event_t::NoChange);
+    set_esn_event(esn_event_t::MMediaRemoval);
     m_removable.ejected = true;
 }
 
 void IDECDROMDevice::button_eject_media()
 {
     if (!m_removable.prevent_removable)
-        set_esn_event(esn_event_t::MMediaRemoval);
+    {
+        eject_media();
+    }
+    else
+        dbgmsg("Attempted to eject media but host has set drive to prevent removable");
 }
 
 void IDECDROMDevice::insert_media(IDEImage *image)

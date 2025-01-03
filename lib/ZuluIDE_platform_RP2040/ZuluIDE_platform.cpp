@@ -361,6 +361,7 @@ void platform_init_eject_button(uint8_t eject_button)
 {
     if (eject_button & 1)
     {
+        //        pin                   function       pup   pdown  out    state fast
         gpio_conf(GPIO_EJECT_BTN_1_PIN, GPIO_FUNC_SIO, true, false, false, true, false);
         g_eject_buttons |= 1;
     }
