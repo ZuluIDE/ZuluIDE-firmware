@@ -352,10 +352,10 @@ void setupStatusController()
   }
 
   g_StatusController.AddObserver(status_observer);
-  platform_set_device_control(&g_StatusController);
 
   if (platform_check_for_controller())
   {
+    platform_set_device_control(&g_StatusController);
     platform_set_status_controller(&uiSafeStatusUpdater);
     platform_set_display_controller(g_DisplayController);
 
