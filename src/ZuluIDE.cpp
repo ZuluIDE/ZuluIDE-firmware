@@ -525,13 +525,10 @@ static void zuluide_setup_sd_card()
 
 void zuluide_init(void)
 {
-    platform_init();
-
-    g_log_debug = ini_getbool("IDE", "debug", g_log_debug, CONFIGFILE);
-
-    platform_late_init();
-    zuluide_setup_sd_card();
-    g_ide_imagefile = IDEImageFile((uint8_t*)g_ide_buffer, sizeof(g_ide_buffer));
+  platform_init();
+  platform_late_init();
+  zuluide_setup_sd_card();
+  g_log_debug = ini_getbool("IDE", "debug", g_log_debug, CONFIGFILE);
 
 #ifdef PLATFORM_MASS_STORAGE
   static bool check_mass_storage = true;
@@ -548,12 +545,12 @@ void zuluide_init(void)
   }
 #endif
 
+  g_ide_imagefile = IDEImageFile((uint8_t*)g_ide_buffer, sizeof(g_ide_buffer));
+
   // Setup the status controller.
   setupStatusController();
 
   blinkStatus(BLINK_STATUS_OK);
-
-
   logmsg("Initialization complete!");
 }
 
