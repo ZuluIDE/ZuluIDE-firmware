@@ -225,7 +225,7 @@ void ide_protocol_poll()
             // }
             else if (regs.error)
             {
-                logmsg("-- Command ", get_ide_command_name(cmd), " completed with error status ", regs.error);
+                dbgmsg("-- Command ", get_ide_command_name(cmd), " completed with error status ", regs.error);
             }
             else
             {
