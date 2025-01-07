@@ -26,6 +26,7 @@
 #include <stdint.h>
 #include <Arduino.h>
 #include "ZuluIDE_platform_gpio.h"
+#include <rp2040_common.h>
 #include <Wire.h>
 #include <zuluide/observable.h>
 #include <zuluide/observable_safe.h>
@@ -47,10 +48,6 @@ extern const char *g_platform_name;
 #define PLATFORM_VDD_WARNING_LIMIT_mV 3000
 #endif
 
-// Debug logging function, can be used to print to e.g. serial port.
-// May get called from interrupt handlers.
-void platform_log(const char *s);
-void platform_emergency_log_save();
 
 // Timing and delay functions.
 // Arduino platform already provides these
@@ -58,23 +55,8 @@ void platform_emergency_log_save();
 // void delay(unsigned long ms);
 // void delayMicroseconds(unsigned long us);
 
-// Initialize SD card and GPIO configuration
-void platform_init();
-
 // Initialization for main application, not used for bootloader
 void platform_late_init();
-
-// Write the status LED through the mux
-void platform_write_led(bool state);
-#define LED_ON()  platform_write_led(true)
-#define LED_OFF() platform_write_led(false)
-void platform_set_blink_status(bool status);
-void platform_write_led_override(bool state);
-#define LED_ON_OVERRIDE()  platform_write_led_override(true)
-#define LED_OFF_OVERRIDE()  platform_write_led_override(false)
-
-// Disable the status LED
-void platform_disable_led(void);
 
 void platform_init_eject_button(uint8_t eject_button);
 
@@ -85,12 +67,6 @@ void platform_init_eject_button(uint8_t eject_button);
 // This function should return without significantly delay.
 uint8_t platform_get_buttons();
 
-// Query IDE device id 0/1 requested on hardware DIP switches.
-// If platform has no DIP switches, returns 0.
-int platform_get_device_id(void);
-
-// Setup soft watchdog if supported
-void platform_reset_watchdog();
 
 // Poll function that is called every few milliseconds.
 // The SD card is free to access during this time, and pauses up to
@@ -123,13 +99,6 @@ void platform_set_display_controller(zuluide::Observable<zuluide::control::Displ
 void platform_set_device_control(zuluide::status::DeviceControlSafe* deviceControl);
 
 /**
-   This mutex is used to prevent saving the log file to the SD card while reading the file system.
-   A more robust file access method is needed, but this is fixing the problem for now, even though
-   it is rather ham-handed.
- */
-mutex_t* platform_get_log_mutex();
-
-/**
    Sets the input receiver, which handles receiving input from the hardware UI and performs updates to the UI as appropriate.
  */
 void platform_set_input_interface(zuluide::control::InputReceiver* inputReceiver);
@@ -143,20 +112,3 @@ void platform_poll_input();
 // in the last page before 1 MB boundary.
 #define PLATFORM_LICENSE_KEY_OFFSET 0x000ff000
 #define PLATFORM_LICENSE_KEY_ADDR ((const uint8_t*)(0x130ff000))
-
-
-// Reprogram firmware in main program area.
-#define PLATFORM_FLASH_TOTAL_SIZE (1020 * 1024)
-#define PLATFORM_FLASH_PAGE_SIZE 4096
-#ifndef RP2040_DISABLE_BOOTLOADER
-#define PLATFORM_BOOTLOADER_SIZE (128 * 1024)
-bool platform_rewrite_flash_page(uint32_t offset, uint8_t buffer[PLATFORM_FLASH_PAGE_SIZE]);
-void platform_boot_to_main_firmware();
-#endif
-
-
-// SD card driver for SdFat
-class SdioConfig;
-extern SdioConfig g_sd_sdio_config;
-#define SD_CONFIG g_sd_sdio_config
-#define SD_CONFIG_CRASH g_sd_sdio_config

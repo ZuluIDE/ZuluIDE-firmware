@@ -21,7 +21,7 @@
 
 // Simple bootloader that loads new firmware from SD card.
 
-#include <ZuluIDE_platform.h>
+#include <rp2040_common.h>
 #include "ZuluIDE_config.h"
 #include "ZuluIDE_log.h"
 #include <SdFat.h>
