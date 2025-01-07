@@ -61,6 +61,9 @@ void platform_emergency_log_save();
 // Initialize SD card and GPIO configuration
 void platform_init();
 
+// Just enough for the bootloader
+void platform_minimal_init();
+
 // Initialization for main application, not used for bootloader
 void platform_late_init();
 

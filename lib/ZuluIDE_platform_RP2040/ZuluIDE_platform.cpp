@@ -167,6 +167,22 @@ static void reclock_to_default()
 
 }
 
+void platform_minimal_init()
+{
+    // SD card pins
+    // Card is used in SDIO mode, rp2040_sdio.cpp will redirect these to PIO1
+    //        pin             function       pup   pdown  out    state fast
+    gpio_conf(SDIO_CLK,       GPIO_FUNC_SIO, true, false, true,  true, true);
+    gpio_conf(SDIO_CMD,       GPIO_FUNC_SIO, true, false, false, true, true);
+    gpio_conf(SDIO_D0,        GPIO_FUNC_SIO, true, false, false, true, true);
+    gpio_conf(SDIO_D1,        GPIO_FUNC_SIO, true, false, false, true, true);
+    gpio_conf(SDIO_D2,        GPIO_FUNC_SIO, true, false, false, true, true);
+    gpio_conf(SDIO_D3,        GPIO_FUNC_SIO, true, false, false, true, true);
+
+    // Status LED
+    gpio_conf(STATUS_LED,     GPIO_FUNC_SIO, false,false, true,  false, false);
+}
+
 void platform_init()
 {
     // Make sure second core is stopped
