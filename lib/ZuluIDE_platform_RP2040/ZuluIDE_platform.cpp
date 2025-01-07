@@ -80,7 +80,7 @@ void processStatusUpdate(const zuluide::status::SystemStatus &update);
 /***************/
 
 // Helper function to configure whole GPIO in one line
-static void gpio_conf(uint gpio, enum gpio_function fn, bool pullup, bool pulldown, bool output, bool initial_state, bool fast_slew)
+static void gpio_conf(uint gpio, gpio_function_t fn, bool pullup, bool pulldown, bool output, bool initial_state, bool fast_slew)
 {
     gpio_put(gpio, initial_state);
     gpio_set_dir(gpio, output);
@@ -89,7 +89,7 @@ static void gpio_conf(uint gpio, enum gpio_function fn, bool pullup, bool pulldo
 
     if (fast_slew)
     {
-        padsbank0_hw->io[gpio] |= PADS_BANK0_GPIO0_SLEWFAST_BITS;
+        pads_bank0_hw->io[gpio] |= PADS_BANK0_GPIO0_SLEWFAST_BITS;
     }
 }
 
@@ -650,7 +650,9 @@ static void watchdog_callback(unsigned alarm_num)
             logmsg("WATCHDOG TIMEOUT, attempting bus reset");
             logmsg("GPIO states: out ", sio_hw->gpio_out, " oe ", sio_hw->gpio_oe, " in ", sio_hw->gpio_in);
 
-            uint32_t *p = (uint32_t*)__get_MSP();
+            uint32_t msp;
+            asm volatile ("MRS %0, msp" : "=r" (msp) );
+            uint32_t *p =  (uint32_t*)msp;
             for (int i = 0; i < 16; i++)
             {
                 if (p == &__StackTop) break; // End of stack
@@ -671,7 +673,9 @@ static void watchdog_callback(unsigned alarm_num)
             logmsg("FW Version: ", g_log_firmwareversion);
             logmsg("GPIO states: out ", sio_hw->gpio_out, " oe ", sio_hw->gpio_oe, " in ", sio_hw->gpio_in);
 
-            uint32_t *p = (uint32_t*)__get_MSP();
+            uint32_t msp;
+            asm volatile ("MRS %0, msp" : "=r" (msp) );
+            uint32_t *p =  (uint32_t*)msp;
             for (int i = 0; i < 16; i++)
             {
                 if (p == &__StackTop) break; // End of stack
@@ -686,9 +690,13 @@ static void watchdog_callback(unsigned alarm_num)
             platform_emergency_log_save();
 
 #ifndef RP2040_DISABLE_BOOTLOADER
-            platform_boot_to_main_firmware();
+           platform_boot_to_main_firmware();
 #else
-            NVIC_SystemReset();
+            // copied from CMSIS's __NVIC_SystemReset();
+            asm volatile ("dsb 0xF":::"memory");
+            scb_hw->aircr  = ((0x5FAUL << 16U) | 1UL << 2U);
+            asm volatile ("dsb 0xF":::"memory");
+            while(true);
 #endif
         }
     }
@@ -705,7 +713,7 @@ void platform_reset_watchdog()
     if (!g_watchdog_initialized)
     {
         int alarm_num = -1;
-        for (int i = 0; i < NUM_TIMERS; i++)
+        for (int i = 0; i < NUM_GENERIC_TIMERS; i++)
         {
             if (!hardware_alarm_is_claimed(i))
             {
@@ -778,10 +786,10 @@ bool install_license(char *buf)
     usb_log_poll();
 
     // Write to RP2040 flash
-    __disable_irq();
+    uint32_t saved_irq = save_and_disable_interrupts();
     flash_range_erase(PLATFORM_LICENSE_KEY_OFFSET, PLATFORM_FLASH_PAGE_SIZE);
     flash_range_program(PLATFORM_LICENSE_KEY_OFFSET, key, 256);
-    __enable_irq();
+    restore_interrupts(saved_irq);
 
     if (memcmp(key, PLATFORM_LICENSE_KEY_ADDR, 32) == 0)
     {
@@ -946,10 +954,10 @@ bool platform_rewrite_flash_page(uint32_t offset, uint8_t buffer[PLATFORM_FLASH_
         }
     }
 
-    if (NVIC_GetEnableIRQ(USBCTRL_IRQ_IRQn))
+    if (nvic_hw->iser & 1 << 14)
     {
         logmsg("Disabling USB during firmware flashing");
-        NVIC_DisableIRQ(USBCTRL_IRQ_IRQn);
+        nvic_hw->icer = 1 << 14;
         usb_hw->main_ctrl = 0;
     }
 
@@ -958,7 +966,7 @@ bool platform_rewrite_flash_page(uint32_t offset, uint8_t buffer[PLATFORM_FLASH_
     assert(offset >= PLATFORM_BOOTLOADER_SIZE);
 
     // Avoid any mbed timer interrupts triggering during the flashing.
-    __disable_irq();
+    uint32_t saved_irq = save_and_disable_interrupts();
 
     // For some reason any code executed after flashing crashes
     // unless we disable the XIP cache.
@@ -985,7 +993,7 @@ bool platform_rewrite_flash_page(uint32_t offset, uint8_t buffer[PLATFORM_FLASH_
         }
     }
 
-    __enable_irq();
+    restore_interrupts(saved_irq);
 
     return true;
 }
@@ -995,7 +1003,7 @@ void platform_boot_to_main_firmware()
     // To ensure that the system state is reset properly, we perform
     // a SYSRESETREQ and jump straight from the reset vector to main application.
     g_bootloader_exit_req = &g_bootloader_exit_req;
-    SCB->AIRCR = 0x05FA0004;
+    scb_hw->aircr = 0x05FA0004;
     while(1);
 }
 
@@ -1008,7 +1016,7 @@ void btldr_reset_handler()
         application_base = (uint32_t*)(XIP_BASE + PLATFORM_BOOTLOADER_SIZE);
     }
 
-    SCB->VTOR = (uint32_t)application_base;
+    scb_hw->vtor = (uint32_t)application_base;
     __asm__(
         "msr msp, %0\n\t"
         "bx %1" : : "r" (application_base[0]),

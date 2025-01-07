@@ -3,7 +3,6 @@
 # as the main() function.
 
 import os
-
 Import("env")
 
 # Build a version of ZuluIDE_main.cpp that calls bootloader instead
@@ -19,7 +18,10 @@ dep_objs = []
 for nodelist in env["PIOBUILDFILES"]:
     for node in nodelist:
         filename = str(node.rfile())
-        if 'ZuluIDE_main' not in filename and 'ZuluIDE.' not in filename:
+        if ('ZuluIDE_main'  not in filename and
+            'ZuluIDE.'      not in filename and
+            'ide_'          not in filename and
+            'ZuluIDE_msc.'  not in filename):
             dep_objs.append(node)
 # print("Bootloader dependencies: ", type(dep_objs), str([str(f.rfile()) for f in dep_objs]))
 

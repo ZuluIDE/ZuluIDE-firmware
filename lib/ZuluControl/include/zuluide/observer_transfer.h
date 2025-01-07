@@ -22,6 +22,7 @@
 #pragma once
 
 #include <functional>
+#include <algorithm>
 #include <pico/util/queue.h>
 #include <zuluide/observable_ui_safe.h>
 #include <zuluide/observable_safe.h>
