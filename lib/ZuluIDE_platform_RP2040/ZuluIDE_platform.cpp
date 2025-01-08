@@ -1081,19 +1081,6 @@ void zuluide_main_loop1(void)
     g_I2cServer.Poll();
 }
 
-
-extern "C"
-{
-    void setup1(void)
-    {
-        zuluide_setup1();
-    }
-    void loop1(void)
-    {
-        zuluide_main_loop1();
-    }
-}
-
 mutex_t* platform_get_log_mutex() {
   return &logMutex;
 }
