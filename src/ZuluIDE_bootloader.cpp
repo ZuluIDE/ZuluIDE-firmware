@@ -86,8 +86,6 @@ bool program_firmware(FsFile &file)
 
     for (int i = 0; i < num_pages; i++)
     {
-        platform_reset_watchdog();
-
         if (i % 2)
             LED_ON();
         else
@@ -130,9 +128,8 @@ static bool mountSDCard()
 extern "C"
 int bootloader_main(void)
 {
-    platform_init();
+    platform_minimal_init();
     g_log_debug = true;
-    platform_reset_watchdog();
 
     logmsg("Bootloader version: " __DATE__ " " __TIME__ " " PLATFORM_NAME);
 
@@ -144,7 +141,7 @@ int bootloader_main(void)
         {
             if (program_firmware(fwfile))
             {
-                logmsg("Firmware update successful!");
+                // logmsg("Firmware update successful!");
                 fwfile.close();
                 if (!SD.remove(name))
                 {
@@ -159,12 +156,8 @@ int bootloader_main(void)
             
         }
     }
-    else
-    {
-        logmsg("Bootloader SD card init failed");
-    }
 
-    logmsg("Bootloader continuing to main firmware");
+    // logmsg("Bootloader continuing to main firmware");
     platform_boot_to_main_firmware();
 
     return 0;

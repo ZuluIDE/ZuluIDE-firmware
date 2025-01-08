@@ -708,7 +708,9 @@ static void rp2040_sdio_tx_irq()
 // Check if transmission is complete
 sdio_status_t rp2040_sdio_tx_poll(uint32_t *bytes_complete)
 {
-    if (SCB->ICSR & SCB_ICSR_VECTACTIVE_Msk)
+    // 0x1FFUL = SCB_ICSR_VECTACTIVE_Msk
+    if (scb_hw->icsr & 0x1FFUL)
+
     {
         // Verify that IRQ handler gets called even if we are in hardfault handler
         rp2040_sdio_tx_irq();
@@ -784,6 +786,8 @@ void rp2040_sdio_init(int clock_divider)
     static bool resources_claimed = false;
     if (!resources_claimed)
     {
+        pio_sm_unclaim(SDIO_PIO, SDIO_CMD_SM);
+        pio_sm_unclaim(SDIO_PIO, SDIO_DATA_SM);
         pio_sm_claim(SDIO_PIO, SDIO_CMD_SM);
         pio_sm_claim(SDIO_PIO, SDIO_DATA_SM);
         dma_channel_claim(SDIO_DMA_CH);

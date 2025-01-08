@@ -29,7 +29,8 @@ int main(void)
 void zuluide_init(void);
 void zuluide_setup(void);
 void zuluide_main_loop(void);
-
+void zuluide_setup1(void);
+void zuluide_main_loop1(void);
 
 #ifdef USE_ARDUINO
 extern "C" 
@@ -46,6 +47,16 @@ extern "C"
     void loop(void)
     {
         zuluide_main_loop();
+    }
+
+    void setup1(void)
+    {
+        zuluide_setup1();
+    }
+
+    void loop1(void)
+    {
+        zuluide_main_loop1();
     }
 }
 #else
