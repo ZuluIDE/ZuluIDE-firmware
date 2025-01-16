@@ -60,7 +60,6 @@ uint8_t g_ide_signals;
 static uint32_t g_last_event_time;
 static ide_event_t g_last_event;
 static ide_registers_t g_prev_ide_regs;
-static int g_ide_busy_secs;
 static bool g_ide_reset_after_init_done;
 
 bool g_ignore_cmd_interrupt;
@@ -280,9 +279,8 @@ void ide_protocol_poll()
         LED_OFF();
         g_last_event_time = millis();
         g_last_event = evt;
-        g_ide_busy_secs = 0;
     }
-    else if ((millis() - g_last_event_time) > 1000)
+    else if ((millis() - g_last_event_time) > 10)
     {
         // Log any changes in IDE registers
         g_last_event_time = millis();
@@ -306,15 +304,11 @@ void ide_protocol_poll()
 
         if (regs.status & IDE_STATUS_BSY)
         {
-            g_ide_busy_secs++;
-
-            if (g_ide_busy_secs > 15)
-            {
-                logmsg("Detected IDE STATUS register stuck at busy state ", regs.status, " for ",
-                       (int)g_ide_busy_secs, " seconds, resetting to zero");
-                regs.status = 0;
-                ide_phy_set_regs(&regs);
-            }
+            // This can happen if the host does unexpected DATA register access.
+            // Because we are not executing a command, status should be DRDY.
+            dbgmsg("---- Clearing IDE busy status");
+            regs.status = 0x50;
+            ide_phy_set_regs(&regs);
         }
     }
 
