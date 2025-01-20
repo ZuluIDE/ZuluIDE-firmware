@@ -70,7 +70,6 @@ bool I2S::setBCLK(pin_size_t pin) {
     return true;
 }
 
-
 bool I2S::setMCLK(pin_size_t pin) {
     if (_running || (pin > 28)) {
         return false;
@@ -78,6 +77,7 @@ bool I2S::setMCLK(pin_size_t pin) {
     _pinMCLK = pin;
     return true;
 }
+
 bool I2S::setDATA(pin_size_t pin) {
     if (_running || (pin > 29)) {
         return false;
@@ -190,15 +190,24 @@ bool I2S::begin() {
     _hasPeeked = false;
     _isHolding = 0;
     int off = 0;
-    // _i2s = new PIOProgram(&pio_lsbj_out_program);
     _i2s = new PIOProgram(&pio_i2s_out_program);
+
+#ifdef I2S_PIO_HW
+    _pio = I2S_PIO_HW;
+    _sm = I2S_PIO_SM;
+    pio_sm_claim(_pio, _sm);
+    off = pio_add_program(I2S_PIO_HW, &pio_i2s_out_program);
+#else
+    // _i2s = new PIOProgram(&pio_lsbj_out_program);
+
     if (!_i2s->prepare(&_pio, &_sm, &off)) {
         _running = false;
         delete _i2s;
         _i2s = nullptr;
         return false;
     }
-    // pio_lsbj_out_program_init(_pio, _sm, off, _pinDOUT, _pinBCLK, _bps, _swapClocks);
+#endif
+    // pio lsbj_out_program_init(_pio, _sm, off, _pinDOUT, _pinBCLK, _bps, _swapClocks);
     pio_i2s_out_program_init(_pio, _sm, off, _pinDOUT, _pinBCLK, _bps, _swapClocks);
     setDivider(_div_int, _div_frac);
 

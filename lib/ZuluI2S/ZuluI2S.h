@@ -22,7 +22,9 @@
 #pragma once
 #include <Arduino.h>
 // #include "AudioBufferManager.h"
-
+// override dynamic setting of pio
+#define I2S_PIO_HW pio0
+#define I2S_PIO_SM 1
 class I2S {
 public:
     I2S(PinMode direction = OUTPUT);
