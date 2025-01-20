@@ -206,6 +206,9 @@ void ide_protocol_poll()
             bool status = device->handle_command(&regs);
             ide_phy_set_signals(g_ide_signals);
 
+            // Command may have updated regs directly to phy without modifying the struct
+            ide_phy_get_regs(&regs);
+
             if (!status)
             {
                 logmsg("-- Command handler failed for ", get_ide_command_name(cmd));
