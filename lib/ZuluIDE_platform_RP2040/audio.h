@@ -20,6 +20,11 @@
 
 #include <stdint.h>
 
+
+// i2s PIO settings
+#define I2S_PIO_HW pio0_hw
+#define I2S_PIO_SM 1
+
 // audio subsystem DMA channels
 #define SOUND_DMA_CHA 6
 #define SOUND_DMA_CHB 7

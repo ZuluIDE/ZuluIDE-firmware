@@ -136,8 +136,8 @@ static void snd_process_b() {
  **********************************************************************************************/
 static bool setup_playback(uint32_t start, uint32_t length, bool continued)
 {
-    static  uint32_t last_length = 0;
-    static  uint32_t last_start = 0;
+    static uint32_t last_length = 0;
+    static uint32_t last_start = 0;
     static uint8_t last_track_number = 0;
 
     if (!continued)
@@ -381,7 +381,7 @@ void audio_init() {
     // 44.1KHz to the nearest integer with a sys clk of 135.43MHz and 2 x 16-bit samples with the pio clock running 2x I2S clock
     // 135.43Mhz / 16 / 2 / 2 / 44.1KHz = 47.98 ~= 48
     i2s.setDivider(48, 0);
-    i2s.begin();
+    i2s.begin(I2S_PIO_HW, I2S_PIO_SM);
     dma_channel_claim(SOUND_DMA_CHA);
 	dma_channel_claim(SOUND_DMA_CHB);
 

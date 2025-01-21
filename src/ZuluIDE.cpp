@@ -380,12 +380,12 @@ void setupStatusController()
     g_StatusController.EndUpdate();
   }
 
-  loadFirstImage();
-
   if (isPrimary)
     ide_protocol_init(g_ide_device, NULL); // Primary device
   else
     ide_protocol_init(NULL, g_ide_device); // Secondary device
+
+  loadFirstImage();
 }
 
 void loadFirstImage() {
@@ -429,6 +429,9 @@ void loadFirstImage() {
       blinkStatus(BLINK_ERROR_NO_IMAGES);
     }
   }
+
+  if (loadedFirstImage)
+     g_ide_device->post_image_setup();
 
   imgIterator.Cleanup();
 }
