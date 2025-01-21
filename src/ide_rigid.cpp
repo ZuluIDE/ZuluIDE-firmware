@@ -65,7 +65,10 @@ void IDERigidDevice::initialize(int devidx)
     memset(&m_ata_state, 0, sizeof(m_ata_state));
     memset(&m_removable, 0, sizeof(m_removable));
     m_devinfo.bytes_per_sector = 512;
+}
 
+void IDERigidDevice::post_image_setup()
+{
     uint64_t cap = capacity();
     uint64_t lba = capacity_lba();
 
@@ -122,7 +125,6 @@ void IDERigidDevice::reset()
     m_devinfo.current_sectors = m_devinfo.sectors_per_track;
     memset(&m_removable, 0, sizeof(m_removable));
 }
-
 
 void IDERigidDevice::set_image(IDEImage *image)
 {

@@ -35,6 +35,9 @@ public:
     // Loads configuration
     virtual void initialize(int devidx);
 
+    // Finishes initialization after the first image has been loaded
+    virtual void post_image_setup() = 0;
+
     // Resets member variables after IDE/ATA reset
     virtual void reset() = 0;
 

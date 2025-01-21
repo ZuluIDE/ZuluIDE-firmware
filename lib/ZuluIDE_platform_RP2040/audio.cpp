@@ -136,8 +136,8 @@ static void snd_process_b() {
  **********************************************************************************************/
 static bool setup_playback(uint32_t start, uint32_t length, bool continued)
 {
-    static  uint32_t last_length = 0;
-    static  uint32_t last_start = 0;
+    static uint32_t last_length = 0;
+    static uint32_t last_start = 0;
     static uint8_t last_track_number = 0;
 
     if (!continued)
