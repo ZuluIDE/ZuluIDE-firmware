@@ -93,7 +93,7 @@ inline void logmsg(Params... params)
 
 // Format a complete debug message
 template<typename... Params>
-inline void dbgmsg(Params... params)
+inline bool dbgmsg(Params... params)
 {
     if (g_log_debug)
     {
@@ -101,4 +101,5 @@ inline void dbgmsg(Params... params)
         log_raw(params...);
         log_raw("\r\n");
     }
+    return g_log_debug;
 }
