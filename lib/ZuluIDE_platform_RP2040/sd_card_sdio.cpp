@@ -46,7 +46,13 @@ static uint32_t g_sdio_sector_count;
 static bool logSDError(int line)
 {
     g_sdio_error_line = line;
-    logmsg("SDIO SD card error on line ", line, ", error code ", (int)g_sdio_error);
+    // suppressing Error code 2s (timeouts) the usually occur when the SD card is removed.
+    if (!dbgmsg("SDIO SD card error on line ", line, ", error code ", (int)g_sdio_error) &&
+        g_sdio_error != 2)
+    {
+        logmsg("Unexpected SD card error on line ", line, ", error code ", (int)g_sdio_error);
+    }
+
     return false;
 }
 
