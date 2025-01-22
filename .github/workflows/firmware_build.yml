@@ -20,6 +20,13 @@ jobs:
         run: |
           sudo pip install platformio
       
+      - name: Checkout dependency repo
+        run: |
+          eval `ssh-agent -s`
+          ssh-add - <<< '${{ secrets.PRIVATE_SSH_KEY }}'
+          cd ZuluIDE/lib/
+          git clone git@github.com:rabbitholecomputing/ZuluIDE-RP2350B-Core1.git
+
       - name: Build firmware
         run: |
           cd ZuluIDE
