@@ -834,10 +834,12 @@ bool IDECDROMDevice::atapi_get_event_status_notification(const uint8_t *cmd)
 
 bool IDECDROMDevice::atapi_start_stop_unit(const uint8_t *cmd)
 {
+#ifdef ENABLE_AUDIO_OUTPUT
     if ((cmd[ATAPI_START_STOP_EJT_OFFSET] & ATAPI_START_STOP_START) == 0)
     {
         doStopAudio();
     }
+#endif
     return IDEATAPIDevice::atapi_start_stop_unit(cmd);
 }
 
