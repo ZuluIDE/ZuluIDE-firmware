@@ -132,10 +132,12 @@ Communication between the FPGA and the CPU uses QSPI interface documented in [rp
 
 Ignored List
 ------------
-Any file that starts with `zulu` is ignored
+Any file or directory that begins with a non-alphanumeric character is ignored by the ZuluIDE firmware, as well as any file that starts with `zulu`.
 
 The following common compression extensions are ignored:
  ".tar", ".tgz", ".gz", ".bz2", ".tbz2", ".xz", ".zst", ".z", ".zip", ".zipx", ".rar", ".lzh", ".lha", ".lzo", ".lz4", ".arj", ".dmg", ".hqx", ".cpt", ".7z", ".s7z"
+
+
 
 The following document extensions are ignored:
 ".cue", ".txt", ".rtf", ".md", ".nfo", ".pdf", ".doc"
