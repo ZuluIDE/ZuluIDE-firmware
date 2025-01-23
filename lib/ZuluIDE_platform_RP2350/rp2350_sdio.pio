@@ -21,9 +21,13 @@
 ; Because data is written on the falling edge and read on the rising
 ; edge, it is preferrable to have a long 0 state and short 1 state.
 ;.define CLKDIV 3
-.define CLKDIV 5
+
+; FIXME: CLKDIV = 5 doesn't work for RP2350 @ 150 MHz
+.define CLKDIV 7
 .define D0 ((CLKDIV + 1) / 2 - 1)
 .define D1 (CLKDIV/2 - 1)
+
+; GPIO base is 16, real CLK GPIO is 34 => GPIO visible to PIO is 18
 .define SDIO_CLK_GPIO 18
 
 ; State machine 0 is used to:

@@ -44,7 +44,9 @@ extern const char *g_platform_name;
 #define SD_USE_SDIO 1
 
 #ifndef PLATFORM_VDD_WARNING_LIMIT_mV
-#define PLATFORM_VDD_WARNING_LIMIT_mV 3000
+// TODO: Fix for RP2350
+#define PLATFORM_VDD_WARNING_LIMIT_mV 0
+//#define PLATFORM_VDD_WARNING_LIMIT_mV 3000
 #endif
 
 // Debug logging function, can be used to print to e.g. serial port.

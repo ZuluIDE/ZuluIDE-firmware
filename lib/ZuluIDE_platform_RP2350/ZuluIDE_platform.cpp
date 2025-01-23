@@ -109,6 +109,8 @@ void platform_init()
     multicore_reset_core1();
 
     /* Check dip switch settings */
+    //        pin             function       pup   pdown  out    state fast
+    gpio_conf(IDE_DATASEL1,     GPIO_FUNC_SIO, false, false, true, true, true);
     gpio_conf(CTRL_IN_SEL,      GPIO_FUNC_SIO, false, false, true,  false, true);
     gpio_conf(DIP_CABLESEL,     GPIO_FUNC_SIO, false, false, false, false, false);
     gpio_conf(DIP_DRIVE_ID,     GPIO_FUNC_SIO, false, false, false, false, false);

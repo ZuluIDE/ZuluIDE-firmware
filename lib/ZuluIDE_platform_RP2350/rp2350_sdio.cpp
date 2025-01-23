@@ -809,24 +809,24 @@ void rp2040_sdio_init(int clock_divider)
     // Command & clock state machine
     g_sdio.pio_cmd_clk_offset = pio_add_program(SDIO_PIO, &sdio_cmd_clk_program);
     pio_sm_config cfg = sdio_cmd_clk_program_get_default_config(g_sdio.pio_cmd_clk_offset);
-    sm_config_set_out_pins(&cfg, SDIO_CMD - SDIO_GPIOBASE, 1);
-    sm_config_set_in_pins(&cfg, SDIO_CMD - SDIO_GPIOBASE);
-    sm_config_set_set_pins(&cfg, SDIO_CMD - SDIO_GPIOBASE, 1);
-    sm_config_set_jmp_pin(&cfg, SDIO_CMD - SDIO_GPIOBASE);
-    sm_config_set_sideset_pins(&cfg, SDIO_CLK - SDIO_GPIOBASE);
+    sm_config_set_out_pins(&cfg, SDIO_CMD, 1);
+    sm_config_set_in_pins(&cfg, SDIO_CMD);
+    sm_config_set_set_pins(&cfg, SDIO_CMD, 1);
+    sm_config_set_jmp_pin(&cfg, SDIO_CMD);
+    sm_config_set_sideset_pins(&cfg, SDIO_CLK);
     sm_config_set_out_shift(&cfg, false, true, 32);
     sm_config_set_in_shift(&cfg, false, true, 32);
     sm_config_set_clkdiv_int_frac(&cfg, clock_divider, 0);
     sm_config_set_mov_status(&cfg, STATUS_TX_LESSTHAN, 2);
 
     pio_sm_init(SDIO_PIO, SDIO_CMD_SM, g_sdio.pio_cmd_clk_offset, &cfg);
-    pio_sm_set_consecutive_pindirs(SDIO_PIO, SDIO_CMD_SM, SDIO_CLK - SDIO_GPIOBASE, 1, true);
+    pio_sm_set_consecutive_pindirs(SDIO_PIO, SDIO_CMD_SM, SDIO_CLK, 1, true);
     pio_sm_set_enabled(SDIO_PIO, SDIO_CMD_SM, true);
 
     // Data reception program
     g_sdio.pio_data_rx_offset = pio_add_program(SDIO_PIO, &sdio_data_rx_program);
     g_sdio.pio_cfg_data_rx = sdio_data_rx_program_get_default_config(g_sdio.pio_data_rx_offset);
-    sm_config_set_in_pins(&g_sdio.pio_cfg_data_rx, SDIO_D0 - SDIO_GPIOBASE);
+    sm_config_set_in_pins(&g_sdio.pio_cfg_data_rx, SDIO_D0);
     sm_config_set_in_shift(&g_sdio.pio_cfg_data_rx, false, true, 32);
     sm_config_set_out_shift(&g_sdio.pio_cfg_data_rx, false, true, 32);
     sm_config_set_clkdiv_int_frac(&g_sdio.pio_cfg_data_rx, clock_divider, 0);
@@ -834,9 +834,9 @@ void rp2040_sdio_init(int clock_divider)
     // Data transmission program
     g_sdio.pio_data_tx_offset = pio_add_program(SDIO_PIO, &sdio_data_tx_program);
     g_sdio.pio_cfg_data_tx = sdio_data_tx_program_get_default_config(g_sdio.pio_data_tx_offset);
-    sm_config_set_in_pins(&g_sdio.pio_cfg_data_tx, SDIO_D0 - SDIO_GPIOBASE);
-    sm_config_set_set_pins(&g_sdio.pio_cfg_data_tx, SDIO_D0 - SDIO_GPIOBASE, 4);
-    sm_config_set_out_pins(&g_sdio.pio_cfg_data_tx, SDIO_D0 - SDIO_GPIOBASE, 4);
+    sm_config_set_in_pins(&g_sdio.pio_cfg_data_tx, SDIO_D0);
+    sm_config_set_set_pins(&g_sdio.pio_cfg_data_tx, SDIO_D0, 4);
+    sm_config_set_out_pins(&g_sdio.pio_cfg_data_tx, SDIO_D0, 4);
     sm_config_set_in_shift(&g_sdio.pio_cfg_data_tx, false, false, 32);
     sm_config_set_out_shift(&g_sdio.pio_cfg_data_tx, false, true, 32);
     sm_config_set_clkdiv_int_frac(&g_sdio.pio_cfg_data_tx, clock_divider, 0);
@@ -846,12 +846,12 @@ void rp2040_sdio_init(int clock_divider)
     // Because the CLK is driven synchronously to CPU clock,
     // there should be no metastability problems.
     SDIO_PIO->input_sync_bypass =
-          (1 << (SDIO_CLK - SDIO_GPIOBASE))
-        | (1 << (SDIO_CMD - SDIO_GPIOBASE))
-        | (1 << (SDIO_D0 - SDIO_GPIOBASE) )
-        | (1 << (SDIO_D1 - SDIO_GPIOBASE) )
-        | (1 << (SDIO_D2 - SDIO_GPIOBASE) )
-        | (1 << (SDIO_D3 - SDIO_GPIOBASE) );
+          (1 << (SDIO_CLK))
+        | (1 << (SDIO_CMD))
+        | (1 << (SDIO_D0) )
+        | (1 << (SDIO_D1) )
+        | (1 << (SDIO_D2) )
+        | (1 << (SDIO_D3) );
 
     // Redirect GPIOs to PIO
     gpio_set_function(SDIO_CMD, GPIO_FUNC_PIO1);
