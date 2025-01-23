@@ -65,6 +65,8 @@ void ide_phy_reset(const ide_phy_config_t* config)
 {
     g_ide_phy.config = *config;
     g_ide_phy.watchdog_error = false;
+
+    zuluide_rp2350b_core1_run();
 }
 
 void ide_phy_reset_from_watchdog()

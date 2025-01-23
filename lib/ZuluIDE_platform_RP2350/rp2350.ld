@@ -247,7 +247,7 @@ SECTIONS
         KEEP(*(.core1.dispatcher))
         KEEP(*(.core1*))
         __core1_ram_end__ = .;
-    } > RAM2 AT > FLASH
+    } > RAM2 AT >FLASH
     __core1_load_source__ = LOADADDR(.core1);
 
     /* Start and end symbols must be word-aligned */
@@ -276,11 +276,11 @@ SECTIONS
     /* by default we put core 0 stack at the end of scratch Y, so that if core 1
      * stack is not used then all of SCRATCH_X is free.
      */
-    .stack1_dummy (COPY):
+    .stack1_dummy (NOLOAD):
     {
         *(.stack1*)
     } > SCRATCH_X
-    .stack_dummy (COPY):
+    .stack_dummy (NOLOAD):
     {
         KEEP(*(.stack*))
     } > SCRATCH_Y

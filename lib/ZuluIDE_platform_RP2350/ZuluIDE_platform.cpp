@@ -173,11 +173,22 @@ void platform_init()
     gpio_conf(CTRL_LOAD,      GPIO_FUNC_SIO, false, false, true,  false, true);
     gpio_conf(CTRL_nEN,       GPIO_FUNC_SIO, false, false, true,  true,  true);
     gpio_conf(CTRL_IN_SEL,    GPIO_FUNC_SIO, false, false, true,  true,  true);
-    gpio_conf(IDE_DATASEL1,   GPIO_FUNC_SIO, false, false, true,  false, true);
+    gpio_conf(IDE_DATASEL1,   GPIO_FUNC_SIO, false, false, true,  true, true);
     gpio_conf(IDE_DATADIR,    GPIO_FUNC_SIO, false, false, true,  false, true);
     gpio_conf(IDE_IORDY_OUT,  GPIO_FUNC_SIO, false, false, true,  false, true);
     gpio_conf(IDE_IORDY_EN,   GPIO_FUNC_SIO, false, false, true,  true,  true);
     gpio_conf(IDE_IOCS16,     GPIO_FUNC_SIO, false, false, true,  true,  true);
+
+    // IDE bus status signals
+    gpio_conf(IDE_RST,        GPIO_FUNC_SIO, false, false, false, false, true);
+    gpio_conf(IDE_DIOW,       GPIO_FUNC_SIO, false, false, false, false, true);
+    gpio_conf(IDE_DIOR,       GPIO_FUNC_SIO, false, false, false, false, true);
+    gpio_conf(IDE_DA0,        GPIO_FUNC_SIO, false, false, false, false, true);
+    gpio_conf(IDE_DA1,        GPIO_FUNC_SIO, false, false, false, false, true);
+    gpio_conf(IDE_DA2,        GPIO_FUNC_SIO, false, false, false, false, true);
+    gpio_conf(IDE_CS0,        GPIO_FUNC_SIO, false, false, false, false, true);
+    gpio_conf(IDE_CS1,        GPIO_FUNC_SIO, false, false, false, false, true);
+    gpio_conf(IDE_DMACK,      GPIO_FUNC_SIO, false, false, false, false, true);
 
     // IDE bus data signals
     for (int i = 0; i < 16; i++)
@@ -198,6 +209,7 @@ void platform_init()
 // late_init() only runs in main application
 void platform_late_init()
 {
+
 }
 
 uint8_t platform_check_for_controller()
@@ -794,18 +806,6 @@ void zuluide_setup(void)
      multicore_reset_core1();
      dbgmsg("No Zulu Control board or I2C server found, disabling 2nd core");
    }
-}
-
-void zuluide_setup1(void)
-{
-
-}
-
-extern "C" void core1_entry(void);
-
-void zuluide_main_loop1(void)
-{
-    core1_entry();
 }
 
 mutex_t* platform_get_log_mutex() {

@@ -49,6 +49,7 @@ extern "C"
         zuluide_main_loop();
     }
 
+#ifndef RP2040_ARDUINO_DISABLE_CORE1
     void setup1(void)
     {
         zuluide_setup1();
@@ -58,6 +59,7 @@ extern "C"
     {
         zuluide_main_loop1();
     }
+#endif
 }
 #else
 int main(void)
