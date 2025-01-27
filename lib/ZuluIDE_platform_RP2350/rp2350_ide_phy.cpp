@@ -48,10 +48,12 @@ static struct {
     int crc_errors;
     uint32_t block_crc0;
     uint32_t block_crc1;
+
+    uint32_t tx_bufferidx; // Index of next buffer in g_idebuffers to use
 } g_ide_phy;
 
 static ide_phy_capabilities_t g_ide_phy_capabilities = {
-    .max_blocksize = 4096,
+    .max_blocksize = IDECOMM_MAX_BLOCKSIZE,
 
     .supports_iordy = true,
     .max_pio_mode = 0,
@@ -63,10 +65,28 @@ static ide_phy_capabilities_t g_ide_phy_capabilities = {
 
 void ide_phy_reset(const ide_phy_config_t* config)
 {
+    // Store register states before reset
+    core1_ideregs_t phyregs = g_idecomm.set_regs;
+    __sync_synchronize();
+
     g_ide_phy.config = *config;
     g_ide_phy.watchdog_error = false;
 
+    dbgmsg("Reset, error ", phyregs.error);
     zuluide_rp2350b_core1_run();
+
+    phyregs.config_enable_dev0          = config->enable_dev0;
+    phyregs.config_enable_dev1          = config->enable_dev1;
+    phyregs.config_enable_dev1_zeros    = config->enable_dev1_zeros;
+    phyregs.config_atapi_dev0           = config->atapi_dev0;
+    phyregs.config_atapi_dev1           = config->atapi_dev1;
+    phyregs.config_disable_iordy        = config->disable_iordy;
+    phyregs.config_enable_packet_intrq  = config->enable_packet_intrq;
+    phyregs.state_irqreq = 0;
+    phyregs.state_datain = 0;
+    phyregs.state_dataout = 0;
+    g_idecomm.set_regs = phyregs;
+    sio_hw->doorbell_out_set = EVT_IN_SET_REGS;
 }
 
 void ide_phy_reset_from_watchdog()
@@ -76,6 +96,15 @@ void ide_phy_reset_from_watchdog()
 
 ide_event_t ide_phy_get_events()
 {
+    uint8_t doorbell = sio_hw->doorbell_in_clr;
+
+    if (doorbell & EVT_OUT_CMD_RECEIVED)
+    {
+        sio_hw->doorbell_in_clr = EVT_OUT_CMD_RECEIVED;
+        dbgmsg("IDE_EVENT_CMD, status ", g_idecomm.get_regs.status);
+        return IDE_EVENT_CMD;
+    }
+
     return IDE_EVENT_NONE;
 }
 
@@ -86,28 +115,81 @@ bool ide_phy_is_command_interrupted()
 
 void ide_phy_get_regs(ide_registers_t *regs)
 {
+    core1_ideregs_t phyregs = g_idecomm.get_regs;
+    regs->status         = phyregs.status;
+    regs->command        = phyregs.command;
+    regs->device         = phyregs.device;
+    regs->device_control = phyregs.device_control;
+    regs->error          = phyregs.error;
+    regs->feature        = phyregs.feature;
+    regs->sector_count   = phyregs.sector_count;
+    regs->lba_low        = phyregs.lba_low;
+    regs->lba_mid        = phyregs.lba_mid;
+    regs->lba_high       = phyregs.lba_high;
+    // dbgmsg("GET_REGS, status ", regs->status, " error ", regs->error, " lba_high ", regs->lba_high);
 }
 
 void ide_phy_set_regs(const ide_registers_t *regs)
 {
+    core1_ideregs_t phyregs = {0};
+    phyregs.status         = regs->status;
+    phyregs.command        = regs->command;
+    phyregs.device         = regs->device;
+    phyregs.device_control = regs->device_control;
+    phyregs.error          = regs->error;
+    phyregs.feature        = regs->feature;
+    phyregs.sector_count   = regs->sector_count;
+    phyregs.lba_low        = regs->lba_low;
+    phyregs.lba_mid        = regs->lba_mid;
+    phyregs.lba_high       = regs->lba_high;
+    g_idecomm.set_regs = phyregs;
+    __sync_synchronize();
+    sio_hw->doorbell_out_set = EVT_IN_SET_REGS;
+    dbgmsg("SET_REGS, status ", phyregs.status, " error ", phyregs.error, " lba_high ", phyregs.lba_high);
+
+    delay(2);
+    phyregs = g_idecomm.get_regs;
+    dbgmsg("READBACK status ", phyregs.status, " error ", phyregs.error, " lba_high ", phyregs.lba_high);
 }
 
 void ide_phy_start_write(uint32_t blocklen, int udma_mode)
 {
+    assert(udma_mode < 0); // TODO: Implement UDMA
+    g_idecomm.wr_block_size = blocklen;
+    g_idecomm.rd_block_size = 0;
+
+    // Actual write is started when first block is written
 }
 
 bool ide_phy_can_write_block()
 {
-    return true;
+    return (sio_hw->fifo_st & SIO_FIFO_ST_RDY_BITS);
 }
 
 void ide_phy_write_block(const uint8_t *buf, uint32_t blocklen)
 {
+    assert(blocklen == g_idecomm.wr_block_size);
+    assert(sio_hw->fifo_st & SIO_FIFO_ST_RDY_BITS);
+
+    // Copy data to a block that remains valid for duration of transfer
+    // Data must be aligned so that it ends at the end of the block.
+    uint8_t *block = g_idebuffers[g_ide_phy.tx_bufferidx++ % IDECOMM_BUFFERCOUNT];
+    block += IDECOMM_MAX_BLOCKSIZE - blocklen;
+    memcpy(block, buf, blocklen);
+
+    // Tell core1 to transmit the block
+    sio_hw->fifo_wr = (uint32_t)block;
+
+    dbgmsg("Start write");
+    core1_ideregs_t phyregs = g_idecomm.get_regs;
+    phyregs.state_datain = 1;
+    g_idecomm.set_regs = phyregs;
+    sio_hw->doorbell_out_set = EVT_IN_SET_REGS;
 }
 
 bool ide_phy_is_write_finished()
 {
-    return true;
+    return !g_idecomm.get_regs.state_datain;
 }
 
 void ide_phy_start_read(uint32_t blocklen, int udma_mode)
@@ -137,10 +219,21 @@ void ide_phy_ata_read_block(uint8_t *buf, uint32_t blocklen, bool continue_trans
 
 void ide_phy_stop_transfers(int *crc_errors)
 {
+    core1_ideregs_t phyregs = g_idecomm.get_regs;
+    phyregs.state_datain = 0;
+    phyregs.state_dataout = 0;
+    g_idecomm.set_regs = phyregs;
+    sio_hw->doorbell_out_set = EVT_IN_SET_REGS;
 }
 
 void ide_phy_assert_irq(uint8_t ide_status)
 {
+    core1_ideregs_t phyregs = g_idecomm.get_regs;
+    phyregs.status = ide_status;
+    phyregs.state_irqreq = 1;
+    g_idecomm.set_regs = phyregs;
+    sio_hw->doorbell_out_set = EVT_IN_SET_REGS;
+    dbgmsg("ASSERT_IRQ, status ", phyregs.status);
 }
 
 void ide_phy_set_signals(uint8_t signals)
