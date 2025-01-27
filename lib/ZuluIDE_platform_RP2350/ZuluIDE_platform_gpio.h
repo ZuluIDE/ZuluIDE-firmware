@@ -54,7 +54,7 @@
 #define IDE_D13         25
 #define IDE_D14         26
 #define IDE_D15         27
-#define IDE_DATASEL1    28
+#define IDE_DATASEL     28
 #define IDE_DATADIR     29
 #define IDE_IORDY_OUT   30
 #define IDE_IORDY_EN    31

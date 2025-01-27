@@ -110,7 +110,7 @@ void platform_init()
 
     /* Check dip switch settings */
     //        pin             function       pup   pdown  out    state fast
-    gpio_conf(IDE_DATASEL1,     GPIO_FUNC_SIO, false, false, true, true, true);
+    gpio_conf(IDE_DATASEL,      GPIO_FUNC_SIO, false, false, true, true, true);
     gpio_conf(CTRL_IN_SEL,      GPIO_FUNC_SIO, false, false, true,  false, true);
     gpio_conf(DIP_CABLESEL,     GPIO_FUNC_SIO, false, false, false, false, false);
     gpio_conf(DIP_DRIVE_ID,     GPIO_FUNC_SIO, false, false, false, false, false);
@@ -153,6 +153,8 @@ void platform_init()
     memcpy(&g_flash_unique_id, response_uniq_id + 5, 8);
     logmsg("Flash unique ID: ", g_flash_unique_id);
 
+    logmsg("System clock is set to ", (int) clock_get_hz(clk_sys), " Hz");
+
     // SD card pins
     // Card is used in SDIO mode, rp2040_sdio.cpp will redirect these to PIO1
     //        pin             function       pup   pdown  out    state fast
@@ -173,7 +175,7 @@ void platform_init()
     gpio_conf(CTRL_LOAD,      GPIO_FUNC_SIO, false, false, true,  false, true);
     gpio_conf(CTRL_nEN,       GPIO_FUNC_SIO, false, false, true,  true,  true);
     gpio_conf(CTRL_IN_SEL,    GPIO_FUNC_SIO, false, false, true,  true,  true);
-    gpio_conf(IDE_DATASEL1,   GPIO_FUNC_SIO, false, false, true,  true, true);
+    gpio_conf(IDE_DATASEL,    GPIO_FUNC_SIO, false, false, true,  true, true);
     gpio_conf(IDE_DATADIR,    GPIO_FUNC_SIO, false, false, true,  false, true);
     gpio_conf(IDE_IORDY_OUT,  GPIO_FUNC_SIO, false, false, true,  false, true);
     gpio_conf(IDE_IORDY_EN,   GPIO_FUNC_SIO, false, false, true,  true,  true);
@@ -195,12 +197,6 @@ void platform_init()
     {
         gpio_conf(IDE_D0 + i, GPIO_FUNC_SIO, false, false, false, false, true);
     }
-
-    // Control mux outputs need their input override set to 0 to avoid
-    // disturbing core 1 logic.
-    gpio_set_inover(CTRL_LOAD, IO_BANK0_GPIO0_CTRL_INOVER_VALUE_LOW);
-    gpio_set_inover(CTRL_nEN, IO_BANK0_GPIO0_CTRL_INOVER_VALUE_LOW);
-    gpio_set_inover(CTRL_IN_SEL, IO_BANK0_GPIO0_CTRL_INOVER_VALUE_LOW);
 
     // Status LED
     gpio_conf(STATUS_LED,     GPIO_FUNC_SIO, false,false, true,  false, false);
