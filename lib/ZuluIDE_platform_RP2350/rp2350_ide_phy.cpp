@@ -49,7 +49,7 @@ static struct {
     uint32_t block_crc0;
     uint32_t block_crc1;
 
-    uint32_t tx_bufferidx; // Index of next buffer in g_idebuffers to use
+    uint32_t bufferidx; // Index of next buffer in g_idebuffers to use
 } g_ide_phy;
 
 static ide_phy_capabilities_t g_ide_phy_capabilities = {
@@ -131,7 +131,7 @@ void ide_phy_get_regs(ide_registers_t *regs)
 
 void ide_phy_set_regs(const ide_registers_t *regs)
 {
-    core1_ideregs_t phyregs = {0};
+    core1_ideregs_t phyregs = g_idecomm.get_regs;
     phyregs.status         = regs->status;
     phyregs.command        = regs->command;
     phyregs.device         = regs->device;
@@ -155,8 +155,7 @@ void ide_phy_set_regs(const ide_registers_t *regs)
 void ide_phy_start_write(uint32_t blocklen, int udma_mode)
 {
     assert(udma_mode < 0); // TODO: Implement UDMA
-    g_idecomm.wr_block_size = blocklen;
-    g_idecomm.rd_block_size = 0;
+    g_idecomm.datablocksize = blocklen;
 
     // Actual write is started when first block is written
 }
@@ -168,19 +167,23 @@ bool ide_phy_can_write_block()
 
 void ide_phy_write_block(const uint8_t *buf, uint32_t blocklen)
 {
-    assert(blocklen == g_idecomm.wr_block_size);
+    assert(blocklen == g_idecomm.datablocksize);
     assert(sio_hw->fifo_st & SIO_FIFO_ST_RDY_BITS);
 
     // Copy data to a block that remains valid for duration of transfer
     // Data must be aligned so that it ends at the end of the block.
-    uint8_t *block = g_idebuffers[g_ide_phy.tx_bufferidx++ % IDECOMM_BUFFERCOUNT];
+    uint8_t *block = g_idebuffers[g_ide_phy.bufferidx++ % IDECOMM_BUFFERCOUNT];
     block += IDECOMM_MAX_BLOCKSIZE - blocklen;
     memcpy(block, buf, blocklen);
 
-    // Tell core1 to transmit the block
+    dbgmsg("Write block ptr ", (uint32_t)block, " length ", (int)blocklen);
+
+    // Give the transmit pointer to core 1
     sio_hw->fifo_wr = (uint32_t)block;
 
-    dbgmsg("Start write");
+    // Wake up core 1
+    // TODO: Can this disturb register access timing?
+    // Maybe should do this only if busy? Possible race condition.
     core1_ideregs_t phyregs = g_idecomm.get_regs;
     phyregs.state_datain = 1;
     g_idecomm.set_regs = phyregs;
@@ -192,25 +195,61 @@ bool ide_phy_is_write_finished()
     return !g_idecomm.get_regs.state_datain;
 }
 
+static void data_out_give_next_block()
+{
+    // Select a buffer for the transfer
+    // Data must be aligned so that it ends at the end of the block.
+    uint8_t *block = g_idebuffers[g_ide_phy.bufferidx++ % IDECOMM_BUFFERCOUNT];
+    block += IDECOMM_MAX_BLOCKSIZE - g_idecomm.datablocksize;
+
+    // Tell core1 to receive the block
+    assert(sio_hw->fifo_st & SIO_FIFO_ST_RDY_BITS);
+    sio_hw->fifo_wr = (uint32_t)block;
+
+    // Wake core1 up
+    // TODO: Can this disturb register access timing?
+    // Maybe should do this only if busy? Possible race condition.
+    core1_ideregs_t phyregs = g_idecomm.get_regs;
+    phyregs.state_dataout = 1;
+    g_idecomm.set_regs = phyregs;
+    sio_hw->doorbell_out_set = EVT_IN_SET_REGS;
+}
+
 void ide_phy_start_read(uint32_t blocklen, int udma_mode)
 {
+    assert(udma_mode < 0); // TODO: Implement UDMA
+    g_idecomm.datablocksize = blocklen;
+
+    data_out_give_next_block();
 }
 
 void ide_phy_start_ata_read(uint32_t blocklen, int udma_mode)
 {
+    assert(false); // TODO: implement
 }
 
 bool ide_phy_can_read_block()
 {
-    return true;
+    return sio_hw->fifo_st & SIO_FIFO_ST_VLD_BITS;
 }
 
 void ide_phy_start_read_buffer(uint32_t blocklen)
 {
+    assert(false); // TODO: implement
 }
 
 void ide_phy_read_block(uint8_t *buf, uint32_t blocklen, bool continue_transfer)
 {
+    assert(blocklen == g_idecomm.datablocksize);
+    assert(sio_hw->fifo_st & SIO_FIFO_ST_VLD_BITS);
+    const uint8_t *buf2 = (const uint8_t*)sio_hw->fifo_rd;
+
+    memcpy(buf, buf2, blocklen);
+
+    if (continue_transfer)
+    {
+        data_out_give_next_block();
+    }
 }
 
 void ide_phy_ata_read_block(uint8_t *buf, uint32_t blocklen, bool continue_transfer)
@@ -224,6 +263,13 @@ void ide_phy_stop_transfers(int *crc_errors)
     phyregs.state_dataout = 0;
     g_idecomm.set_regs = phyregs;
     sio_hw->doorbell_out_set = EVT_IN_SET_REGS;
+    g_idecomm.datablocksize = 0;
+
+    // Drain FIFO
+    while (sio_hw->fifo_st & SIO_FIFO_ST_VLD_BITS)
+    {
+        (void)sio_hw->fifo_rd;
+    }
 }
 
 void ide_phy_assert_irq(uint8_t ide_status)
