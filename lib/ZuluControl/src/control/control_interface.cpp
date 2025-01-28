@@ -35,7 +35,6 @@ void ControlInterface::SetDisplayController(StdDisplayController* dispController
 }
 
 void ControlInterface::RotaryUpdate(int offset) {
-  logmsg("Rotary update received: ", offset);
   switch(currentDisplayMode) {
   case Mode::Eject: {
     displayController->GetEjectController().MoveToNextEntry();
@@ -111,7 +110,6 @@ void ControlInterface::RotaryUpdate(int offset) {
 }
 
 void ControlInterface::RotaryButtonPressed() {
-  logmsg("Rotary Button Pressed");
   switch(currentDisplayMode) {
   case Mode::Status: {
     displayController->GetStatusController().ChangeToMenu();
@@ -146,7 +144,6 @@ void ControlInterface::RotaryButtonPressed() {
 }
 
 void ControlInterface::PrimaryButtonPressed() {
-  logmsg("Primary Button Pressed");
   switch(currentDisplayMode) {
   case Mode::Select: {
     displayController->GetSelectController().DecreaseImageNameOffset();
@@ -158,7 +155,6 @@ void ControlInterface::PrimaryButtonPressed() {
 }
 
 void ControlInterface::SecondaryButtonPressed() {
-  logmsg("Secondary Button Pressed");
   switch(currentDisplayMode) {
   case Mode::Select: {
     displayController->GetSelectController().IncrementImageNameOffset();

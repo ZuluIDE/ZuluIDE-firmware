@@ -61,6 +61,7 @@ namespace zuluide::control {
     void UpdateState(SplashState& newState);
     void SetMode(Mode value);
     void ProcessSystemStatusUpdate(zuluide::status::SystemStatus& currentStatus);
+    const zuluide::status::SystemStatus& GetCurrentStatus() const;
   private:
     void notifyObservers();
     std::vector<std::function<void(const DisplayState& current)>> observers;
@@ -75,5 +76,6 @@ namespace zuluide::control {
     InfoController infoController;
     SplashController splashController;
     UIControllerBase* getControllerByMode(const Mode mode);
+    zuluide::status::SystemStatus currentStatus;
   };
 }

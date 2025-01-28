@@ -1,5 +1,5 @@
 /**
- * ZuluIDE™ - Copyright (c) 2024 Rabbit Hole Computing™
+ * ZuluIDE™ - Copyright (c) 2025 Rabbit Hole Computing™
  *
  * ZuluIDE™ firmware is licensed under the GPL version 3 or any later version. 
  *
@@ -27,8 +27,23 @@ using namespace zuluide::control;
 
 DisplayState SelectController::Reset() {
   imgIterator.Reset();
-  state = SelectState();
-  GetNextImageEntry();
+  state = SelectState();  
+  auto currentStatus = controller->GetCurrentStatus();
+  if (currentStatus.HasLoadedImage()) {
+    // Lets try to move the iterator to the currently selected image.
+    if (!imgIterator.MoveToFile(currentStatus.GetLoadedImage().GetFilename().c_str())) {
+      logmsg("Failed to move to currently selected image.");
+      // We failed to find the file for some reason, lets reset at the begining.
+      imgIterator.Reset();
+      // Move to the first image.
+      GetNextImageEntry();
+    } else {
+      state.SetCurrentImage(std::make_unique<Image>(imgIterator.Get()));
+      state.SetIsShowingBack(false);
+      controller->UpdateState(state);
+    }
+  }
+
   return DisplayState(state);
 }
 
@@ -74,7 +89,6 @@ void SelectController::ChangeToMenu() {
 }
 
 void SelectController::GetNextImageEntry() {
-  logmsg("GetNextImageEntry Core ", (int)get_core_num());
   if (imgIterator.IsLast() && !state.IsShowingBack()) {
     // We are currently on the last item, show the back.
     state.SetIsShowingBack(true);
