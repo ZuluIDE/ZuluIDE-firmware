@@ -178,9 +178,13 @@ zuluide::status::StatusController& StdDisplayController::GetStatController() {
   return *statController;
 }
 
-void StdDisplayController::ProcessSystemStatusUpdate(zuluide::status::SystemStatus& currentStatus) {
+void StdDisplayController::ProcessSystemStatusUpdate(zuluide::status::SystemStatus& newStatus) {
+  currentStatus = newStatus;
   if (current) {
     current->SystemStatusUpdated(currentStatus);
   }
 }
 
+const zuluide::status::SystemStatus& StdDisplayController::GetCurrentStatus() const {
+  return currentStatus;
+}
