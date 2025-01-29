@@ -181,13 +181,15 @@ void ide_phy_write_block(const uint8_t *buf, uint32_t blocklen)
     // Give the transmit pointer to core 1
     sio_hw->fifo_wr = (uint32_t)block;
 
-    // Wake up core 1
-    // TODO: Can this disturb register access timing?
-    // Maybe should do this only if busy? Possible race condition.
-    core1_ideregs_t phyregs = g_idecomm.get_regs;
-    phyregs.state_datain = 1;
-    g_idecomm.set_regs = phyregs;
-    sio_hw->doorbell_out_set = EVT_IN_SET_REGS;
+    if (!g_idecomm.get_regs.state_datain)
+    {
+        // Wake up core 1
+        // FIXME: Possible race condition if core1 unsets state_datain after we check it
+        core1_ideregs_t phyregs = g_idecomm.get_regs;
+        phyregs.state_datain = 1;
+        g_idecomm.set_regs = phyregs;
+        sio_hw->doorbell_out_set = EVT_IN_SET_REGS;
+    }
 }
 
 bool ide_phy_is_write_finished()
@@ -206,13 +208,15 @@ static void data_out_give_next_block()
     assert(sio_hw->fifo_st & SIO_FIFO_ST_RDY_BITS);
     sio_hw->fifo_wr = (uint32_t)block;
 
-    // Wake core1 up
-    // TODO: Can this disturb register access timing?
-    // Maybe should do this only if busy? Possible race condition.
-    core1_ideregs_t phyregs = g_idecomm.get_regs;
-    phyregs.state_dataout = 1;
-    g_idecomm.set_regs = phyregs;
-    sio_hw->doorbell_out_set = EVT_IN_SET_REGS;
+    if (!g_idecomm.get_regs.state_dataout)
+    {
+        // Wake core1 up
+        // FIXME: Possible race condition if core1 unsets state_dataout after we check it
+        core1_ideregs_t phyregs = g_idecomm.get_regs;
+        phyregs.state_dataout = 1;
+        g_idecomm.set_regs = phyregs;
+        sio_hw->doorbell_out_set = EVT_IN_SET_REGS;
+    }
 }
 
 void ide_phy_start_read(uint32_t blocklen, int udma_mode)
