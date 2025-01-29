@@ -674,6 +674,11 @@ void platform_poll()
 {
     static uint32_t prev_poll_time;
 
+    // Disable the RP2040Support.h interrupt, otherwise it steals our FIFO items
+    // TODO: Find a better place to do this, it has to be after
+    // framework-arduinopico/cores/rp2040/main.cpp runs.
+    irq_set_enabled(SIO_IRQ_FIFO, false);
+
     // No point polling the USB hardware more often than once per millisecond
     uint32_t time_now = millis();
     if (time_now == prev_poll_time)
