@@ -72,7 +72,7 @@ void ide_phy_reset(const ide_phy_config_t* config)
     g_ide_phy.config = *config;
     g_ide_phy.watchdog_error = false;
 
-    dbgmsg("Reset, error ", phyregs.error);
+    dbgmsg("ide_phy_reset");
     zuluide_rp2350b_core1_run();
 
     phyregs.config_enable_dev0          = config->enable_dev0;
@@ -103,6 +103,34 @@ ide_event_t ide_phy_get_events()
         sio_hw->doorbell_in_clr = EVT_OUT_CMD_RECEIVED;
         dbgmsg("IDE_EVENT_CMD, status ", g_idecomm.get_regs.status);
         return IDE_EVENT_CMD;
+    }
+    else if (g_idecomm.hwrst_flag)
+    {
+        g_idecomm.hwrst_flag = 0;
+        delay(1);
+        if (g_idecomm.hwrst_flag)
+        {
+            // Reset still continues, report when it ends
+            return IDE_EVENT_NONE;
+        }
+        else
+        {
+            return IDE_EVENT_HWRST;
+        }
+    }
+    else if (g_idecomm.swrst_flag)
+    {
+        if (g_idecomm.get_regs.device_control & IDE_DEVCTRL_SRST)
+        {
+            // Software reset continues
+            return IDE_EVENT_NONE;
+        }
+        else
+        {
+            // Software reset done
+            g_idecomm.swrst_flag = 0;
+            return IDE_EVENT_SWRST;
+        }
     }
 
     return IDE_EVENT_NONE;
