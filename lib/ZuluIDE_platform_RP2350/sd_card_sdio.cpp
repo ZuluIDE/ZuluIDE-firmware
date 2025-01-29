@@ -203,7 +203,7 @@ uint32_t SdioCard::errorLine() const
 
 bool SdioCard::isBusy() 
 {
-    return (sio_hw->gpio_in & (1 << SDIO_D0)) == 0;
+    return !gpio_get(SDIO_D0);
 }
 
 uint32_t SdioCard::kHzSdClk()
