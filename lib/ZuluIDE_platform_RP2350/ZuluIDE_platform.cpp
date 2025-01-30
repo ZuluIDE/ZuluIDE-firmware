@@ -59,7 +59,7 @@ static uint32_t g_flash_chip_size = 0;
 static bool g_uart_initialized = false;
 static bool g_led_disabled = false;
 static bool g_led_blinking = false;
-static bool g_dip_drive_id, g_dip_cable_sel;
+static bool g_dip_drive_id, g_dip_cable_sel, g_cable_sel_state;
 static uint64_t g_flash_unique_id;
 static mutex_t logMutex;
 static uint8_t g_eject_buttons = 0;
@@ -116,6 +116,7 @@ void platform_init()
     gpio_conf(DIP_CABLESEL,     GPIO_FUNC_SIO, false, false, false, false, false);
     gpio_conf(DIP_DRIVE_ID,     GPIO_FUNC_SIO, false, false, false, false, false);
     gpio_conf(DIP_DBGLOG,       GPIO_FUNC_SIO, false, false, false, false, false);
+    gpio_conf(IDE_CABLESEL,     GPIO_FUNC_SIO, false, false, false, false, false);
 
     delay(10); // 10 ms delay to let pull-ups do their work
     mutex_init(&logMutex);
@@ -123,6 +124,7 @@ void platform_init()
     bool dbglog = !gpio_get(DIP_DBGLOG);
     g_dip_cable_sel = !gpio_get(DIP_CABLESEL);
     g_dip_drive_id = !gpio_get(DIP_DRIVE_ID);
+    g_cable_sel_state = gpio_get(IDE_CABLESEL);
 
     // Disable CTRL IN mux for now
     gpio_put(CTRL_IN_SEL, true);
@@ -299,21 +301,20 @@ uint8_t platform_get_buttons()
 
 int platform_get_device_id(void)
 {
-    return 0;
-    // if (g_dip_cable_sel)
-    // {
-    //     if (gpio_get(IDE_CSEL_IN))
-    //         return 1;    // CSEL wire has been cut, secondary device
-    //     else
-    //         return 0;    // CSEL wire grounded, primary device
-    // }
-    // else
-    // {
-    //     if (g_dip_drive_id)
-    //         return 1;    // PRI/SEC switch on, secondary device
-    //     else
-    //         return 0;    // PRI/SEC switch off, primary device
-    // }
+    if (g_dip_cable_sel)
+    {
+        if (g_cable_sel_state)
+            return 1;    // CSEL wire has been cut, secondary device
+        else
+            return 0;    // CSEL wire grounded, primary device
+    }
+    else
+    {
+        if (g_dip_drive_id)
+            return 1;    // PRI/SEC switch on, secondary device
+        else
+            return 0;    // PRI/SEC switch off, primary device
+    }
 }
 
 /*****************************************/
@@ -801,12 +802,6 @@ const void * btldr_vectors[2] = {&__StackTop, (void*)&btldr_reset_handler};
 /********************************/
 void zuluide_setup(void)
 {
-   if (!platform_check_for_controller())
-   {
-     rp2040.idleOtherCore();
-     multicore_reset_core1();
-     dbgmsg("No Zulu Control board or I2C server found, disabling 2nd core");
-   }
 }
 
 mutex_t* platform_get_log_mutex() {

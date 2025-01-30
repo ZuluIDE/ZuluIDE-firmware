@@ -95,6 +95,7 @@
 #define DIP_CABLESEL IDE_D10
 #define DIP_DRIVE_ID IDE_D11
 #define DIP_DBGLOG   IDE_D12
+#define IDE_CABLESEL IDE_D15
 
 // Serial output pin
 // NOTE: PCB rev 2024c has errata on this pin.
