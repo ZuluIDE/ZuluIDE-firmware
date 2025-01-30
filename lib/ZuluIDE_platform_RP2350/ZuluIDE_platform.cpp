@@ -62,6 +62,7 @@ static bool g_led_blinking = false;
 static bool g_dip_drive_id, g_dip_cable_sel;
 static uint64_t g_flash_unique_id;
 static mutex_t logMutex;
+static uint8_t g_eject_buttons = 0;
 
 //void mbed_error_hook(const mbed_error_ctx * error_context);
 
@@ -256,45 +257,44 @@ void platform_disable_led(void)
 
 void platform_init_eject_button(uint8_t eject_button)
 {
-    // if (eject_button & 1)
-    // {
-    //     //        pin                   function       pup   pdown  out    state fast
-    //     gpio_conf(GPIO_EJECT_BTN_1_PIN, GPIO_FUNC_SIO, true, false, false, true, false);
-    //     g_eject_buttons |= 1;
-    // }
+    if (eject_button & 1)
+    {
+        //        pin                   function       pup   pdown  out    state fast
+        gpio_conf(GPIO_EJECT_BTN_1_PIN, GPIO_FUNC_SIO, true, false, false, true, false);
+        g_eject_buttons |= 1;
+    }
 
-    // if (eject_button & 2)
-    // {
-    //     gpio_conf(GPIO_EJECT_BTN_2_PIN, GPIO_FUNC_SIO, true, false, false, true, false);
-    //     g_eject_buttons |= 2;
-    // }
+    if (eject_button & 2)
+    {
+        gpio_conf(GPIO_EJECT_BTN_2_PIN, GPIO_FUNC_SIO, true, false, false, true, false);
+        g_eject_buttons |= 2;
+    }
 }
 
 uint8_t platform_get_buttons()
 {
-    return 0;
-    // uint8_t buttons = 0;
+    uint8_t buttons = 0;
 
-    // if ((g_eject_buttons & 1) && (!gpio_get(GPIO_EJECT_BTN_1_PIN))) 
-    //     buttons |= 1;
-    // if ((g_eject_buttons & 2) && !gpio_get(GPIO_EJECT_BTN_2_PIN)) 
-    //     buttons |= 2;
+    if ((g_eject_buttons & 1) && (!gpio_get(GPIO_EJECT_BTN_1_PIN))) 
+        buttons |= 1;
+    if ((g_eject_buttons & 2) && !gpio_get(GPIO_EJECT_BTN_2_PIN)) 
+        buttons |= 2;
 
-    // // Simple debouncing logic: handle button releases after 100 ms delay.
-    // static uint32_t debounce;
-    // static uint8_t buttons_debounced = 0;
+    // Simple debouncing logic: handle button releases after 100 ms delay.
+    static uint32_t debounce;
+    static uint8_t buttons_debounced = 0;
 
-    // if (buttons != 0)
-    // {
-    //     buttons_debounced = buttons;
-    //     debounce = millis();
-    // }
-    // else if ((uint32_t)(millis() - debounce) > 100)
-    // {
-    //     buttons_debounced = 0;
-    // }
+    if (buttons != 0)
+    {
+        buttons_debounced = buttons;
+        debounce = millis();
+    }
+    else if ((uint32_t)(millis() - debounce) > 100)
+    {
+        buttons_debounced = 0;
+    }
 
-    // return buttons_debounced;
+    return buttons_debounced;
 }
 
 int platform_get_device_id(void)
