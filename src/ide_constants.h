@@ -52,8 +52,8 @@
 #define IDE_DEVCTRL_HOB     0x80
 
 // Device bits register bits
-#define IDE_DEVICE_LBA  0x40;
-#define IDE_DEVICE_DEV  0x10;
+#define IDE_DEVICE_LBA  0x40
+#define IDE_DEVICE_DEV  0x10
 
 // IDE command set defined as X-macro
 // These will be available as enum values named IDE_CMD_xxx
