@@ -130,7 +130,7 @@ void platform_init()
     gpio_put(CTRL_IN_SEL, true);
 
     /* Initialize logging to SWO pin (UART0) */
-    gpio_conf(SWO_PIN,        GPIO_FUNC_UART,false,false, true,  false, true);
+    gpio_conf(SWO_PIN,        GPIO_FUNC_UART_AUX,false,false, true,  false, true);
     uart_init(uart0, 1000000); // Debug UART at 1 MHz baudrate
     g_uart_initialized = true;
 

@@ -71,10 +71,9 @@
 #define SDIO_D3  39
 
 // Expansion I2C bus
-// NOTE: PCB rev 2024c has errata on these pins.
-#define GPIO_I2C_SDA 46
-#define GPIO_I2C_SCL 47
-#define GPIO_EXT_INTERRUPT 45
+#define GPIO_I2C_SDA 44
+#define GPIO_I2C_SCL 45
+#define GPIO_EXT_INTERRUPT 47
 
 #ifdef ENABLE_AUDIO_OUTPUT
     // IO expander I2C pins being used as SPI for audio
@@ -98,8 +97,7 @@
 #define IDE_CABLESEL IDE_D15
 
 // Serial output pin
-// NOTE: PCB rev 2024c has errata on this pin.
-#define SWO_PIN 44
+#define SWO_PIN 46
 
 // Status LED
 #define STATUS_LED 33
