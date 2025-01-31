@@ -68,6 +68,20 @@ SECTIONS
         /* bit of a hack right now to exclude all floating point and time critical (e.g. memset, memcpy) code from
          * FLASH ... we will include any thing excluded here in .data below by default */
         *(.init)
+    }  > FLASH
+
+    /* Core 1 dedicated RAM */
+    .core1 : {
+        __core1_ram_start__ = .;
+        KEEP(*:*rp2350_core1_register_access*(.text .text*))
+        KEEP(*:*rp2350_core1_register_access*(.data*))
+        KEEP(*:*rp2350_core1_register_access*(.bss*))
+        KEEP(*(.core1*))
+        __core1_ram_end__ = .;
+    } > RAM2 AT >FLASH
+    __core1_load_source__ = LOADADDR(.core1);
+
+    .text : {
         *libgcc.a:cmse_nonsecure_call.o
         *(EXCLUDE_FILE(*libgcc.a: *libc.a:*lib_a-mem*.o *libm.a:) .text*)
         *(.fini)
@@ -240,15 +254,6 @@ SECTIONS
     /* historically on GCC sbrk was growing past __HeapLimit to __StackLimit, however
        to be more compatible, we now set __HeapLimit explicitly to where the end of the heap is */
     __HeapLimit = ORIGIN(RAM) + LENGTH(RAM);
-
-    /* Core 1 dedicated RAM */
-    .core1 : {
-        __core1_ram_start__ = .;
-        KEEP(*(.core1.dispatcher))
-        KEEP(*(.core1*))
-        __core1_ram_end__ = .;
-    } > RAM2 AT >FLASH
-    __core1_load_source__ = LOADADDR(.core1);
 
     /* Start and end symbols must be word-aligned */
     .scratch_x : {
