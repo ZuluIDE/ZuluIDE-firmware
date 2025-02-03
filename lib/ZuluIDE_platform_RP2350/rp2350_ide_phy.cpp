@@ -56,7 +56,7 @@ static ide_phy_capabilities_t g_ide_phy_capabilities = {
     .max_blocksize = IDECOMM_MAX_BLOCK_PAYLOAD,
 
     .supports_iordy = true,
-    .max_pio_mode = 0,
+    .max_pio_mode = 3,
     .min_pio_cycletime_no_iordy = 240,
     .min_pio_cycletime_with_iordy = 180,
 
