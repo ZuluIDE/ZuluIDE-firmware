@@ -53,7 +53,7 @@ static struct {
 } g_ide_phy;
 
 static ide_phy_capabilities_t g_ide_phy_capabilities = {
-    .max_blocksize = IDECOMM_MAX_BLOCKSIZE,
+    .max_blocksize = IDECOMM_MAX_BLOCK_PAYLOAD,
 
     .supports_iordy = true,
     .max_pio_mode = 0,
@@ -184,12 +184,20 @@ void ide_phy_write_block(const uint8_t *buf, uint32_t blocklen)
 {
     assert(blocklen == g_idecomm.datablocksize);
     assert(sio_hw->fifo_st & SIO_FIFO_ST_RDY_BITS);
+    assert((blocklen & 1) == 0);
 
     // Copy data to a block that remains valid for duration of transfer
     // Data must be aligned so that it ends at the end of the block.
+    // We also need 16 bit -> 32 bit padding.
     uint8_t *block = g_idebuffers[g_ide_phy.bufferidx++ % IDECOMM_BUFFERCOUNT];
-    block += IDECOMM_MAX_BLOCKSIZE - blocklen;
-    memcpy(block, buf, blocklen);
+    block += IDECOMM_MAX_BLOCKSIZE - blocklen * 2;
+
+    const uint16_t *src = (const uint16_t*)buf;
+    uint32_t *dst = (uint32_t*)block;
+    for (int i = 0; i < blocklen / 2; i++)
+    {
+        *dst++ = (*src++) | IDECOMM_DATA_PATTERN;
+    }
 
     dbgmsg("Write block ptr ", (uint32_t)block, " length ", (int)blocklen);
 
@@ -261,9 +269,14 @@ void ide_phy_read_block(uint8_t *buf, uint32_t blocklen, bool continue_transfer)
 {
     assert(blocklen == g_idecomm.datablocksize);
     assert(sio_hw->fifo_st & SIO_FIFO_ST_VLD_BITS);
-    const uint8_t *buf2 = (const uint8_t*)sio_hw->fifo_rd;
+    const uint32_t *rxbuf = (const uint32_t*)sio_hw->fifo_rd;
 
-    memcpy(buf, buf2, blocklen);
+    // Narrowing conversion from 32 bits
+    uint16_t *dst = (uint16_t*)buf;
+    for (int i = 0; i < blocklen / 2; i++)
+    {
+        *dst++ = *rxbuf++;
+    }
 
     if (continue_transfer)
     {
