@@ -130,16 +130,8 @@ ide_event_t ide_phy_get_events()
     }
     else if (flags & CORE1_EVT_SWRST)
     {
-        if (g_idecomm.phyregs.regs.device_control & IDE_DEVCTRL_SRST)
-        {
-            // Software reset continues
-            return IDE_EVENT_NONE;
-        }
-        else
-        {
-            // Software reset done
-            return IDE_EVENT_SWRST;
-        }
+        // Software reset
+        return IDE_EVENT_SWRST;
     }
 
     return IDE_EVENT_NONE;
