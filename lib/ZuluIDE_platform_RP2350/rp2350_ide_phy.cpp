@@ -63,6 +63,12 @@ static ide_phy_capabilities_t g_ide_phy_capabilities = {
     .max_udma_mode = -1,
 };
 
+static void ide_phy_post_request(uint32_t request)
+{
+    __atomic_or_fetch(&g_idecomm.requests, request, __ATOMIC_ACQ_REL);
+    IDE_PIO->irq_force = (1 << IDE_CORE1_WAKEUP_IRQ);
+}
+
 void ide_phy_reset(const ide_phy_config_t* config)
 {
     // Only initialize registers once after boot, after that ide_protocol handles it.
@@ -92,7 +98,7 @@ void ide_phy_reset(const ide_phy_config_t* config)
     phyregs.state_datain = 0;
     phyregs.state_dataout = 0;
     g_idecomm.phyregs = phyregs;
-    sio_hw->doorbell_out_set = EVT_IN_SET_REGS;
+    ide_phy_post_request(CORE1_REQ_SET_REGS);
 }
 
 void ide_phy_reset_from_watchdog()
@@ -102,19 +108,17 @@ void ide_phy_reset_from_watchdog()
 
 ide_event_t ide_phy_get_events()
 {
-    uint8_t doorbell = sio_hw->doorbell_in_clr;
+    uint32_t flags = __atomic_exchange_n(&g_idecomm.events, 0, __ATOMIC_ACQ_REL);
 
-    if (doorbell & EVT_OUT_CMD_RECEIVED)
+    if (flags & CORE1_EVT_CMD_RECEIVED)
     {
-        sio_hw->doorbell_in_clr = EVT_OUT_CMD_RECEIVED;
         dbgmsg("IDE_EVENT_CMD, status ", g_idecomm.phyregs.regs.status);
         return IDE_EVENT_CMD;
     }
-    else if (g_idecomm.hwrst_flag)
+    else if (flags & CORE1_EVT_HWRST)
     {
-        g_idecomm.hwrst_flag = 0;
         delay(1);
-        if (g_idecomm.hwrst_flag)
+        if (g_idecomm.events & CORE1_EVT_HWRST)
         {
             // Reset still continues, report when it ends
             return IDE_EVENT_NONE;
@@ -124,7 +128,7 @@ ide_event_t ide_phy_get_events()
             return IDE_EVENT_HWRST;
         }
     }
-    else if (g_idecomm.swrst_flag)
+    else if (flags & CORE1_EVT_SWRST)
     {
         if (g_idecomm.phyregs.regs.device_control & IDE_DEVCTRL_SRST)
         {
@@ -134,7 +138,6 @@ ide_event_t ide_phy_get_events()
         else
         {
             // Software reset done
-            g_idecomm.swrst_flag = 0;
             return IDE_EVENT_SWRST;
         }
     }
@@ -144,7 +147,7 @@ ide_event_t ide_phy_get_events()
 
 bool ide_phy_is_command_interrupted()
 {
-    return false;
+    return (g_idecomm.events & (CORE1_EVT_CMD_RECEIVED | CORE1_EVT_HWRST | CORE1_EVT_SWRST));
 }
 
 void ide_phy_get_regs(ide_registers_t *regs)
@@ -155,15 +158,14 @@ void ide_phy_get_regs(ide_registers_t *regs)
 
 void ide_phy_set_regs(const ide_registers_t *regs)
 {
-    phy_ide_registers_t phyregs = g_idecomm.phyregs;
-    phyregs.regs = *regs;
-    g_idecomm.phyregs = phyregs;
+    g_idecomm.phyregs.regs = *regs;
     __sync_synchronize();
-    sio_hw->doorbell_out_set = EVT_IN_SET_REGS;
-    dbgmsg("SET_REGS, status ", regs->status, " error ", regs->error, " lba_high ", regs->lba_high, " data_in ", (int)phyregs.state_datain);
+
+    ide_phy_post_request(CORE1_REQ_SET_REGS);
+    dbgmsg("SET_REGS, status ", regs->status, " error ", regs->error, " lba_high ", regs->lba_high, " data_in ", (int)g_idecomm.phyregs.state_datain);
 
     delay(2);
-    phyregs = g_idecomm.phyregs;
+    phy_ide_registers_t phyregs = g_idecomm.phyregs;
     dbgmsg("READBACK status ", phyregs.regs.status, " error ", phyregs.regs.error, " lba_high ", phyregs.regs.lba_high, " data_in ", (int)phyregs.state_datain);
 }
 
@@ -204,20 +206,18 @@ void ide_phy_write_block(const uint8_t *buf, uint32_t blocklen)
     // Give the transmit pointer to core 1
     sio_hw->fifo_wr = (uint32_t)block;
 
-    if (!g_idecomm.phyregs.state_datain)
-    {
-        // Wake up core 1
-        // FIXME: Possible race condition if core1 unsets state_datain after we check it
-        phy_ide_registers_t phyregs = g_idecomm.phyregs;
-        phyregs.state_datain = 1;
-        g_idecomm.phyregs = phyregs;
-        sio_hw->doorbell_out_set = EVT_IN_SET_REGS;
-    }
+    ide_phy_post_request(CORE1_REQ_START_DATAIN);
 }
 
 bool ide_phy_is_write_finished()
 {
-    return !g_idecomm.phyregs.state_datain;
+    if (g_idecomm.phyregs.state_datain)
+        return false; // Still in progress
+
+    if (g_idecomm.requests & CORE1_REQ_START_DATAIN)
+        return false; // Not even started yet
+
+    return true;
 }
 
 static void data_out_give_next_block()
@@ -231,15 +231,7 @@ static void data_out_give_next_block()
     assert(sio_hw->fifo_st & SIO_FIFO_ST_RDY_BITS);
     sio_hw->fifo_wr = (uint32_t)block;
 
-    if (!g_idecomm.phyregs.state_dataout)
-    {
-        // Wake core1 up
-        // FIXME: Possible race condition if core1 unsets state_dataout after we check it
-        phy_ide_registers_t phyregs = g_idecomm.phyregs;
-        phyregs.state_dataout = 1;
-        g_idecomm.phyregs = phyregs;
-        sio_hw->doorbell_out_set = EVT_IN_SET_REGS;
-    }
+    ide_phy_post_request(CORE1_REQ_START_DATAOUT);
 }
 
 void ide_phy_start_read(uint32_t blocklen, int udma_mode)
@@ -290,11 +282,7 @@ void ide_phy_ata_read_block(uint8_t *buf, uint32_t blocklen, bool continue_trans
 
 void ide_phy_stop_transfers(int *crc_errors)
 {
-    phy_ide_registers_t phyregs = g_idecomm.phyregs;
-    phyregs.state_datain = 0;
-    phyregs.state_dataout = 0;
-    g_idecomm.phyregs = phyregs;
-    sio_hw->doorbell_out_set = EVT_IN_SET_REGS;
+    ide_phy_post_request(CORE1_REQ_STOP_TRANSFERS);
     g_idecomm.datablocksize = 0;
 
     // Drain FIFO
@@ -306,12 +294,9 @@ void ide_phy_stop_transfers(int *crc_errors)
 
 void ide_phy_assert_irq(uint8_t ide_status)
 {
-    phy_ide_registers_t phyregs = g_idecomm.phyregs;
-    phyregs.regs.status = ide_status;
-    phyregs.state_irqreq = 1;
-    g_idecomm.phyregs = phyregs;
-    sio_hw->doorbell_out_set = EVT_IN_SET_REGS;
-    dbgmsg("ASSERT_IRQ, status ", phyregs.regs.status);
+    g_idecomm.phyregs.regs.status = ide_status;
+    ide_phy_post_request(CORE1_REQ_ASSERT_IRQ);
+    dbgmsg("ASSERT_IRQ, status ", ide_status);
 }
 
 void ide_phy_set_signals(uint8_t signals)
