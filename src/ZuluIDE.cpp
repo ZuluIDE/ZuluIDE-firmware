@@ -74,6 +74,13 @@ void load_image(const zuluide::images::Image& toLoad, bool insert = true);
 
 static zuluide::ObserverTransfer<zuluide::status::SystemStatus> uiSafeStatusUpdater;
 
+enum sniffer_mode_t {
+  SNIFFER_OFF = 0,
+  SNIFFER_ACTIVE = 1,
+  SNIFFER_PASSIVE = 2
+};
+static sniffer_mode_t g_sniffer_mode;
+
 #ifndef SD_SPEED_CLASS_WARN_BELOW
 #define SD_SPEED_CLASS_WARN_BELOW 10
 #endif
@@ -549,6 +556,27 @@ void zuluide_init(void)
   platform_late_init();
   zuluide_setup_sd_card();
   g_log_debug = ini_getbool("IDE", "debug", g_log_debug, CONFIGFILE);
+  g_sniffer_mode = (sniffer_mode_t)ini_getl("IDE", "sniffer", 0, CONFIGFILE);
+
+  if (g_sniffer_mode != SNIFFER_OFF)
+  {
+#ifdef PLATFORM_HAS_SNIFFER
+    SD.remove("sniff.dat");
+    if (platform_enable_sniffer("sniff.dat", g_sniffer_mode == SNIFFER_PASSIVE))
+    {
+      logmsg("-- Storing IDE bus traffic to sniff.dat");
+      if (g_sniffer_mode == SNIFFER_PASSIVE) logmsg("-- Normal IDE bus operation is disabled by passive sniffer mode");
+    }
+    else
+    {
+      logmsg("-- Failed to initialize IDE bus sniffer");
+      g_sniffer_mode = SNIFFER_OFF;
+    }
+#else
+    logmsg("-- This platform does not support IDE bus sniffer");
+    g_sniffer_mode = SNIFFER_OFF;
+#endif
+  }
 
 #ifdef PLATFORM_MASS_STORAGE
   static bool check_mass_storage = true;
@@ -612,7 +640,10 @@ void zuluide_main_loop(void)
 
     save_logfile();
 
-    ide_protocol_poll();
+    if (g_sniffer_mode != SNIFFER_PASSIVE)
+    {
+      ide_protocol_poll();
+    }
 
     if (g_sdcard_present)
     {

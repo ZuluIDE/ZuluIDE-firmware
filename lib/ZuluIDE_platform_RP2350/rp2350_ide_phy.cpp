@@ -33,6 +33,7 @@
 #include <assert.h>
 #include "ide_constants.h"
 #include "ide_phy.h"
+#include "rp2350_sniffer.h"
 
 #include <zuluide_rp2350b_core1.h>
 #ifndef ZULUIDE_RP2350B_CORE1_HAVE_SOURCE
@@ -71,6 +72,8 @@ static void ide_phy_post_request(uint32_t request)
 
 void ide_phy_reset(const ide_phy_config_t* config)
 {
+    if (g_rp2350_passive_sniffer) return;
+
     // Only initialize registers once after boot, after that ide_protocol handles it.
     static bool regs_inited = false;
     phy_ide_registers_t phyregs = g_idecomm.phyregs;

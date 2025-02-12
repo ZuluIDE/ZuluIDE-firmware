@@ -160,3 +160,8 @@ class SdioConfig;
 extern SdioConfig g_sd_sdio_config;
 #define SD_CONFIG g_sd_sdio_config
 #define SD_CONFIG_CRASH g_sd_sdio_config
+
+
+// Logic sniffer for IDE bus communication
+#define PLATFORM_HAS_SNIFFER
+bool platform_enable_sniffer(const char *filename, bool passive);

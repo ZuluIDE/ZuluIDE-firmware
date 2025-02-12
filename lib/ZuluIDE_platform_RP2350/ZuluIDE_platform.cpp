@@ -42,6 +42,8 @@
 #include <Wire.h>
 // #include <Adafruit_SSD1306.h>
 #include "ZuluIDE_platform_gpio.h"
+#include "rp2350_sniffer.h"
+#include <zuluide_rp2350b_core1.h>
 // #include "display/display_ssd1306.h"
 // #include "rotary_control.h"
 // #include <zuluide/i2c/i2c_server.h>
@@ -63,6 +65,7 @@ static bool g_dip_drive_id, g_dip_cable_sel, g_cable_sel_state;
 static uint64_t g_flash_unique_id;
 static mutex_t logMutex;
 static uint8_t g_eject_buttons = 0;
+static bool g_sniffer_enabled;
 
 //void mbed_error_hook(const mbed_error_ctx * error_context);
 
@@ -696,6 +699,11 @@ void platform_poll()
 #ifdef ENABLE_AUDIO_OUTPUT
     audio_poll();
 #endif // ENABLE_AUDIO_OUTPUT
+
+    if (g_sniffer_enabled)
+    {
+        rp2350_sniffer_poll();
+    }
 }
 
 /*****************************************/
@@ -809,4 +817,47 @@ mutex_t* platform_get_log_mutex() {
 }
 
 void processStatusUpdate(const zuluide::status::SystemStatus &currentStatus) {
+}
+
+/********************************/
+/* Logic sniffer functionality  */
+/********************************/
+
+bool platform_enable_sniffer(const char *filename, bool passive)
+{
+    if (passive)
+    {
+        // Stop IDE phy and configure pins for passive input
+        multicore_reset_core1();
+        pio_set_sm_mask_enabled(IDE_PIO, 0xF, false);
+
+        // Configure IDE bus for input mode
+        // Data buffer is enabled in input mode.
+        // Control buffer is disabled.
+        for (int i = 0; i < 16; i++)
+        {
+            gpio_conf(IDE_D0 + i, GPIO_FUNC_SIO, false, false, false, false, true);
+        }
+
+        //        pin             function       pup   pdown  out    state fast
+        gpio_conf(IDE_RST,        GPIO_FUNC_SIO, false, false, false, false, true); // Input
+        gpio_conf(IDE_DIOW,       GPIO_FUNC_SIO, false, false, false, false, true);
+        gpio_conf(IDE_DIOR,       GPIO_FUNC_SIO, false, false, false, false, true);
+        gpio_conf(IDE_DA0,        GPIO_FUNC_SIO, false, false, false, false, true);
+        gpio_conf(IDE_DA1,        GPIO_FUNC_SIO, false, false, false, false, true);
+        gpio_conf(IDE_DA2,        GPIO_FUNC_SIO, false, false, false, false, true);
+        gpio_conf(IDE_CS0,        GPIO_FUNC_SIO, false, false, false, false, true);
+        gpio_conf(IDE_CS1,        GPIO_FUNC_SIO, false, false, false, false, true);
+        gpio_conf(IDE_DMACK,      GPIO_FUNC_SIO, false, false, false, false, true);
+        gpio_conf(CTRL_LOAD,      GPIO_FUNC_SIO, false, false, true, false, true); // Don't load ctrl mux
+        gpio_conf(CTRL_nEN,       GPIO_FUNC_SIO, false, false, true, true, true);  // Disable ctrl mux
+        gpio_conf(CTRL_IN_SEL,    GPIO_FUNC_SIO, false, false, true, true, true);  // Disable ctrl in mux
+        gpio_conf(IDE_IORDY_EN,   GPIO_FUNC_SIO, false, false, true, true, true);  // Disable IORDY out
+        gpio_conf(IDE_IOCS16,     GPIO_FUNC_SIO, false, false, true, true, true);  // Disable IOCS16 out
+        gpio_conf(IDE_DATADIR,    GPIO_FUNC_SIO, false, false, true, false, true); // Data input
+        gpio_conf(IDE_DATASEL,    GPIO_FUNC_SIO, false, false, true, false, true); // Enable data buffer
+    }
+
+    g_sniffer_enabled = true;
+    return rp2350_sniffer_init(filename, passive);
 }
