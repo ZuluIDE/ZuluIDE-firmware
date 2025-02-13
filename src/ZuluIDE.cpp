@@ -518,44 +518,15 @@ void load_image(const zuluide::images::Image& toLoad, bool insert)
   blinkStatus(BLINK_STATUS_OK);
 }
 
-static void zuluide_setup_sd_card()
+
+static void zuluide_reload_config()
 {
-    g_sdcard_present = mountSDCard();
-    if(!g_sdcard_present)
-    {
-        g_StatusController.SetIsCardPresent(false);
-        blinkStatus(BLINK_ERROR_NO_SD_CARD);
-    }
-    else
-    {
-        g_StatusController.SetIsCardPresent(true);
-        if (SD.clusterCount() == 0)
-        {
-            logmsg("SD card without filesystem!");
-        }
+  if (ini_haskey("IDE", "debug", CONFIGFILE))
+  {
+    g_log_debug = ini_getbool("IDE", "debug", g_log_debug, CONFIGFILE);
+    logmsg("-- Debug log setting overridden in " CONFIGFILE ", debug = ", (int)g_log_debug);
+  }
 
-        print_sd_info();
-
-        if (g_sdcard_present)
-        {
-            init_logfile();
-
-            if (ini_getbool("IDE", "DisableStatusLED", false, CONFIGFILE))
-            {
-                platform_disable_led();
-            }
-            uint8_t eject_button = ini_getl("IDE", "eject_button", 1, CONFIGFILE);
-            platform_init_eject_button(eject_button);
-        }
-    }
-}
-
-void zuluide_init(void)
-{
-  platform_init();
-  platform_late_init();
-  zuluide_setup_sd_card();
-  g_log_debug = ini_getbool("IDE", "debug", g_log_debug, CONFIGFILE);
   g_sniffer_mode = (sniffer_mode_t)ini_getl("IDE", "sniffer", 0, CONFIGFILE);
 
   if (g_sniffer_mode != SNIFFER_OFF)
@@ -577,6 +548,48 @@ void zuluide_init(void)
     g_sniffer_mode = SNIFFER_OFF;
 #endif
   }
+
+  if (ini_getbool("IDE", "DisableStatusLED", false, CONFIGFILE))
+  {
+      platform_disable_led();
+  }
+
+  uint8_t eject_button = ini_getl("IDE", "eject_button", 1, CONFIGFILE);
+  platform_init_eject_button(eject_button);
+}
+
+static void zuluide_setup_sd_card()
+{
+    g_sdcard_present = mountSDCard();
+    if(!g_sdcard_present)
+    {
+        g_StatusController.SetIsCardPresent(false);
+        blinkStatus(BLINK_ERROR_NO_SD_CARD);
+    }
+    else
+    {
+        g_StatusController.SetIsCardPresent(true);
+        if (SD.clusterCount() == 0)
+        {
+            logmsg("SD card without filesystem!");
+        }
+
+        print_sd_info();
+
+        if (g_sdcard_present)
+        {
+            init_logfile();
+        }
+    }
+}
+
+
+void zuluide_init(void)
+{
+  platform_init();
+  platform_late_init();
+  zuluide_setup_sd_card();
+  zuluide_reload_config();
 
 #ifdef PLATFORM_MASS_STORAGE
   static bool check_mass_storage = true;
@@ -678,6 +691,7 @@ void zuluide_main_loop(void)
             print_sd_info();
 
             init_logfile();
+            zuluide_reload_config();
 
             g_StatusController.SetIsCardPresent(true);
             loadFirstImage();
