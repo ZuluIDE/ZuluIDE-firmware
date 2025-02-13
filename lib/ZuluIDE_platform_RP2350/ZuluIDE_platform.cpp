@@ -368,6 +368,7 @@ void show_hardfault(uint32_t *sp)
     logmsg("CRASH!");
     logmsg("Platform: ", g_platform_name);
     logmsg("FW Version: ", g_log_firmwareversion);
+    logmsg("CFSR: ", (uint32_t)scb_hw->cfsr);
     logmsg("SP: ", (uint32_t)sp);
     logmsg("PC: ", pc);
     logmsg("LR: ", lr);
@@ -378,7 +379,7 @@ void show_hardfault(uint32_t *sp)
 
     uint32_t *p = (uint32_t*)((uint32_t)sp & ~3);
 
-    for (int i = 0; i < 8; i++)
+    for (int i = 0; i < 16; i++)
     {
         if (p == &__StackTop) break; // End of stack
 
