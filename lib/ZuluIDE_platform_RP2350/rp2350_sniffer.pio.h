@@ -34,7 +34,7 @@ static const uint16_t rp2350_sniffer_program_instructions[] = {
     0x0048, // 12: jmp    x--, 8
             //     .wrap_target
     0xa0eb, // 13: mov    osr, !null
-    0x606d, // 14: out    null, 13
+    0x6066, // 14: out    null, 6
     0xa027, // 15: mov    x, osr
     0xa0e1, // 16: mov    osr, x
     0xa020, // 17: mov    x, pins

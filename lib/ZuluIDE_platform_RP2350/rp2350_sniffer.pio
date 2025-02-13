@@ -36,15 +36,15 @@
  * If D != 31, then P is the new state of the 27 IO pins.
  * Clock cycles since previous sample is 5 * (31 - D)
  *
- * If D == 31 and P != 0x07FFFFFF, then P is a long time delta.
- * Pin states have not changed and clock cycles is 5 * (0x0007FFFF - P + 3)
+ * If D == 31 and P <= 0x03FFFFFF, then P is a long time delta.
+ * Pin states have not changed and clock cycles is 5 * (0x03FFFFFF - P + 3)
+ *
+ * If D == 31 and 0x03FFFFFF < P <= 0x07FFFFFE, this is invalid value.
+ * It should be ignored by decoder.
  *
  * If D == 31 and P == 0x07FFFFFF (whole word is all ones), then maximum time delta
- * has passed. Clock cycles is 5 * (0x0007FFFF + 3) (approx 4.4 seconds @ 150 MHz)
+ * has passed. Clock cycles is 5 * (0x03FFFFFF + 3) (approx 2.2 seconds @ 150 MHz)
  *
- * Note that the limit 0x0007FFFF (17 ms) for long timestamp is chosen so that a
- * 512 byte SD card block fills up in approx 2 seconds. This ensures that last
- * changes get flushed to file even when bus is idle.
  */
 
 .program rp2350_sniffer
@@ -77,7 +77,7 @@ loop:
     .wrap_target
 long_gap:
     mov osr, ~null   ; Set OSR to all ones
-    out null, 13     ; Modify OSR to 0x0007FFFF
+    out null, 6      ; Modify OSR to 0x03FFFFFF
     mov x, osr       ; Load the new time delta counter to x
 
 loop_lg:

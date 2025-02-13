@@ -88,6 +88,7 @@ class SniffDecoder:
     def reset(self):
         '''Initialize state at start of a file'''
         self.timestamp = 0
+        self.last_vcd_timestamp = 0
         self.pin_states = 0
 
     def decode(self, data: bytes):
@@ -99,15 +100,16 @@ class SniffDecoder:
         for word, in struct.iter_unpack("<I", data):
             d = word >> 27
             p = word & 0x07FFFFFF
+            max_timedelta = 0x03FFFFFF
 
             if d != 31:
                 self.timestamp += 5 * (31 - d)
                 self.pin_states = p
                 result.append((self.timestamp, self.pin_states))
-            elif p < 0x0007FFFF:
-                self.timestamp += 5 * (0x0007FFFF - p + 3)
-            else:
-                self.timestamp += 5 * (0x0007FFFF + 3)
+            elif p <= max_timedelta:
+                self.timestamp += 5 * (max_timedelta - p + 3)
+            elif word == 0xFFFFFFFF:
+                self.timestamp += 5 * (max_timedelta + 3)
 
         if result and self.timestamp != result[-1][0]:
             # Store the last timestamp in the capture block
@@ -127,6 +129,7 @@ class SniffDecoder:
                     bitstring = bitstring.zfill(bitcount)[-bitcount:]
                     line += " b%s %s" % (bitstring, symbol)
             result.append(line)
+            self.last_vcd_timestamp = (timestamp // self.divider)
         return result
 
     def format_vcd_header(self):
@@ -183,4 +186,9 @@ if __name__ == '__main__':
         sys.stdout.write("Progress: %d/%d transitions (%d %%)\r" % (tcount, total_trans, 100 * tcount // total_trans))
         sys.stdout.flush()
 
-    print("Done, total %d transitions                                " % tcount)
+    print("Done, total %d transitions, length %0.1f s,                        " %
+          (tcount, decoder.last_vcd_timestamp * decoder.divider / decoder.cpu_freq))
+
+    if decoder.last_vcd_timestamp > 1e9:
+        print("WARNING: Result file has a large time range, PulseView may take a lot of memory when loading")
+        print("         Consider using 'Compress idle periods' in PulseView VCD Import")
