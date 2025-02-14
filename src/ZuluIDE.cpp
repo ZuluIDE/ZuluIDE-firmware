@@ -658,6 +658,13 @@ void zuluide_main_loop(void)
       ide_protocol_poll();
     }
 
+#ifdef PLATFORM_HAS_SNIFFER
+    if (g_sniffer_mode != SNIFFER_OFF)
+    {
+      platform_sniffer_poll();
+    }
+#endif
+
     if (g_sdcard_present)
     {
         // Check SD card status for hotplug

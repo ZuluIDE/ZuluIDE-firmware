@@ -700,11 +700,6 @@ void platform_poll()
 #ifdef ENABLE_AUDIO_OUTPUT
     audio_poll();
 #endif // ENABLE_AUDIO_OUTPUT
-
-    if (g_sniffer_enabled)
-    {
-        rp2350_sniffer_poll();
-    }
 }
 
 /*****************************************/
@@ -861,4 +856,9 @@ bool platform_enable_sniffer(const char *filename, bool passive)
 
     g_sniffer_enabled = true;
     return rp2350_sniffer_init(filename, passive);
+}
+
+void platform_sniffer_poll()
+{
+    rp2350_sniffer_poll();
 }

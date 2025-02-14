@@ -163,5 +163,8 @@ extern SdioConfig g_sd_sdio_config;
 
 
 // Logic sniffer for IDE bus communication
-#define PLATFORM_HAS_SNIFFER
+#define PLATFORM_HAS_SNIFFER 1
 bool platform_enable_sniffer(const char *filename, bool passive);
+
+// This should only be called when SDIO card is not being accessed by other code.
+void platform_sniffer_poll();
