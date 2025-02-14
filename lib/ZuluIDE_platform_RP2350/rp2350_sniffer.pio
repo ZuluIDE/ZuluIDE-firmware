@@ -39,8 +39,8 @@
  * If D == 31 and P <= 0x03FFFFFF, then P is a long time delta.
  * Pin states have not changed and clock cycles is 5 * (0x03FFFFFF - P + 3)
  *
- * If D == 31 and 0x03FFFFFF < P <= 0x07FFFFFE, this is invalid value.
- * It should be ignored by decoder.
+ * If D == 31 and 0x03FFFFFF < P <= 0x07FFFFFE, these are used for system timestamp
+ * reporting by CPU.
  *
  * If D == 31 and P == 0x07FFFFFF (whole word is all ones), then maximum time delta
  * has passed. Clock cycles is 5 * (0x03FFFFFF + 3) (approx 2.2 seconds @ 150 MHz)

@@ -88,12 +88,18 @@ class SniffDecoder:
     def reset(self):
         '''Initialize state at start of a file'''
         self.timestamp = 0
+        self.systime = 0
+        self.systime_ref = 0
         self.last_vcd_timestamp = 0
         self.pin_states = 0
 
+    def get_systime(self):
+        '''Interpolate system time from sample timestamps.'''
+        return self.systime + int((self.timestamp - self.systime_ref) * 1000 // self.cpu_freq)
+
     def decode(self, data: bytes):
         '''Decode binary data and return a list of tuples:
-        [(timedelta, pin_states), ...]
+        [(timedelta, pin_states, systime), ...]
         '''
 
         result = []
@@ -105,22 +111,24 @@ class SniffDecoder:
             if d != 31:
                 self.timestamp += 5 * (31 - d)
                 self.pin_states = p
-                result.append((self.timestamp, self.pin_states))
             elif p <= max_timedelta:
                 self.timestamp += 5 * (max_timedelta - p + 3)
+            elif (word >> 24) == 0xFC:
+                # System millisecond timestamp for correlating with logs
+                self.systime = word & 0xFFFFFF
+                self.systime_ref = self.timestamp
             elif word == 0xFFFFFFFF:
                 self.timestamp += 5 * (max_timedelta + 3)
 
-        if result and self.timestamp != result[-1][0]:
-            # Store the last timestamp in the capture block
-            result.append((self.timestamp, self.pin_states))
+            result.append((self.timestamp, self.pin_states, self.get_systime()))
+
         return result
 
     def format_vcd(self, transitions):
         '''Format tuple of changes into VCD format'''
         result = []
-        for timestamp, pin_states in transitions:
-            line = '#%d' % (timestamp // self.divider)
+        for timestamp, pin_states, systime in transitions:
+            line = '#%d r%0.3f T' % (timestamp // self.divider, systime / 1000.0)
             for bit, bitcount, name, symbol in self.pinmap:
                 if bitcount == 1:
                     line += " %d%s" % ((pin_states >> bit) & 1, symbol)
@@ -143,6 +151,7 @@ class SniffDecoder:
         for bit, bitcount, name, symbol in self.pinmap:
             result.append('$var wire %d %s %s $end' % (bitcount, symbol, name))
 
+        result.append('$var real 24 T systime $end')
         result.append('$upscope $end')
         result.append('$enddefinitions $end')
         return result

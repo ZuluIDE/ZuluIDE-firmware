@@ -208,12 +208,13 @@ static void sniffer_sd_callback(uint32_t bytes_complete)
 
             // There was dropped data.
             // Encode a "glitch" that will visually indicate lost data
-            static const uint32_t glitch[5] = {
+            const uint32_t glitch[6] = {
                 0xF0000000, // All signals low, 1 cycle
                 0xFBFF8ACF, // 1 ms pause
                 0xF7FFFFFF, // All signals high, 1 cycle
                 0xF0000000, // All signals low, 1 cycle
                 0xFBFF8ACF, // 1 ms pause
+                0xFC000000 | (millis() & 0xFFFFFF), // Timestamp
             };
 
             memcpy(blockptr, glitch, sizeof(glitch));
