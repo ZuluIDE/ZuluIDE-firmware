@@ -285,6 +285,7 @@ void platform_late_init()
 #ifdef ENABLE_AUDIO_OUTPUT
     // one-time control setup for DMA channels and second core
     audio_init();
+    audio_set_max_volume((uint8_t) ini_getl("IDE", "max_volume", 100, CONFIGFILE));
 #endif
     platform_check_for_controller();
     __USBStart();
