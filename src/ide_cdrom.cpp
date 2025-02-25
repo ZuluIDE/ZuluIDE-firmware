@@ -910,9 +910,8 @@ bool IDECDROMDevice::atapi_pause_resume_audio(const uint8_t *cmd)
 bool IDECDROMDevice::atapi_seek_10(const uint8_t *cmd)
 {
     uint32_t lba = parse_be32(&cmd[2]);
-    dbgmsg("---- Seek 10 - LBA: ", lba, " - seek not implemented - Win95 uses to pause audio ");
 #ifdef ENABLE_AUDIO_OUTPUT
-    doStopAudio();
+    doPlayAudio(lba, 0);
 #endif
     return atapi_cmd_ok();
 }

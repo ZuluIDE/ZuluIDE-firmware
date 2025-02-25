@@ -432,6 +432,15 @@ void audio_poll() {
         }
     }
 
+    if (audio_file.position() != fpos) {
+        // should be uncommon due to SCSI command restrictions on devices
+        // playing audio; if this is showing up in logs a different approach
+        // will be needed to avoid seek performance issues on FAT32 vols
+        dbgmsg("------ Audio seek required");
+        if (!audio_file.seek(fpos)) {
+            logmsg("------ Audio error, unable to seek to ", fpos);
+        }
+    }
 
     // are new audio samples needed from the memory card?
     uint8_t* audiobuf;
@@ -468,15 +477,7 @@ void audio_poll() {
     else
     {
         if (fleft < toRead) toRead = fleft;
-        if (audio_file.position() != fpos) {
-            // should be uncommon due to SCSI command restrictions on devices
-            // playing audio; if this is showing up in logs a different approach
-            // will be needed to avoid seek performance issues on FAT32 vols
-            dbgmsg("------ Audio seek required");
-            if (!audio_file.seek(fpos)) {
-                logmsg("------ Audio error, unable to seek to ", fpos);
-            }
-        }
+
         if (audio_file.read(audiobuf, toRead) != toRead) {
             logmsg("------ Audio sample data read error");
         }
@@ -505,14 +506,6 @@ bool audio_play(uint32_t start, uint32_t length, bool swap) {
 
     // verify audio file is present and inputs are (somewhat) sane
     platform_set_sd_callback(NULL, NULL);
-
-    // truncate playback end to end of file
-    // we will not consider this to be an error at the moment
-    // \todo reimplement
-    // if (end > len) {
-    //     dbgmsg("------ Truncate audio play request end ", end, " to file size ", len);
-    //     end = len;
-    //
 
     if(!setup_playback(start, length, false))
         return false;
@@ -643,9 +636,14 @@ void audio_set_channel(uint16_t chn) {
 
 uint32_t audio_get_lba_position()
 {
-    if (audio_is_active() && current_track.track_number != 0 && audio_file.isOpen())
+    if (current_track.track_number != 0 && audio_file.isOpen())
     {
-        return current_track.data_start + (audio_file.position() - current_track.file_offset) / current_track.sector_length;
+        // We need the file position from the start of the track,
+        // current_track.file_offset equivalent to data_start (index 1 in cue file)
+        // index0_offset is the adjustment to current_track.file_offset
+        // to make it equivalent to current_track.track_start (index 0 in cue file)
+        uint64_t index0_offset = (current_track.data_start -  current_track.track_start) * current_track.sector_length;
+        return current_track.track_start + (audio_file.position() - (current_track.file_offset - index0_offset)) / current_track.sector_length;
     }
     else
     {
