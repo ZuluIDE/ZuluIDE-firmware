@@ -815,7 +815,7 @@ bool IDECDROMDevice::atapi_start_stop_unit(const uint8_t *cmd)
 bool IDECDROMDevice::atapi_play_audio_10(const uint8_t *cmd)
 {
     uint32_t lba = parse_be32(&cmd[2]);
-    uint32_t blocks = parse_be32(&cmd[6]);
+    uint16_t blocks = parse_be16(&cmd[7]);
 
     return doPlayAudio(lba, blocks);
 }
@@ -823,7 +823,7 @@ bool IDECDROMDevice::atapi_play_audio_10(const uint8_t *cmd)
 bool IDECDROMDevice::atapi_play_audio_12(const uint8_t *cmd)
 {
     uint32_t lba = parse_be32(&cmd[2]);
-    uint16_t blocks = parse_be16(&cmd[7]);
+    uint32_t blocks = parse_be32(&cmd[6]);
 
     return doPlayAudio(lba, blocks);
 
