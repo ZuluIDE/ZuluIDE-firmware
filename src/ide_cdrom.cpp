@@ -211,6 +211,8 @@ static int32_t MSF2LBA(uint8_t m, uint8_t s, uint8_t f, bool relative)
     return lba;
 }
 
+static void doStopAudio();
+
 // Format track info read from cue sheet into the format used by ReadTOC command.
 // Refer to T10/1545-D MMC-4 Revision 5a, "Response Format 0000b: Formatted TOC"
 static void formatTrackInfo(const CUETrackInfo *track, uint8_t *dest, bool use_MSF_time)
@@ -445,10 +447,7 @@ bool IDECDROMDevice::atapi_cmd_not_ready_error()
 
 bool IDECDROMDevice::atapi_set_cd_speed(const uint8_t *cmd)
 {
-#if ENABLE_AUDIO_OUTPUT
-    // terminate audio playback if active on this target (Annex C)
-    audio_stop();
-#endif
+    doStopAudio();
     uint16_t read_speed = parse_be16(&cmd[2]);
     uint16_t write_speed = parse_be16(&cmd[4]);
     dbgmsg("-- Host requested read_speed=", (int)read_speed, ", write_speed=", (int)write_speed);
@@ -457,10 +456,7 @@ bool IDECDROMDevice::atapi_set_cd_speed(const uint8_t *cmd)
 
 bool IDECDROMDevice::atapi_read_disc_information(const uint8_t *cmd)
 {
-#if ENABLE_AUDIO_OUTPUT
-    // terminate audio playback if active on this target (Annex C)
-    audio_stop();
-#endif
+    doStopAudio();
 
     if (!is_medium_present()) return atapi_cmd_not_ready_error();
     if (m_atapi_state.not_ready) return atapi_cmd_error(ATAPI_SENSE_NOT_READY, ATAPI_ASC_UNIT_BECOMING_READY);
@@ -490,10 +486,7 @@ bool IDECDROMDevice::atapi_read_disc_information(const uint8_t *cmd)
 
 bool IDECDROMDevice::atapi_read_track_information(const uint8_t *cmd)
 {
-#if ENABLE_AUDIO_OUTPUT
-    // terminate audio playback if active on this target (Annex C)
-    audio_stop();
-#endif
+    doStopAudio();
 
     if (!is_medium_present()) return atapi_cmd_not_ready_error();
     if (m_atapi_state.not_ready) return atapi_cmd_error(ATAPI_SENSE_NOT_READY, ATAPI_ASC_UNIT_BECOMING_READY);
@@ -634,10 +627,7 @@ bool IDECDROMDevice::atapi_read_toc(const uint8_t *cmd)
 // Given 2048-byte block sizes this effectively is 1:1 with the provided LBA.
 bool IDECDROMDevice::atapi_read_header(const uint8_t *cmd)
 {
-#if ENABLE_AUDIO_OUTPUT
-    // terminate audio playback if active on this target (Annex C)
-    audio_stop();
-#endif
+    doStopAudio();
 
     if (!is_medium_present()) return atapi_cmd_not_ready_error();
     if (m_atapi_state.not_ready) return atapi_cmd_error(ATAPI_SENSE_NOT_READY, ATAPI_ASC_UNIT_BECOMING_READY);
@@ -674,10 +664,7 @@ bool IDECDROMDevice::atapi_read_header(const uint8_t *cmd)
 
 bool IDECDROMDevice::atapi_read_cd(const uint8_t *cmd)
 {
-#if ENABLE_AUDIO_OUTPUT
-    // terminate audio playback if active on this target (Annex C)
-    audio_stop();
-#endif
+    doStopAudio();
     if (!is_medium_present()) return atapi_cmd_not_ready_error();
     if (m_atapi_state.not_ready) return atapi_cmd_error(ATAPI_SENSE_NOT_READY, ATAPI_ASC_UNIT_BECOMING_READY);
 
@@ -692,10 +679,7 @@ bool IDECDROMDevice::atapi_read_cd(const uint8_t *cmd)
 
 bool IDECDROMDevice::atapi_read_cd_msf(const uint8_t *cmd)
 {
-#if ENABLE_AUDIO_OUTPUT
-    // terminate audio playback if active on this target (Annex C)
-    audio_stop();
-#endif
+    doStopAudio();
     if (!is_medium_present()) return atapi_cmd_not_ready_error();
     if (m_atapi_state.not_ready) return atapi_cmd_error(ATAPI_SENSE_NOT_READY, ATAPI_ASC_UNIT_BECOMING_READY);
 
@@ -759,10 +743,10 @@ bool IDECDROMDevice::atapi_get_event_status_notification(const uint8_t *cmd)
                 buf[5] = 0x02; // Media Present
                 buf[6] = 0; // Start slot
                 buf[7] = 0; // End slot
-#if ENABLE_AUDIO_OUTPUT
-                audio_stop();
-#endif
-                 esn_next_event();
+
+                doStopAudio();
+
+                esn_next_event();
             }
             else if (m_esn.current_event == esn_event_t::MMediaRemoval)
             {
@@ -775,9 +759,8 @@ bool IDECDROMDevice::atapi_get_event_status_notification(const uint8_t *cmd)
                 buf[5] = 0x02; // Media Present
                 buf[6] = 0; // Start slot
                 buf[7] = 0; // End slot
-                #if ENABLE_AUDIO_OUTPUT
-                  audio_stop();
-                #endif
+
+                doStopAudio();
                 esn_next_event();
             }
         }
@@ -824,7 +807,7 @@ bool IDECDROMDevice::atapi_start_stop_unit(const uint8_t *cmd)
 {
     if ((cmd[ATAPI_START_STOP_EJT_OFFSET] & ATAPI_START_STOP_START) == 0)
     {
-        audio_stop();
+        doStopAudio();
     }
     return IDEATAPIDevice::atapi_start_stop_unit(cmd);
 }
@@ -874,6 +857,7 @@ bool IDECDROMDevice::atapi_play_audio_msf(const uint8_t *cmd)
 
 static void doStopAudio()
 {
+    // terminate audio playback if active on this target (Annex C)
     dbgmsg("------ CD-ROM Stop Audio request");
 #ifdef ENABLE_AUDIO_OUTPUT
     audio_stop();
@@ -1164,6 +1148,7 @@ bool IDECDROMDevice::doReadSubChannel(bool time, bool subq, uint8_t parameter, u
 
 bool IDECDROMDevice::doRead(uint32_t lba, uint32_t transfer_len)
 {
+    doStopAudio();
     // Override IDEATAPIDevice::doRead() in case the CD image uses different sector length
     return doReadCD(lba, transfer_len, 0, 0x10, 0, true);
 }
@@ -1570,9 +1555,7 @@ uint64_t IDECDROMDevice::capacity_lba()
 
 void IDECDROMDevice::eject_media()
 {
-#if ENABLE_AUDIO_OUTPUT
-    audio_stop();
-#endif
+    doStopAudio();
     if (m_image)
     {
         char filename[MAX_FILE_PATH+1];
@@ -1599,9 +1582,7 @@ void IDECDROMDevice::button_eject_media()
 
 void IDECDROMDevice::insert_media(IDEImage *image)
 {
-#if ENABLE_AUDIO_OUTPUT
-    audio_stop();
-#endif
+    doStopAudio();
     zuluide::images::ImageIterator img_iterator;
     char filename[MAX_FILE_PATH+1];
 
@@ -1631,9 +1612,7 @@ void IDECDROMDevice::insert_media(IDEImage *image)
 
 void IDECDROMDevice::insert_next_media(IDEImage *image)
 {
-#if ENABLE_AUDIO_OUTPUT
-    audio_stop();
-#endif
+    doStopAudio();
     zuluide::images::ImageIterator img_iterator;
     char filename[MAX_FILE_PATH+1];
     if (m_devinfo.removable && m_removable.ejected)
@@ -1972,7 +1951,7 @@ bool IDECDROMDevice::doPlayAudio(uint32_t lba, uint32_t length)
     // Per Annex C terminate playback immediately if already in progress on
     // the current target. Non-current targets may also get their audio
     // interrupted later due to hardware limitations
-    audio_stop();
+    doStopAudio();
 
 
     // if actual playback is requested perform steps to verify prior to playback
