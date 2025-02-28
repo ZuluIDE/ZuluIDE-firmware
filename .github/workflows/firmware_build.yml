@@ -6,8 +6,8 @@ on:
 
 jobs:
   build_firmware:
-    name: Build firmware on Ubuntu 20.04
-    runs-on: ubuntu-20.04
+    name: Build firmware on Ubuntu Latest
+    runs-on: ubuntu-latest
     
     steps:
       - name: Check out code from GitHub
