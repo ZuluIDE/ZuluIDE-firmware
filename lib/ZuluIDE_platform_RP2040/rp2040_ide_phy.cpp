@@ -224,7 +224,12 @@ bool ide_phy_can_write_block()
         return false;
     }
 
-    assert(status & FPGA_STATUS_DATA_DIR);
+    if ((status & FPGA_STATUS_DATA_DIR) != 1)
+    {
+        dbgmsg("--- ide_phy_can_write_block(): direction is read");
+        return false;
+    }
+
     return (status & FPGA_STATUS_TX_CANWRITE);
 }
 
@@ -360,7 +365,13 @@ bool ide_phy_can_read_block()
 {
     uint8_t status;
     fpga_rdcmd(FPGA_CMD_READ_STATUS, &status, 1);
-    assert(!(status & FPGA_STATUS_DATA_DIR));
+
+    if ((status & FPGA_STATUS_DATA_DIR) != 0)
+    {
+        dbgmsg("--- ide_phy_can_read_block(): direction is write");
+        return false;
+    }
+
     return (status & FPGA_STATUS_RX_DONE);
 }
 
