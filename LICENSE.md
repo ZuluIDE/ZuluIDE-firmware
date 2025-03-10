@@ -14,4 +14,8 @@ but WITHOUT ANY WARRANTY; without even the implied warranty of
 MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 GNU General Public License for more details. 
 
+Under Section 7 of GPL version 3, you are granted additional
+permissions described in the ZuluIDE Hardware Support Library Exception
+[GPL-3.0_HSL_Exception.md](GPL-3.0_HSL_Exception.md), as published by Rabbit Hole Computing™.
+
 The full GPL-3.0 license text is included in [GPL-3.0.md](GPL-3.0.md).
