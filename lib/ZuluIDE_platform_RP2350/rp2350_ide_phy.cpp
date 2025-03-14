@@ -40,9 +40,6 @@
 #include "rp2350_sniffer.h"
 
 #include <zuluide_rp2350b_core1.h>
-#ifndef ZULUIDE_RP2350B_CORE1_HAVE_SOURCE
-#error Binary blob loading not yet implemented
-#endif
 
 static struct {
     ide_phy_config_t config;
@@ -92,7 +89,10 @@ void ide_phy_reset(const ide_phy_config_t* config)
     g_ide_phy.watchdog_error = false;
 
     dbgmsg("ide_phy_reset");
+
+#ifdef ZULUIDE_RP2350B_CORE1_HAVE_SOURCE
     zuluide_rp2350b_core1_run();
+#endif
 
     g_idecomm.enable_dev0          = config->enable_dev0;
     g_idecomm.enable_dev1          = config->enable_dev1;

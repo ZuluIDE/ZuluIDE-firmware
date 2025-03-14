@@ -38,7 +38,15 @@ SECTIONS
         __flash_binary_start = .;
     } > FLASH
 
-    /* If ZuluIDE SD card bootloader is included, it goes in first 128 kB */
+    /* If ZuluIDE RP2350B encrypted HSL is included, it goes in first 128 kB */
+    .text.core1_bootloader : ALIGN(16)
+    {
+        KEEP(*(.text.core1_bootloader*))
+        . = ALIGN(131072);
+        CHECK_CORE1_BOOTLOADER_SIZE = 1 / (. <= 131072);
+    } > FLASH
+
+    /* If ZuluIDE SD card bootloader is included, it goes in next 128 kB */
    .text.bootloader : ALIGN(16) SUBALIGN(16)
     {
         KEEP(*(.text.btldr*))
