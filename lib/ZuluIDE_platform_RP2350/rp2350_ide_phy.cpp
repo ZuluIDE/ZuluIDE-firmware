@@ -71,9 +71,14 @@ static void ide_phy_post_request(uint32_t request)
     IDE_PIO->irq_force = (1 << IDE_CORE1_WAKEUP_IRQ);
 }
 
+void core1_log_poll();
+
 void ide_phy_reset(const ide_phy_config_t* config)
 {
     if (g_rp2350_passive_sniffer) return;
+
+    g_idecomm.enable_idephy = false;
+    delay(2);
 
     // Only initialize registers once after boot, after that ide_protocol handles it.
     static bool regs_inited = false;
@@ -106,6 +111,16 @@ void ide_phy_reset(const ide_phy_config_t* config)
     phyregs.state_dataout = 0;
     g_idecomm.phyregs = phyregs;
     ide_phy_post_request(CORE1_REQ_SET_REGS);
+
+    g_idecomm.enable_idephy = true;
+
+    delay(2);
+    core1_log_poll();
+
+    if (g_idecomm.requests & CORE1_REQ_SET_REGS)
+    {
+        logmsg("ERROR: Core1 is not responding.");
+    }
 }
 
 void ide_phy_reset_from_watchdog()

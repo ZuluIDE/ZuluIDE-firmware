@@ -113,8 +113,10 @@ void platform_minimal_init()
 
 void platform_init()
 {
+#ifdef ZULUIDE_RP2350B_CORE1_HAVE_SOURCE
     // Make sure second core is stopped
     multicore_reset_core1();
+#endif
 
     /* Check dip switch settings */
     //        pin             function       pup   pdown  out    state fast
@@ -677,6 +679,39 @@ void usb_command_poll()
     }
 }
 
+// Pass forwards log messages from core1 code.
+void core1_log_poll()
+{
+    static uint32_t core1_log_readpos = 0;
+
+    if (g_idecomm.logpos > core1_log_readpos)
+    {
+        char linebuf[128];
+        int len = 0;
+        while (len < sizeof(linebuf) - 1 && g_idecomm.logpos > core1_log_readpos)
+        {
+            char c = g_idecomm.core1_log[core1_log_readpos % sizeof(g_idecomm.core1_log)];
+            core1_log_readpos++;
+
+            if (c == '\n' || c == '\r')
+            {
+                if (len > 0)
+                    break;
+                else
+                    continue;
+            }
+
+            linebuf[len++] = c;
+        }
+
+        if (len > 0)
+        {
+            linebuf[len] = '\0';
+            logmsg("CORE1: ", linebuf);
+        }
+    }
+}
+
 // Poll function that is called every few milliseconds.
 // Can be left empty or used for platform-specific processing.
 void platform_poll()
@@ -698,6 +733,7 @@ void platform_poll()
 
     // Monitor supply voltage and process USB events
     adc_poll();
+    core1_log_poll();
     usb_log_poll();
     usb_command_poll();
 
@@ -828,8 +864,7 @@ bool platform_enable_sniffer(const char *filename, bool passive)
     if (passive)
     {
         // Stop IDE phy and configure pins for passive input
-        multicore_reset_core1();
-        pio_set_sm_mask_enabled(IDE_PIO, 0xF, false);
+        g_idecomm.enable_idephy = false;
 
         // Configure IDE bus for input mode
         // Data buffer is enabled in input mode.
