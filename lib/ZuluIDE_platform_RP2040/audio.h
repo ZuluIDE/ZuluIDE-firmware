@@ -47,6 +47,12 @@ bool audio_is_active();
 void audio_init();
 
 /**
+ * Set Max volume percentage
+ * \param max_vol Max volume from 100 to 0 (mute)
+ */
+void audio_set_max_volume(uint8_t max_vol);
+
+/**
  * Called from platform_poll() to fill sample buffer(s) if needed.
  */
 void audio_poll();

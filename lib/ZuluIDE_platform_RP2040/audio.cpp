@@ -83,6 +83,7 @@ static CUETrackInfo current_track = {0};
 static audio_status_code audio_last_status = ASC_NO_STATUS;
 // volume information for targets
 static volatile uint8_t volume[2] = {DEFAULT_VOLUME_LEVEL, DEFAULT_VOLUME_LEVEL};
+static uint8_t max_volume = 100;
 static volatile uint16_t channel = AUDIO_CHANNEL_ENABLE_MASK;
 
 // mechanism for cleanly stopping DMA units
@@ -109,10 +110,10 @@ static void snd_encode(int16_t* samples, int16_t* output_buf, uint16_t len) {
             if (i % 2 == 0)
             {
                 temp = output_buf[i+1];
-                output_buf[i+1] = (int16_t)(((int32_t)samples[i]) * (vol[0]) / 255);
+                output_buf[i+1] = (int16_t)(((int64_t)samples[i]) * (vol[0]) * max_volume / 25500);
             }
             else
-                output_buf[i-1] = (int16_t)(((int32_t)temp) * (vol[1]) / 255);
+                output_buf[i-1] = (int16_t)(((int64_t)temp) * (vol[1]) * max_volume / 25500);
         }
     }
 }
@@ -624,6 +625,11 @@ uint16_t audio_get_volume() {
 void audio_set_volume(uint8_t lvol, uint8_t rvol) {
     volume[0] = lvol;
     volume[1] = rvol;
+}
+
+void audio_set_max_volume(uint8_t max_vol)
+{
+    max_volume = max_vol;
 }
 
 uint16_t audio_get_channel() {
