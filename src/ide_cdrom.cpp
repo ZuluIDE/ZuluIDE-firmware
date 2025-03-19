@@ -858,7 +858,7 @@ bool IDECDROMDevice::atapi_play_audio_msf(const uint8_t *cmd)
 static void doStopAudio()
 {
     // terminate audio playback if active on this target (Annex C)
-    dbgmsg("------ CD-ROM Stop Audio request");
+    // dbgmsg("------ CD-ROM Stop Audio request");
 #ifdef ENABLE_AUDIO_OUTPUT
     audio_stop();
 #endif
@@ -1862,13 +1862,6 @@ size_t IDECDROMDevice::atapi_get_mode_page(uint8_t page_ctrl, uint8_t page_idx, 
 #ifdef ENABLE_AUDIO_OUTPUT
     if (page_idx == ATAPI_MODESENSE_CD_AUDIO_CONTROL)
     {
-        uint16_t vol = audio_get_volume();
-        uint8_t r_vol = vol >> 8;
-        uint8_t l_vol = vol & 0xFF;
-        uint16_t ch = audio_get_channel() & AUDIO_CHANNEL_ENABLE_MASK;
-        uint8_t l_ch = ch & 0xFF;
-        uint8_t r_ch = ch >> 8;
-        dbgmsg("Volume returns: lc ", l_ch, " lv ", l_vol, " rc ", r_ch, " rv ", r_vol);
         buffer[0] = ATAPI_MODESENSE_CD_AUDIO_CONTROL;
         buffer[1] = 14; // page length
         buffer[2] = 0x04; // 'Immed' bti set, 'SOTC' bit not set
@@ -1877,10 +1870,15 @@ size_t IDECDROMDevice::atapi_get_mode_page(uint8_t page_ctrl, uint8_t page_idx, 
         buffer[5] = 0x00; // reserved
         buffer[6] = 0x00; // obsolete
         buffer[7] = 0x00; // obsolete
-        buffer[8] = l_ch; // output port 0
-        buffer[9] = l_vol; // port 0 - left volume
-        buffer[10] = r_ch; // output port 1
-        buffer[11] = r_vol; // port 1 - right volume
+
+        // The values seem to be masks, for example if max volume port 0 was reporting 128
+        // Then setting any higher or equal number of 128 would still report 128 and any lower value would report 0
+        // Reprorting 0xFF for volume and the actual channel make setting the volume work
+        buffer[8] = 0x01;  // output port 0 on channel 1
+        buffer[9] = 0xFF;  // max volume port 0 - left volume
+        buffer[10] = 0x02; // output port 1 on channel 2
+        buffer[11] = 0xFF; // max volume port 1 - right volume
+
         buffer[12] = 0x00; // output port 3 inactive
         buffer[13] = 0x00; // output port 3 inactive
         buffer[14] = 0x00; // output port 4 inactive
