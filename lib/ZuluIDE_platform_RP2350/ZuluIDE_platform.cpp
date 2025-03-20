@@ -150,6 +150,7 @@ void platform_init()
 
     g_log_debug = dbglog;
 
+#ifndef ARM_NONSECURE_MODE
     // Get flash chip size
     uint8_t cmd_read_jedec_id[4] = {0x9f, 0, 0, 0};
     uint8_t response_jedec[4] = {0};
@@ -164,6 +165,7 @@ void platform_init()
     flash_do_cmd(cmd_read_uniq_id, response_uniq_id, 13);
     memcpy(&g_flash_unique_id, response_uniq_id + 5, 8);
     logmsg("Flash unique ID: ", g_flash_unique_id);
+#endif
 
     logmsg("System clock is set to ", (int) clock_get_hz(clk_sys), " Hz");
 
@@ -365,16 +367,21 @@ void platform_emergency_log_save()
 }
 
 extern "C" __attribute__((noinline))
-void show_hardfault(uint32_t *sp)
+void show_hardfault(uint32_t *sp, uint32_t r4, uint32_t r5, uint32_t r6, uint32_t r7)
 {
     uint32_t pc = sp[6];
     uint32_t lr = sp[5];
+
+    // When the main firmware is run in non-secure mode, the secure mode
+    // fault handler forwards to us. It stores context in r4-r7.
+    bool sec_fault = (r4 == 0xACCE55ED);
 
     logmsg("--------------");
     logmsg("CRASH!");
     logmsg("Platform: ", g_platform_name);
     logmsg("FW Version: ", g_log_firmwareversion);
     logmsg("CFSR: ", (uint32_t)scb_hw->cfsr);
+    logmsg("BFAR: ", (uint32_t)scb_hw->bfar);
     logmsg("SP: ", (uint32_t)sp);
     logmsg("PC: ", pc);
     logmsg("LR: ", lr);
@@ -382,6 +389,10 @@ void show_hardfault(uint32_t *sp)
     logmsg("R1: ", sp[1]);
     logmsg("R2: ", sp[2]);
     logmsg("R3: ", sp[3]);
+    logmsg("R4: ", r4, (sec_fault ? " (SECURE FAULT)" : "")); // ARMv8-m secure mode handler forwards to us
+    logmsg("R5: ", r5);
+    logmsg("R6: ", r6, (sec_fault ? " (SFAR)" : ""));
+    logmsg("R7: ", r7, (sec_fault ? " (SFSR)" : ""));
 
     uint32_t *p = (uint32_t*)((uint32_t)sp & ~3);
 
@@ -420,8 +431,12 @@ void show_hardfault(uint32_t *sp)
 extern "C" __attribute__((naked, interrupt))
 void isr_hardfault(void)
 {
-    // Copies stack pointer into first argument
+    // Copies stack pointer and R4..R7 into function arguments
     asm("mrs r0, msp\n"
+        "mov r1, r4\n"
+        "mov r2, r5\n"
+        "mov r3, r6\n"
+        "mov r4, r7\n"
         "bl show_hardfault": : : "r0");
 }
 
@@ -901,3 +916,41 @@ void platform_sniffer_poll()
 {
     rp2350_sniffer_poll();
 }
+
+/*************************************************/
+/* SDK overrides for running in non-secure mode  */
+/*************************************************/
+
+#ifdef ARM_NONSECURE_MODE
+// When the main firmware runs under ARM TrustZone, we must
+// override some SDK functions. These have already been
+// initialized by the bootloader.
+
+extern "C" void runtime_init_bootrom_reset()
+{
+}
+
+extern "C" void runtime_init_early_resets()
+{
+}
+
+extern "C" void runtime_init_post_clock_resets()
+{
+    // JTAG and TBMAN peripherals are secure access only,
+    // so we have to mask them out of reset.
+    unreset_block_mask_wait_blocking(0x1fbffeff);
+}
+
+extern "C" void runtime_init_boot_locks_reset()
+{
+}
+
+extern "C" void runtime_init_bootrom_locking_enable()
+{
+}
+
+extern "C" void runtime_init_per_core_bootrom_reset()
+{
+}
+
+#endif
