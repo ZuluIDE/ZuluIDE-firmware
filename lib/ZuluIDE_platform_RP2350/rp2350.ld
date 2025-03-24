@@ -98,6 +98,7 @@ SECTIONS
         KEEP(*:*rp2350_core1_register_access*(.text .text*))
         KEEP(*:*rp2350_core1_register_access*(.data*))
         KEEP(*:*rp2350_core1_register_access*(.bss*))
+        KEEP(*(.text.core1*))
         __core1_load_end__ = .;
     } > RAM_CORE1_CODE AT >FLASH
     __core1_load_source__ = LOADADDR(.core1);

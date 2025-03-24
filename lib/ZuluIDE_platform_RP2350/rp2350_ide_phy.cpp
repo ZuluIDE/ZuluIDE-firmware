@@ -83,8 +83,14 @@ void ide_phy_reset(const ide_phy_config_t* config)
     // Only initialize registers once after boot, after that ide_protocol handles it.
     static bool regs_inited = false;
     phy_ide_registers_t phyregs = g_idecomm.phyregs;
+
     if (!regs_inited)
     {
+#ifdef ZULUIDE_RP2350B_CORE1_HAVE_SOURCE
+        zuluide_rp2350b_core1_run();
+        delay(200);
+#endif
+
         memset(&phyregs, 0, sizeof(phyregs));
         regs_inited = true;
     }
@@ -94,10 +100,6 @@ void ide_phy_reset(const ide_phy_config_t* config)
     g_ide_phy.watchdog_error = false;
 
     dbgmsg("ide_phy_reset");
-
-#ifdef ZULUIDE_RP2350B_CORE1_HAVE_SOURCE
-    zuluide_rp2350b_core1_run();
-#endif
 
     g_idecomm.enable_dev0          = config->enable_dev0;
     g_idecomm.enable_dev1          = config->enable_dev1;
