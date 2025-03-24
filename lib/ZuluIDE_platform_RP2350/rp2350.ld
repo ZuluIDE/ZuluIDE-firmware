@@ -25,7 +25,10 @@ MEMORY
 {
     FLASH(rx) : ORIGIN = 0x10000000, LENGTH = 1024k
     RAM(rwx) : ORIGIN =  0x20000000, LENGTH = 256k
-    RAM2(rwx) : ORIGIN =  0x20040000, LENGTH = 256k
+    RAM_CORE1_CODE(rwx) : ORIGIN =  0x20041000, LENGTH = 52k
+    RAM_CORE1_STACK(rwx):   ORIGIN =  0x2004E000, LENGTH = 8k
+    RAM_IDECOMM(rwx): ORIGIN =  0x20052000, LENGTH = 8k
+    RAM_IDEBUF(rwx):  ORIGIN =  0x20054000, LENGTH = 64k
     SCRATCH_X(rwx) : ORIGIN = 0x20080000, LENGTH = 4k
     SCRATCH_Y(rwx) : ORIGIN = 0x20081000, LENGTH = 4k
 }
@@ -79,14 +82,24 @@ SECTIONS
     }  > FLASH
 
     /* Core 1 dedicated RAM */
+    .data.idecomm (NOLOAD) :
+    {
+        KEEP(*(.data.idecomm*))
+    } > RAM_IDECOMM
+
+    .data.idebuf (NOLOAD) :
+    {
+        KEEP(*(.data.idebuf*))
+    } > RAM_IDEBUF
+
     .core1 : {
-        __core1_ram_start__ = .;
+        __core1_load_start__ = .;
+        KEEP(*(.core1.vectors))
         KEEP(*:*rp2350_core1_register_access*(.text .text*))
         KEEP(*:*rp2350_core1_register_access*(.data*))
         KEEP(*:*rp2350_core1_register_access*(.bss*))
-        KEEP(*(.core1*))
-        __core1_ram_end__ = .;
-    } > RAM2 AT >FLASH
+        __core1_load_end__ = .;
+    } > RAM_CORE1_CODE AT >FLASH
     __core1_load_source__ = LOADADDR(.core1);
 
     .text : {
@@ -305,11 +318,13 @@ SECTIONS
 
     /* stack limit is poorly named, but historically is maximum heap ptr */
     __StackLimit = ORIGIN(RAM) + LENGTH(RAM);
-    __StackOneTop = ORIGIN(SCRATCH_X) + LENGTH(SCRATCH_X);
+    __StackOneTop = ORIGIN(RAM_CORE1_STACK) + LENGTH(RAM_CORE1_STACK);
     __StackTop = ORIGIN(SCRATCH_Y) + LENGTH(SCRATCH_Y);
-    __StackOneBottom = __StackOneTop - SIZEOF(.stack1_dummy);
+    __StackOneBottom = ORIGIN(RAM_CORE1_STACK);
     __StackBottom = __StackTop - SIZEOF(.stack_dummy);
     PROVIDE(__stack = __StackTop);
+
+    __core1_stack__ = ORIGIN(RAM_CORE1_STACK) + LENGTH(RAM_CORE1_STACK);
 
     /* picolibc and LLVM */
     PROVIDE (__heap_start = __end__);
