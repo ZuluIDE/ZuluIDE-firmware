@@ -99,7 +99,7 @@ void ide_phy_reset(const ide_phy_config_t* config)
     g_ide_phy.config = *config;
     g_ide_phy.watchdog_error = false;
 
-    dbgmsg("ide_phy_reset");
+    // dbgmsg("ide_phy_reset");
 
     g_idecomm.enable_dev0          = config->enable_dev0;
     g_idecomm.enable_dev1          = config->enable_dev1;
@@ -136,7 +136,7 @@ ide_event_t ide_phy_get_events()
 
     if (flags & CORE1_EVT_CMD_RECEIVED)
     {
-        dbgmsg("IDE_EVENT_CMD, status ", g_idecomm.phyregs.regs.status);
+        // dbgmsg("IDE_EVENT_CMD, status ", g_idecomm.phyregs.regs.status);
         return IDE_EVENT_CMD;
     }
     else if (flags & CORE1_EVT_HWRST)
@@ -178,11 +178,11 @@ void ide_phy_set_regs(const ide_registers_t *regs)
     __sync_synchronize();
 
     ide_phy_post_request(CORE1_REQ_SET_REGS);
-    dbgmsg("SET_REGS, status ", regs->status, " error ", regs->error, " lba_high ", regs->lba_high, " data_in ", (int)g_idecomm.phyregs.state_datain);
+    // dbgmsg("SET_REGS, status ", regs->status, " error ", regs->error, " lba_high ", regs->lba_high, " data_in ", (int)g_idecomm.phyregs.state_datain);
 
     delay(2);
     phy_ide_registers_t phyregs = g_idecomm.phyregs;
-    dbgmsg("READBACK status ", phyregs.regs.status, " error ", phyregs.regs.error, " lba_high ", phyregs.regs.lba_high, " data_in ", (int)phyregs.state_datain);
+    // dbgmsg("READBACK status ", phyregs.regs.status, " error ", phyregs.regs.error, " lba_high ", phyregs.regs.lba_high, " data_in ", (int)phyregs.state_datain);
 }
 
 void ide_phy_start_write(uint32_t blocklen, int udma_mode)
@@ -217,7 +217,7 @@ void ide_phy_write_block(const uint8_t *buf, uint32_t blocklen)
         *dst++ = (*src++) | IDECOMM_DATA_PATTERN;
     }
 
-    dbgmsg("Write block ptr ", (uint32_t)block, " length ", (int)blocklen);
+    // dbgmsg("Write block ptr ", (uint32_t)block, " length ", (int)blocklen);
 
     // Give the transmit pointer to core 1
     sio_hw->fifo_wr = (uint32_t)block;
@@ -312,7 +312,7 @@ void ide_phy_assert_irq(uint8_t ide_status)
 {
     g_idecomm.phyregs.regs.status = ide_status;
     ide_phy_post_request(CORE1_REQ_ASSERT_IRQ);
-    dbgmsg("ASSERT_IRQ, status ", ide_status);
+    // dbgmsg("ASSERT_IRQ, status ", ide_status);
 }
 
 void ide_phy_set_signals(uint8_t signals)
