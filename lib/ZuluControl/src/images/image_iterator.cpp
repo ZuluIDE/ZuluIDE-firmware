@@ -335,6 +335,11 @@ static bool is_valid_filename(const char *name)
     return false;
   }
 
+  if (strncasecmp(name, "sniff.dat", sizeof("sniff.dat")) == 0) {
+    // Ignore bus sniffer output file
+    return false;
+  }
+
   if (!isalnum(name[0])) {
     // Skip names beginning with special character
     return false;
