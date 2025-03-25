@@ -183,6 +183,7 @@ protected:
     virtual bool handle_atapi_command(const uint8_t *cmd);
     virtual bool atapi_test_unit_ready(const uint8_t *cmd);
     virtual bool atapi_start_stop_unit(const uint8_t *cmd);
+    virtual bool atapi_load_unload_medium(const uint8_t *cmd);
     virtual bool atapi_prevent_allow_removal(const uint8_t *cmd);
     virtual bool atapi_inquiry(const uint8_t *cmd);
     virtual bool atapi_mode_sense(const uint8_t *cmd);

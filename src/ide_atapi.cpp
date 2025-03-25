@@ -685,6 +685,7 @@ bool IDEATAPIDevice::handle_atapi_command(const uint8_t *cmd)
     {
         case ATAPI_CMD_TEST_UNIT_READY: return atapi_test_unit_ready(cmd);
         case ATAPI_CMD_START_STOP_UNIT: return atapi_start_stop_unit(cmd);
+        case ATAPI_CMD_LOAD_UNLOAD_MEDIUM: return atapi_load_unload_medium(cmd);
         case ATAPI_CMD_PREVENT_ALLOW_MEDIUM_REMOVAL: return atapi_prevent_allow_removal(cmd);
         case ATAPI_CMD_MODE_SENSE6:     return atapi_mode_sense(cmd);
         case ATAPI_CMD_MODE_SENSE10:    return atapi_mode_sense(cmd);
@@ -845,6 +846,18 @@ bool IDEATAPIDevice::atapi_start_stop_unit(const uint8_t *cmd)
 
 }
 
+bool IDEATAPIDevice::atapi_load_unload_medium(const uint8_t *cmd)
+{
+    uint8_t slot = cmd[8];
+
+    if (slot != 0)
+    {
+        return atapi_cmd_error(ATAPI_SENSE_ILLEGAL_REQ, ATAPI_ASC_NO_MEDIUM);
+    }
+
+    // cmd[4] works the same as with start_stop_unit().
+    return atapi_start_stop_unit(cmd);
+}
 
 bool IDEATAPIDevice::atapi_prevent_allow_removal(const uint8_t *cmd)
 {
