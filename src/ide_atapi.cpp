@@ -798,7 +798,7 @@ bool IDEATAPIDevice::atapi_test_unit_ready(const uint8_t *cmd)
 {
     if (m_devinfo.removable && m_removable.ejected)
     {
-        if (m_removable.reinsert_media_after_eject)
+        if (m_removable.reinsert_media_after_eject && check_time_after_eject())
         {
             insert_next_media(m_image);
         }
@@ -879,7 +879,7 @@ bool IDEATAPIDevice::atapi_inquiry(const uint8_t *cmd)
     if (req_bytes < count) count = req_bytes;
     atapi_send_data(inquiry, count);
 
-    if (m_removable.reinsert_media_on_inquiry)
+    if (m_removable.reinsert_media_on_inquiry && check_time_after_eject())
     {
         insert_next_media(m_image);
     }
@@ -1362,7 +1362,12 @@ void IDEATAPIDevice::eject_media()
     {
         logmsg("Device ejecting media, image already cleared");
     }
-    m_removable.ejected = true;
+
+    if (!m_removable.ejected)
+    {
+        m_removable.ejected = true;
+        m_removable.eject_time = millis();
+    }
 }
 
 void IDEATAPIDevice::insert_media(IDEImage *image)
@@ -1478,4 +1483,9 @@ void IDEATAPIDevice::set_not_ready(bool not_ready)
 {
     if (ini_getbool("IDE", "set_not_ready_on_insert", 0, CONFIGFILE))
         m_atapi_state.not_ready = not_ready;
+}
+
+bool IDEATAPIDevice::check_time_after_eject()
+{
+    return ((uint32_t)(millis() - m_removable.eject_time)) > 500;
 }
