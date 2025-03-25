@@ -685,6 +685,7 @@ bool IDEATAPIDevice::handle_atapi_command(const uint8_t *cmd)
     {
         case ATAPI_CMD_TEST_UNIT_READY: return atapi_test_unit_ready(cmd);
         case ATAPI_CMD_START_STOP_UNIT: return atapi_start_stop_unit(cmd);
+        case ATAPI_CMD_LOAD_UNLOAD_MEDIUM: return atapi_load_unload_medium(cmd);
         case ATAPI_CMD_PREVENT_ALLOW_MEDIUM_REMOVAL: return atapi_prevent_allow_removal(cmd);
         case ATAPI_CMD_MODE_SENSE6:     return atapi_mode_sense(cmd);
         case ATAPI_CMD_MODE_SENSE10:    return atapi_mode_sense(cmd);
@@ -798,7 +799,7 @@ bool IDEATAPIDevice::atapi_test_unit_ready(const uint8_t *cmd)
 {
     if (m_devinfo.removable && m_removable.ejected)
     {
-        if (m_removable.reinsert_media_after_eject)
+        if (m_removable.reinsert_media_after_eject && check_time_after_eject())
         {
             insert_next_media(m_image);
         }
@@ -845,6 +846,18 @@ bool IDEATAPIDevice::atapi_start_stop_unit(const uint8_t *cmd)
 
 }
 
+bool IDEATAPIDevice::atapi_load_unload_medium(const uint8_t *cmd)
+{
+    uint8_t slot = cmd[8];
+
+    if (slot != 0)
+    {
+        return atapi_cmd_error(ATAPI_SENSE_ILLEGAL_REQ, ATAPI_ASC_NO_MEDIUM);
+    }
+
+    // cmd[4] works the same as with start_stop_unit().
+    return atapi_start_stop_unit(cmd);
+}
 
 bool IDEATAPIDevice::atapi_prevent_allow_removal(const uint8_t *cmd)
 {
@@ -879,7 +892,7 @@ bool IDEATAPIDevice::atapi_inquiry(const uint8_t *cmd)
     if (req_bytes < count) count = req_bytes;
     atapi_send_data(inquiry, count);
 
-    if (m_removable.reinsert_media_on_inquiry)
+    if (m_removable.reinsert_media_on_inquiry && check_time_after_eject())
     {
         insert_next_media(m_image);
     }
@@ -1362,7 +1375,12 @@ void IDEATAPIDevice::eject_media()
     {
         logmsg("Device ejecting media, image already cleared");
     }
-    m_removable.ejected = true;
+
+    if (!m_removable.ejected)
+    {
+        m_removable.ejected = true;
+        m_removable.eject_time = millis();
+    }
 }
 
 void IDEATAPIDevice::insert_media(IDEImage *image)
@@ -1478,4 +1496,9 @@ void IDEATAPIDevice::set_not_ready(bool not_ready)
 {
     if (ini_getbool("IDE", "set_not_ready_on_insert", 0, CONFIGFILE))
         m_atapi_state.not_ready = not_ready;
+}
+
+bool IDEATAPIDevice::check_time_after_eject()
+{
+    return ((uint32_t)(millis() - m_removable.eject_time)) > 500;
 }

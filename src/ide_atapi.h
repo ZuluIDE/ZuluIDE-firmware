@@ -132,6 +132,7 @@ protected:
         bool prevent_removable;
         bool prevent_persistent;
         bool ignore_prevent_removal;
+        uint32_t eject_time;
     } m_removable;
 
     // Buffer used for responses, ide_phy code benefits from this being aligned to 32 bits
@@ -182,6 +183,7 @@ protected:
     virtual bool handle_atapi_command(const uint8_t *cmd);
     virtual bool atapi_test_unit_ready(const uint8_t *cmd);
     virtual bool atapi_start_stop_unit(const uint8_t *cmd);
+    virtual bool atapi_load_unload_medium(const uint8_t *cmd);
     virtual bool atapi_prevent_allow_removal(const uint8_t *cmd);
     virtual bool atapi_inquiry(const uint8_t *cmd);
     virtual bool atapi_mode_sense(const uint8_t *cmd);
@@ -213,4 +215,7 @@ protected:
 
     // Set not ready if enabled via config ini
     virtual void set_not_ready(bool not_ready);
+
+    // Wait a moment after ejection before reinsertion
+    bool check_time_after_eject();
 };

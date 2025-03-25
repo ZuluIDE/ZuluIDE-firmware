@@ -711,6 +711,7 @@ bool IDECDROMDevice::atapi_get_event_status_notification(const uint8_t *cmd)
         buf[6] = 0x00; // Start slot
         buf[7] = 0x01; // End slot
         esn_next_event();
+        dbgmsg("---- Event: Operational state has changed");
     }
     // Media class request
     else if (cmd[4] & 0x10)
@@ -735,11 +736,20 @@ bool IDECDROMDevice::atapi_get_event_status_notification(const uint8_t *cmd)
                 buf[2] = m_esn.request; // Media status events
                 buf[3] = 0x12; // Supported events
                 if (m_esn.current_event == esn_event_t::MEjectRequest)
+                {
+                    dbgmsg("---- Event: EjectRequest");
                     buf[4] = 0x01; // Eject Request
+                }
                 else if (m_esn.current_event == esn_event_t::MNewMedia)
+                {
+                    dbgmsg("---- Event: NewMedia");
                     buf[4] = 0x02; // New Media
+                }
                 else
+                {
+                    dbgmsg("---- Event: Unknown ", (int)m_esn.current_event);
                     return atapi_cmd_error(ATAPI_SENSE_ILLEGAL_REQ, ATAPI_ASC_INVALID_CMD);
+                }
                 buf[5] = 0x02; // Media Present
                 buf[6] = 0; // Start slot
                 buf[7] = 0; // End slot
@@ -751,6 +761,7 @@ bool IDECDROMDevice::atapi_get_event_status_notification(const uint8_t *cmd)
             else if (m_esn.current_event == esn_event_t::MMediaRemoval)
             {
                 // Report media status event Media Removal
+                dbgmsg("---- Event: MediaRemoval");
                 buf[0] = 0;
                 buf[1] = 6; // EventDataLength
                 buf[2] = m_esn.request; // Media status events
@@ -774,9 +785,15 @@ bool IDECDROMDevice::atapi_get_event_status_notification(const uint8_t *cmd)
             buf[3] = 0x12; // Supported events
             buf[4] = 0x00; // No Change
             if (m_removable.ejected)
+            {
+                dbgmsg("---- Event: No change (media not present)");
                 buf[5] = 0x00;
+            }
             else
+            {
+                dbgmsg("---- Event: no change (media present)");
                 buf[5] = 0x02; // Media Present
+            }
             buf[6] = 0; // Start slot
             buf[7] = 0; // End slot
             set_esn_event(esn_event_t::NoChange);
@@ -785,6 +802,7 @@ bool IDECDROMDevice::atapi_get_event_status_notification(const uint8_t *cmd)
     else
     {
         // No events to report
+        dbgmsg("---- Event: No events");
         buf[0] = 0;
         buf[1] = 0x06; // EventDataLength
         buf[2] = 0x01; // Operational Change request/notification
@@ -1556,18 +1574,13 @@ uint64_t IDECDROMDevice::capacity_lba()
 void IDECDROMDevice::eject_media()
 {
     doStopAudio();
-    if (m_image)
+
+    if (!m_removable.ejected)
     {
-        char filename[MAX_FILE_PATH+1];
-        m_image->get_image_name(filename, sizeof(filename));
-        logmsg("Device ejecting media: \"", filename, "\"");
+        set_esn_event(esn_event_t::MMediaRemoval);
     }
-    else
-    {
-        logmsg("Device ejecting media, image already cleared");
-    }
-    set_esn_event(esn_event_t::MMediaRemoval);
-    m_removable.ejected = true;
+
+    IDEATAPIDevice::eject_media();
 }
 
 void IDECDROMDevice::button_eject_media()
