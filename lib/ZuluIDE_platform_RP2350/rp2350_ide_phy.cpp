@@ -112,7 +112,7 @@ void ide_phy_reset(const ide_phy_config_t* config)
     phyregs.state_datain = 0;
     phyregs.state_dataout = 0;
     g_idecomm.phyregs = phyregs;
-    ide_phy_post_request(CORE1_REQ_SET_REGS);
+    ide_phy_post_request(CORE1_REQ_SET_REGS | CORE1_REQ_STOP_TRANSFERS);
 
     g_idecomm.enable_idephy = true;
 
