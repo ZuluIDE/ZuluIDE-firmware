@@ -21,6 +21,7 @@
 
 #include <zuluide/i2c/i2c_server.h>
 #include <sstream>
+#include <cctype>
 #include "ZuluIDE_log.h"
 #include "ZuluIDE_platform.h"
 
@@ -174,10 +175,12 @@ void I2CServer::Poll() {
       }
       if (buffer[0] != '\0')
       {
-        logmsg("Client requested the current image be set to:", buffer);
+        std::string encoded_url = buffer;
+        std::string unencoded_url = UnescapeUrl(encoded_url);
+        logmsg("Client requested the current image be set to:", unencoded_url.c_str());
         mutex_enter_blocking(platform_get_log_mutex());  
         iterator.Reset();
-        bool found_file = iterator.MoveToFile(buffer);
+        bool found_file = iterator.MoveToFile(unencoded_url.c_str());
         zuluide::images::Image toLoad(std::string(), 0);
         toLoad = iterator.Get();
         iterator.Cleanup();
@@ -311,4 +314,22 @@ void I2CServer::SetPassword(std::string &value) {
 
 bool I2CServer::WifiCredentialsSet() {
   return !ssid.empty() && !password.empty();
+}
+
+std::string I2CServer::UnescapeUrl(const std::string& str) {
+    std::string result;
+    for (size_t i = 0; i < str.length(); ++i) {
+        if (str[i] == '%' && i + 2 < str.length()) {
+            if (std::isxdigit(str[i + 1]) && std::isxdigit(str[i + 2])) {
+                char hex[3] = {str[i + 1], str[i + 2], 0};
+                result += static_cast<char>(std::strtol(hex, nullptr, 16));
+                i += 2;
+            } else {
+                result += str[i];
+            }
+        } else {
+            result += str[i];
+        }
+    }
+    return result;
 }

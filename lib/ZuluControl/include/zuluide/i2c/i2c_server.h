@@ -98,6 +98,8 @@ namespace zuluide::i2c {
        True if the SSID and and password have been set.
      */
     bool WifiCredentialsSet();
+  protected:
+    std::string UnescapeUrl(const std::string& str);
   private:
     TwoWire* wire;
     DeviceControlSafe* deviceControl;
