@@ -31,7 +31,7 @@
 
 using namespace zuluide::i2c;
 
-I2CServer::I2CServer() : deviceControl(nullptr), isSubscribed(false), devControlSet(false), sendFiles(false), sendNextImage(false), isIterating(false), isPresent(false) {
+I2CServer::I2CServer() : deviceControl(nullptr), isSubscribed(false), devControlSet(false), sendFiles(false), sendNextImage(false), isIterating(false), isPresent(false), remoteMajorVersion(0){
 }
 
 void I2CServer::SetI2c(TwoWire* wireValue) {
@@ -139,6 +139,69 @@ void I2CServer::Poll() {
   uint8_t requestType = wire->read();
 
   switch (requestType) {
+
+
+  case I2C_CLIENT_API_VERSION:
+  {
+    wire->requestFrom(CLIENT_ADDR, 2);
+    uint16_t length = ReadInLength(wire);
+    if (length > 0)
+    {
+      // Client is sending some data.
+      char* buffer = new char[length + 1];
+      memset(buffer, 0, length + 1);
+
+      for (int pos = 0; pos < length;)
+      {
+        int toRecv = pos + BUFFER_LENGTH < length ? BUFFER_LENGTH : length - pos;
+
+        wire->requestFrom(CLIENT_ADDR, toRecv);
+        while (toRecv > 0) {
+          while (wire->available() == 0) { }
+          buffer[pos++] = wire->read();
+          toRecv--;
+        }
+      }
+
+      bool major_version_match = false;
+      if (buffer[0] != '\0')
+      {
+        unsigned long local_major_version;
+        char* period_location = strchr(buffer, '.');
+        if (period_location != NULL)
+        {
+          remoteVersionString = buffer;
+          remoteMajorVersion = strtoul(buffer, &period_location, 10);
+          period_location = strchr(I2C_API_VERSION, '.');
+          if (period_location != NULL)
+          {
+            local_major_version = strtoul(I2C_API_VERSION, &period_location, 10);
+            if (local_major_version > 0 && local_major_version == remoteMajorVersion)
+            {
+              major_version_match = true;
+            }
+          }
+        }
+      }
+
+      if (major_version_match)
+      {
+        dbgmsg("I2C server and client major version match. Client: v",remoteVersionString.c_str()," Server: v", I2C_API_VERSION);
+      }
+      else
+      {
+        if (remoteMajorVersion > 0)
+          logmsg("I2C server (v",I2C_API_VERSION ,") and client major version (v",remoteVersionString.c_str(),") mismatch. Please upgrade both devices to the latest firmware");
+        else
+          logmsg("I2C client failed to send API version I2C server API verion. Please upgrade both devices to the latest firmware");
+
+      }
+      writeLengthPrefacedString(wire, I2C_SERVER_API_VERSION, strlen(I2C_API_VERSION), I2C_API_VERSION);
+      delete[] buffer;
+    }
+    break;
+  }
+
   case I2C_CLIENT_SUBSCRIBE_STATUS_JSON: {
     wire->requestFrom(CLIENT_ADDR, 2);
     if (ReadInLength(wire) != 0) {
