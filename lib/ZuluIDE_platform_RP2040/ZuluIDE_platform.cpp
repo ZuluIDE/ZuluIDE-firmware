@@ -316,8 +316,8 @@ uint8_t platform_check_for_controller()
 void platform_set_status_controller(zuluide::ObserverTransfer<zuluide::status::SystemStatus> *statusController) {
   logmsg("Initialized platform controller with the status controller.");
   display.init(&g_wire);
+  statusController->AddObserver(processStatusUpdate);
   uiStatusController = statusController;
-  uiStatusController->AddObserver(processStatusUpdate);
 }
 
 void platform_set_display_controller(zuluide::Observable<zuluide::control::DisplayState>& displayController) {
@@ -1073,13 +1073,16 @@ void zuluide_main_loop1(void)
 {
     platform_poll_input();
 
-    // Process status update, if any exist.
-    if (!uiStatusController->ProcessUpdate()) {
-      // If no updates happend, refresh the display (enables animation)
-      display.Refresh();
-    }
+    if (uiStatusController)
+    {
+        // Process status update, if any exist.
+        if (!uiStatusController->ProcessUpdate()) {
+            // If no updates happend, refresh the display (enables animation)
+            display.Refresh();
+        }
 
-    g_I2cServer.Poll();
+        g_I2cServer.Poll();
+    }
 }
 
 mutex_t* platform_get_log_mutex() {
