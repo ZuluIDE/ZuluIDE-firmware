@@ -27,6 +27,9 @@
 #include <zuluide/images/image_iterator.h>
 #include <string>
 
+#define I2C_API_VERSION "2.0.0"
+
+#define I2C_SERVER_API_VERSION  0x1
 #define I2C_SERVER_SYSTEM_STATUS_JSON  0xA
 #define I2C_SERVER_IMAGE_JSON  0xB
 #define I2C_SERVER_POLL_CLIENT 0xC
@@ -35,6 +38,8 @@
 #define I2C_SERVER_RESET 0xF
 
 #define I2C_CLIENT_NOOP 0x0
+
+#define I2C_CLIENT_API_VERSION 0x01
 #define I2C_CLIENT_SUBSCRIBE_STATUS_JSON  0xA
 #define I2C_CLIENT_LOAD_IMAGE  0xB
 #define I2C_CLIENT_EJECT_IMAGE  0xC
@@ -98,6 +103,8 @@ namespace zuluide::i2c {
        True if the SSID and and password have been set.
      */
     bool WifiCredentialsSet();
+  protected:
+    std::string UnescapeUrl(const std::string& str);
   private:
     TwoWire* wire;
     DeviceControlSafe* deviceControl;
@@ -111,5 +118,7 @@ namespace zuluide::i2c {
     std::string status;
     std::string ssid;
     std::string password;
+    unsigned long remoteMajorVersion;
+    std::string remoteVersionString;
   };
 }

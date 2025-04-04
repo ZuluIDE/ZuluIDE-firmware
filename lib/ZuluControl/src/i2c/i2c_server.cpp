@@ -21,6 +21,7 @@
 
 #include <zuluide/i2c/i2c_server.h>
 #include <sstream>
+#include <cctype>
 #include "ZuluIDE_log.h"
 #include "ZuluIDE_platform.h"
 
@@ -30,7 +31,7 @@
 
 using namespace zuluide::i2c;
 
-I2CServer::I2CServer() : deviceControl(nullptr), isSubscribed(false), devControlSet(false), sendFiles(false), sendNextImage(false), isIterating(false), isPresent(false) {
+I2CServer::I2CServer() : deviceControl(nullptr), isSubscribed(false), devControlSet(false), sendFiles(false), sendNextImage(false), isIterating(false), isPresent(false), remoteMajorVersion(0){
 }
 
 void I2CServer::SetI2c(TwoWire* wireValue) {
@@ -138,6 +139,69 @@ void I2CServer::Poll() {
   uint8_t requestType = wire->read();
 
   switch (requestType) {
+
+
+  case I2C_CLIENT_API_VERSION:
+  {
+    wire->requestFrom(CLIENT_ADDR, 2);
+    uint16_t length = ReadInLength(wire);
+    if (length > 0)
+    {
+      // Client is sending some data.
+      char* buffer = new char[length + 1];
+      memset(buffer, 0, length + 1);
+
+      for (int pos = 0; pos < length;)
+      {
+        int toRecv = pos + BUFFER_LENGTH < length ? BUFFER_LENGTH : length - pos;
+
+        wire->requestFrom(CLIENT_ADDR, toRecv);
+        while (toRecv > 0) {
+          while (wire->available() == 0) { }
+          buffer[pos++] = wire->read();
+          toRecv--;
+        }
+      }
+
+      bool major_version_match = false;
+      if (buffer[0] != '\0')
+      {
+        unsigned long local_major_version;
+        char* period_location = strchr(buffer, '.');
+        if (period_location != NULL)
+        {
+          remoteVersionString = buffer;
+          remoteMajorVersion = strtoul(buffer, &period_location, 10);
+          period_location = strchr(I2C_API_VERSION, '.');
+          if (period_location != NULL)
+          {
+            local_major_version = strtoul(I2C_API_VERSION, &period_location, 10);
+            if (local_major_version > 0 && local_major_version == remoteMajorVersion)
+            {
+              major_version_match = true;
+            }
+          }
+        }
+      }
+
+      if (major_version_match)
+      {
+        dbgmsg("I2C server and client major version match. Client: v",remoteVersionString.c_str()," Server: v", I2C_API_VERSION);
+      }
+      else
+      {
+        if (remoteMajorVersion > 0)
+          logmsg("I2C server (v",I2C_API_VERSION ,") and client major version (v",remoteVersionString.c_str(),") mismatch. Please upgrade both devices to the latest firmware");
+        else
+          logmsg("I2C client failed to send API version I2C server API verion. Please upgrade both devices to the latest firmware");
+
+      }
+      writeLengthPrefacedString(wire, I2C_SERVER_API_VERSION, strlen(I2C_API_VERSION), I2C_API_VERSION);
+      delete[] buffer;
+    }
+    break;
+  }
+
   case I2C_CLIENT_SUBSCRIBE_STATUS_JSON: {
     wire->requestFrom(CLIENT_ADDR, 2);
     if (ReadInLength(wire) != 0) {
@@ -174,10 +238,12 @@ void I2CServer::Poll() {
       }
       if (buffer[0] != '\0')
       {
-        logmsg("Client requested the current image be set to:", buffer);
+        std::string encoded_url = buffer;
+        std::string unencoded_url = UnescapeUrl(encoded_url);
+        logmsg("Client requested the current image be set to:", unencoded_url.c_str());
         mutex_enter_blocking(platform_get_log_mutex());  
         iterator.Reset();
-        bool found_file = iterator.MoveToFile(buffer);
+        bool found_file = iterator.MoveToFile(unencoded_url.c_str());
         zuluide::images::Image toLoad(std::string(), 0);
         toLoad = iterator.Get();
         iterator.Cleanup();
@@ -311,4 +377,22 @@ void I2CServer::SetPassword(std::string &value) {
 
 bool I2CServer::WifiCredentialsSet() {
   return !ssid.empty() && !password.empty();
+}
+
+std::string I2CServer::UnescapeUrl(const std::string& str) {
+    std::string result;
+    for (size_t i = 0; i < str.length(); ++i) {
+        if (str[i] == '%' && i + 2 < str.length()) {
+            if (std::isxdigit(str[i + 1]) && std::isxdigit(str[i + 2])) {
+                char hex[3] = {str[i + 1], str[i + 2], 0};
+                result += static_cast<char>(std::strtol(hex, nullptr, 16));
+                i += 2;
+            } else {
+                result += str[i];
+            }
+        } else {
+            result += str[i];
+        }
+    }
+    return result;
 }
