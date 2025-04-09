@@ -130,6 +130,29 @@ void ide_phy_reset_from_watchdog()
     g_ide_phy.watchdog_error = true;
 }
 
+void ide_phy_print_debug()
+{
+    if (!g_log_debug) return;
+
+    dbgmsg("Transfer running: ", (int)g_ide_phy.transfer_running, " UDMA: ", (int)g_ide_phy.udma_mode);
+    dbgmsg("Core1 requests: ", g_idecomm.requests, " events: ", g_idecomm.events);
+    ide_registers_t regs = g_idecomm.phyregs.regs;
+    dbgmsg("IDE regs:",
+        " STATUS:", regs.status,
+        " CMD:", regs.command,
+        " DEV:", regs.device,
+        " DEVCTRL:", regs.device_control,
+        " ERROR:", regs.error,
+        " FEATURE:", regs.feature,
+        " LBAL:", regs.lba_low,
+        " LBAM:", regs.lba_mid,
+        " LBAH:", regs.lba_high);
+    dbgmsg("IRQReq: ", (int)(g_idecomm.phyregs.state_irqreq != 0),
+           " Datain: ", (int)(g_idecomm.phyregs.state_datain != 0),
+           " Dataout: ", (int)(g_idecomm.phyregs.state_dataout != 0));
+    dbgmsg("GPIO in: ", sio_hw->gpio_in, " out: ", sio_hw->gpio_out, " oe: ", sio_hw->gpio_oe);
+}
+
 ide_event_t ide_phy_get_events()
 {
     uint32_t flags = __atomic_exchange_n(&g_idecomm.events, 0, __ATOMIC_ACQ_REL);

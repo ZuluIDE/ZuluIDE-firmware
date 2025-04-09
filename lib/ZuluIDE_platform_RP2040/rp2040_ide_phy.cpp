@@ -101,6 +101,17 @@ void ide_phy_reset_from_watchdog()
     g_ide_phy.watchdog_error = true;
 }
 
+void ide_phy_print_debug()
+{
+    if (!g_log_debug) return;
+
+    uint8_t status;
+    fpga_rdcmd(FPGA_CMD_READ_STATUS, &status, 1);
+    dbgmsg("Transfer running: ", (int)g_ide_phy.transfer_running,
+           " FPGA status ", status);
+    fpga_dump_ide_regs();
+}
+
 // Poll for new events.
 // Returns IDE_EVENT_NONE if no new events.
 ide_event_t ide_phy_get_events()

@@ -65,6 +65,9 @@ struct ide_phy_config_t {
 // Reset the IDE phy
 void ide_phy_reset(const ide_phy_config_t* config);
 
+// Print debug information to log, called when something goes wrong
+void ide_phy_print_debug();
+
 // Poll for new events.
 // Returns IDE_EVENT_NONE if no new events.
 ide_event_t ide_phy_get_events();

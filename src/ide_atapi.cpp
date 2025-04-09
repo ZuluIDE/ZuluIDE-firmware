@@ -291,6 +291,7 @@ bool IDEATAPIDevice::cmd_identify_packet_device(ide_registers_t *regs)
         if ((uint32_t)(millis() - start) > 10000)
         {
             logmsg("IDEATAPIDevice::cmd_identify_packet_device() response write timeout");
+            ide_phy_print_debug();
             ide_phy_stop_transfers();
             return false;
         }
@@ -355,6 +356,7 @@ bool IDEATAPIDevice::cmd_packet(ide_registers_t *regs)
         if ((uint32_t)(millis() - start) > 10000)
         {
             logmsg("IDEATAPIDevice::cmd_packet() command read timeout");
+            ide_phy_print_debug();
             ide_phy_stop_transfers();
             return false;
         }
@@ -362,6 +364,7 @@ bool IDEATAPIDevice::cmd_packet(ide_registers_t *regs)
         if (ide_phy_is_command_interrupted())
         {
             dbgmsg("IDEATAPIDevice::cmd_packet() interrupted");
+            ide_phy_print_debug();
             ide_phy_stop_transfers();
             return false;
         }
@@ -562,11 +565,13 @@ bool IDEATAPIDevice::atapi_send_data_block(const uint8_t *data, uint16_t blocksi
             if ((uint32_t)(millis() - start) > 10000)
             {
                 logmsg("IDEATAPIDevice::atapi_send_data_block() data write timeout");
+                ide_phy_print_debug();
                 return false;
             }
             if (ide_phy_is_command_interrupted())
             {
                 dbgmsg("IDEATAPIDevice::atapi_send_data_block() interrupted");
+                ide_phy_print_debug();
                 return false;
             }
         }
@@ -587,12 +592,14 @@ bool IDEATAPIDevice::atapi_send_wait_finish()
         if ((uint32_t)(millis() - start) > 10000)
         {
             logmsg("IDEATAPIDevice::atapi_send_wait_finish() data write timeout");
+            ide_phy_print_debug();
             return false;
         }
 
         if (ide_phy_is_command_interrupted())
         {
             dbgmsg("IDEATAPIDevice::atapi_send_wait_finish() interrupted");
+            ide_phy_print_debug();
             return false;
         }
     }
@@ -647,6 +654,7 @@ bool IDEATAPIDevice::atapi_recv_data(uint8_t *data, size_t blocksize, size_t num
             if ((uint32_t)(millis() - start) > 10000)
             {
                 logmsg("IDEATAPIDevice::atapi_recv_data read timeout on block ", (int)(i + 1), "/", (int)num_blocks);
+                ide_phy_print_debug();
                 ide_phy_stop_transfers();
                 return false;
             }
@@ -654,6 +662,7 @@ bool IDEATAPIDevice::atapi_recv_data(uint8_t *data, size_t blocksize, size_t num
             if (ide_phy_is_command_interrupted())
             {
                 dbgmsg("IDEATAPIDevice::atapi_recv_data() interrupted");
+                ide_phy_print_debug();
                 return false;
             }
         }
@@ -694,6 +703,7 @@ bool IDEATAPIDevice::atapi_recv_data_block(uint8_t *data, uint16_t blocksize)
         if ((uint32_t)(millis() - start) > 10000)
         {
             logmsg("IDEATAPIDevice::atapi_recv_data_block(", (int)blocksize, ") read timeout");
+            ide_phy_print_debug();
             ide_phy_stop_transfers();
             return false;
         }
@@ -701,6 +711,7 @@ bool IDEATAPIDevice::atapi_recv_data_block(uint8_t *data, uint16_t blocksize)
         if (ide_phy_is_command_interrupted())
         {
             dbgmsg("IDEATAPIDevice::atapi_recv_data_block() interrupted");
+            ide_phy_print_debug();
             return false;
         }
     }

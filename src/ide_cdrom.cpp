@@ -1399,6 +1399,7 @@ ssize_t IDECDROMDevice::read_callback(const uint8_t *data, size_t blocksize, siz
     if (ide_phy_is_command_interrupted())
     {
         dbgmsg("---- IDECDROMDevice::read_callback interrupted by host, sectors_done ", m_cd_read_format.sectors_done);
+        ide_phy_print_debug();
         return num_blocks;
     }
 
