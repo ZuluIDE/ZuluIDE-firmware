@@ -62,9 +62,11 @@ namespace zuluide::images {
 	Defaults to true.
      **/
     void SetParseMultiPartBinCueSize(bool value);
+    static Image::ImageType InferImageTypeFromImagePrefix(const char* prefix);
   private:
     bool Move(bool forward = true);
     bool FetchSizeFromCueFile();
+    static Image::ImageType inferImageTypeFromFileName(const char* filename);
     FsFile currentFile;
     FsFile root;
     char candidate[MAX_FILE_PATH + 1];
