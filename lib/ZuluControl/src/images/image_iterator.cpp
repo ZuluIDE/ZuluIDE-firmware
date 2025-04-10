@@ -150,7 +150,7 @@ bool ImageIterator::Move(bool forward) {
       return false;
 
     curIdx = matchingIdx;
-    candidateImageType = inferImageTypeFromFileName(candidate);
+    candidateImageType = Image::InferImageTypeFromFileName(candidate);
     return true;
   }
   return false;
@@ -457,43 +457,4 @@ bool ImageIterator::FetchSizeFromCueFile() {
   candidateSizeInBytes = totalSize;
   file.close();
   return true;
-}
-
-Image::ImageType ImageIterator::InferImageTypeFromImagePrefix(const char* prefix) {
-  if (strncasecmp(prefix, "cdrm", sizeof("cdrm")) == 0) {
-    return Image::ImageType::cdrom;
-  } else if (strncasecmp(prefix, "zipd", sizeof("zipd")) == 0) {
-    return Image::ImageType::zip100;
-  } else if (strncasecmp(prefix, "z100", sizeof("z100")) == 0) {
-    return Image::ImageType::zip100;
-  } else if (strncasecmp(prefix, "z250", sizeof("z250")) == 0) {
-    return Image::ImageType::zip250;
-  } else if (strncasecmp(prefix, "remv", sizeof("remv")) == 0) {
-    return Image::ImageType::generic;
-  } else if (strncasecmp(prefix, "hddr", sizeof("hddr")) == 0) {
-    return Image::ImageType::generic;
-  } else {
-    return Image::ImageType::unknown;
-  }
-}
-
-Image::ImageType ImageIterator::inferImageTypeFromFileName(const char *filename) {
-  auto returnValue = Image::ImageType::unknown;
-  auto len = strnlen(filename, MAX_FILE_PATH);
-
-  if (len > 3) {
-    // Check the suffix to see if this is a cd-rom image type extension.
-    if (strncasecmp(filename + len - 4, ".iso", sizeof(".iso")) == 0) {
-      returnValue = Image::ImageType::cdrom;
-    } else {
-      // Check  prefix to see if this uses the ZuluIDE file-prefix format.
-      char *prefix = (char *)calloc(4, sizeof(char));
-      if (prefix) {
-        strncpy(prefix, filename, 4);
-        returnValue = ImageIterator::InferImageTypeFromImagePrefix(prefix);
-      }
-    }
-  }
-
-  return returnValue;
 }

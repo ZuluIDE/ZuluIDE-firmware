@@ -23,6 +23,7 @@
 
 #include <string>
 #include <stdint.h>
+#include <zuluide/ide_drive_type.h>>
 
 namespace zuluide::images {
 
@@ -34,13 +35,14 @@ namespace zuluide::images {
       zip100,
       zip250,
       zip750,
-      generic,  
-      unknown  
+      removable,
+      harddrive,
+      unknown
     };
-    
+
     Image(std::string filename, uint64_t sizeInBytes = 0);
     Image(std::string filename, ImageType imageType, uint64_t sizeInBytes = 0);
-    
+
     const std::string& GetFilename() const;
     ImageType GetImageType();
     bool operator==(const Image& other) const;
@@ -48,11 +50,15 @@ namespace zuluide::images {
 
     std::string ToJson();
     std::string ToJson(const char* fieldName);
-    
+    static drive_type_t ToDriveType(const ImageType toConvert);
+    static const char* GetImagePrefix(const ImageType toConvert);
+    static ImageType InferImageTypeFromImagePrefix(const char* prefix);
+    static ImageType InferImageTypeFromFileName(const char *filename);
+
   private:
     std::string filenm;
     ImageType imgType;
     uint64_t fileSizeBytes;
   };
-  
+
 }

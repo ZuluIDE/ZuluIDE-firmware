@@ -237,41 +237,25 @@ void init_logfile()
 drive_type_t searchForDriveType() {
   zuluide::images::ImageIterator imgIter;
   imgIter.Reset();
-  while(imgIter.MoveNext()) {
+  while (imgIter.MoveNext()) {
     Image image = imgIter.Get();
 
-    switch (image.GetImageType()) {
-        case Image::ImageType::cdrom: {
-            return DRIVE_TYPE_CDROM;
-        }
+    if (image.GetImageType() == Image::ImageType::cdrom) {
+      return DRIVE_TYPE_CDROM;
     }
 
-    auto prefix = image.GetFilename().substr(0,4).c_str();
-    if (strncasecmp(prefix, "cdrm", sizeof("cdrm")) == 0) {
-      g_ide_imagefile.set_prefix(prefix);
-      return DRIVE_TYPE_CDROM;
-    } else if (strncasecmp(prefix, "zipd", sizeof("zipd")) == 0) {
-      g_ide_imagefile.set_prefix(prefix);
-      return DRIVE_TYPE_ZIP100;
-    } else if (strncasecmp(prefix, "z100", sizeof("z100")) == 0) {
-      g_ide_imagefile.set_prefix(prefix);
-      return DRIVE_TYPE_ZIP100;
-    } else if (strncasecmp(prefix, "z250", sizeof("z250")) == 0) {
-      g_ide_imagefile.set_prefix(prefix);
-      return DRIVE_TYPE_ZIP250;
-    } else if (strncasecmp(prefix, "remv", sizeof("remv")) == 0) {
-      g_ide_imagefile.set_prefix(prefix);
-      return DRIVE_TYPE_REMOVABLE;
-    } else if (strncasecmp(prefix, "hddr", sizeof("hddr")) == 0) {
-      g_ide_imagefile.set_prefix(prefix);
-      return DRIVE_TYPE_RIGID;
+    auto imageType = Image::InferImageTypeFromFileName(image.GetFilename().c_str());
+    if (imageType != Image::ImageType::unknown) {
+      imgIter.Cleanup();
+      g_ide_imagefile.set_prefix(Image::GetImagePrefix(imageType));
+      return Image::ToDriveType(imageType);
     }
   }
 
   imgIter.Cleanup();
 
   // If nothing is found, default to a CDROM.
-  return drive_type_t::DRIVE_TYPE_CDROM;
+  return DRIVE_TYPE_CDROM;
 }
 
 /***
