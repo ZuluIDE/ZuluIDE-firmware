@@ -150,6 +150,7 @@ bool ImageIterator::Move(bool forward) {
       return false;
 
     curIdx = matchingIdx;
+    candidateImageType = Image::InferImageTypeFromFileName(candidate);
     return true;
   }
   return false;

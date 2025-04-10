@@ -20,6 +20,8 @@
 **/
 
 #include <zuluide/images/image.h>
+#include <string.h>
+#include <ZuluIDE_config.h>
 
 using namespace zuluide::images;
 
@@ -79,8 +81,12 @@ static const char* toString(Image::ImageType type) {
     return "zip750";
   }
 
-  case Image::ImageType::generic: {
-    return "generic";
+  case Image::ImageType::harddrive: {
+    return "harddrive";
+  }
+
+  case Image::ImageType::removable: {
+    return "removable";
   }
 
   case Image::ImageType::unknown:
@@ -109,3 +115,106 @@ std::string Image::ToJson(const char* fieldName) {
   buffer.append(ToJson());
   return buffer;
 }
+drive_type_t Image::ToDriveType(const Image::ImageType toConvert)
+{
+  switch (toConvert) {
+    case Image::ImageType::cdrom: {
+      return DRIVE_TYPE_CDROM;
+    }
+
+    case Image::ImageType::zip100: {
+      return DRIVE_TYPE_ZIP100;
+    }
+
+    case Image::ImageType::zip250: {
+      return DRIVE_TYPE_ZIP250;
+    }
+
+    case Image::ImageType::removable: {
+      return DRIVE_TYPE_REMOVABLE;
+    }
+
+    case Image::ImageType::harddrive: {
+      return DRIVE_TYPE_RIGID;
+    }
+
+    case Image::ImageType::unknown:
+    default: {
+      // If nothing is found, default to a CDROM.
+      return drive_type_t::DRIVE_TYPE_CDROM;
+    }
+  }
+}
+
+const char* Image::GetImagePrefix(const ImageType toConvert) {
+  switch (toConvert) {
+    case Image::ImageType::cdrom: {
+      return "cdrm";
+    }
+
+    case Image::ImageType::zip100: {
+      return "z100";
+    }
+
+    case Image::ImageType::zip250: {
+      return "z250";
+    }
+
+    case Image::ImageType::zip750: {
+      return "z750";
+    }
+
+    case Image::ImageType::harddrive: {
+      return "hddr";
+    }
+
+    case Image::ImageType::removable: {
+      return "remv";
+    }
+
+    case Image::ImageType::unknown:
+    default: {
+      return "unkn";
+    }
+    }
+}
+
+Image::ImageType Image::InferImageTypeFromImagePrefix(const char* prefix) {
+  if (strncasecmp(prefix, "cdrm", sizeof("cdrm")) == 0) {
+    return Image::ImageType::cdrom;
+  } else if (strncasecmp(prefix, "zipd", sizeof("zipd")) == 0) {
+    return Image::ImageType::zip100;
+  } else if (strncasecmp(prefix, "z100", sizeof("z100")) == 0) {
+    return Image::ImageType::zip100;
+  } else if (strncasecmp(prefix, "z250", sizeof("z250")) == 0) {
+    return Image::ImageType::zip250;
+  } else if (strncasecmp(prefix, "remv", sizeof("remv")) == 0) {
+    return Image::ImageType::removable;
+  } else if (strncasecmp(prefix, "hddr", sizeof("hddr")) == 0) {
+    return Image::ImageType::harddrive;
+  } else {
+    return Image::ImageType::unknown;
+  }
+}
+
+Image::ImageType Image::InferImageTypeFromFileName(const char *filename) {
+  auto returnValue = Image::ImageType::unknown;
+  auto len = strnlen(filename, MAX_FILE_PATH);
+
+  if (len > 3) {
+    // Check the suffix to see if this is a cd-rom image type extension.
+    if (strncasecmp(filename + len - 4, ".iso", sizeof(".iso")) == 0) {
+      returnValue = Image::ImageType::cdrom;
+    } else {
+      // Check  prefix to see if this uses the ZuluIDE file-prefix format.
+      char *prefix = (char *)calloc(4, sizeof(char));
+      if (prefix) {
+        strncpy(prefix, filename, 4);
+        returnValue = Image::InferImageTypeFromImagePrefix(prefix);
+      }
+    }
+  }
+
+  return returnValue;
+}
+
