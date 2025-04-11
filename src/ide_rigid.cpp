@@ -150,6 +150,7 @@ bool IDERigidDevice::handle_command(ide_registers_t *regs)
         case IDE_CMD_SET_FEATURES: return cmd_set_features(regs);
         case IDE_CMD_READ_DMA: return cmd_read(regs, true, false);
         case IDE_CMD_WRITE_DMA: return cmd_write(regs, true);
+        case IDE_CMD_READ_SECTORS_WOUT_RETRIES:
         case IDE_CMD_READ_SECTORS: return cmd_read(regs, false, false);
         case IDE_CMD_READ_VERIFY_SECTORS: return cmd_read(regs, false, true);
         case IDE_CMD_WRITE_SECTORS: return cmd_write(regs, false);
