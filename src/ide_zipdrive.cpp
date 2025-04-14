@@ -28,9 +28,13 @@
 #include <string.h>
 #include <strings.h>
 #include <minIni.h>
+#include <zuluide/images/image_iterator.h>
+#include <status/status_controller.h>
 
 #define ZIP100_SECTORSIZE 512
 #define ZIP100_SECTORCOUNT 196608
+
+extern zuluide::status::StatusController g_StatusController;
 
 void IDEZipDrive::initialize(int devidx)
 {
@@ -84,12 +88,75 @@ bool IDEZipDrive::handle_command(ide_registers_t *regs)
     }
 }
 
+void IDEZipDrive::eject_media()
+{
+    char filename[MAX_FILE_PATH+1];
+    if (m_image && m_image->get_image_name(filename, sizeof(filename)))
+        logmsg("Device ejecting media: \"", filename, "\"");
+    else
+        logmsg("Eject requested, no media to eject");
+    g_StatusController.SetIsCardPresent(false);
+    m_removable.ejected = true;
+}
+
+
 void IDEZipDrive::button_eject_media()
 {
     if (m_removable.prevent_removable)
         m_zip_disk_info.button_pressed = true;
     else
         eject_media();
+}
+
+
+void IDEZipDrive::insert_media(IDEImage *image)
+{
+    zuluide::images::ImageIterator img_iterator;
+    char filename[MAX_FILE_PATH+1];
+
+    img_iterator.Reset();
+    if (!img_iterator.IsEmpty())
+    {
+        if (image && image->get_image_name(filename, sizeof(filename)))
+        {
+            if (!img_iterator.MoveToFile(filename))
+                img_iterator.MoveNext();
+        }
+        else
+            img_iterator.MoveNext();
+
+        g_ide_imagefile.clear();
+        if (g_ide_imagefile.open_file(img_iterator.Get().GetFilename().c_str()))
+        {
+            logmsg("-- Device loading media: \"", img_iterator.Get().GetFilename().c_str(), "\"");
+            m_removable.ejected = false;
+            set_image(&g_ide_imagefile);
+            m_atapi_state.unit_attention = true;
+            m_atapi_state.sense_asc = ATAPI_ASC_MEDIUM_CHANGE;
+            set_not_ready(true);
+        }
+    }
+        img_iterator.Cleanup();
+}
+
+bool IDEZipDrive::set_load_deferred(const char* image_name)
+{
+    if (!m_removable.ignore_prevent_removal && m_removable.prevent_removable)
+    {
+        dbgmsg("Loading file deferred, host is preventing media from being ejected: \"", image_name, "\"");
+        strncpy(m_removable.deferred_image_name, image_name, sizeof(m_removable.deferred_image_name) - 1);
+        m_removable.is_load_deferred = true;
+        g_StatusController.SetIsDeferred(true);
+        m_zip_disk_info.button_pressed = true;
+        return true;
+    }
+    return false;
+}
+
+
+bool IDEZipDrive::is_load_deferred()
+{
+    return m_removable.is_load_deferred;
 }
 
 bool IDEZipDrive::cmd_set_features(ide_registers_t *regs)
@@ -449,6 +516,58 @@ bool IDEZipDrive::atapi_inquiry(const uint8_t *cmd)
     }
 
     return atapi_cmd_ok();
+}
+
+bool IDEZipDrive::atapi_start_stop_unit(const uint8_t *cmd)
+{
+    uint8_t cmd_eject = *(cmd + ATAPI_START_STOP_EJT_OFFSET);
+    if ((ATAPI_START_STOP_PWR_CON_MASK & cmd_eject) == 0 &&
+        (ATAPI_START_STOP_LOEJ & cmd_eject) != 0)
+    {
+        // Eject condition
+        if ((ATAPI_START_STOP_START & cmd_eject) == 0)
+        {
+            if (m_removable.prevent_removable)
+            {
+                if (is_medium_present())
+                    return atapi_cmd_error(ATAPI_SENSE_ILLEGAL_REQ, ATAPI_ASC_MEDIUM_REMOVAL_PREVENTED);
+                else
+                    return atapi_cmd_error(ATAPI_SENSE_NOT_READY, ATAPI_ASC_MEDIUM_REMOVAL_PREVENTED);
+            }
+            else
+            {
+                if (m_removable.is_load_deferred && m_image)
+                {
+                    if (m_removable.deferred_image_name[0] != '\0')
+                    {
+                        g_ide_imagefile.clear();
+                        g_ide_imagefile.open_file(m_removable.deferred_image_name);
+                        m_removable.is_load_deferred = false;
+                        g_StatusController.SetIsDeferred(false);
+                        insert_media(&g_ide_imagefile);
+                    }
+                    else
+                    {
+                        g_StatusController.SetIsDeferred(false);
+                        m_removable.is_load_deferred = false;
+                        m_zip_disk_info.button_pressed = false;
+                        eject_media();
+                    }
+                }
+                else
+                {
+                    eject_media();
+                }
+            }
+        }
+        // Load condition
+        else
+        {
+            insert_next_media(m_image);
+        }
+    }
+    return atapi_cmd_ok();
+
 }
 
 bool IDEZipDrive::atapi_zip_disk_0x06(const uint8_t *cmd)

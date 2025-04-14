@@ -21,21 +21,15 @@
 
 #pragma once
 
-#include "base_state.h"
+#include "widget.h"
+#include "scrolling_text.h"
 
-namespace zuluide::control {
-
-  class MenuState : public BaseState {
+namespace zuluide {
+  class EjectPreventedWidget : public Widget {
   public:
-    enum class Entry { Eject, Select, Back, Info };
-    MenuState (Entry value = Entry::Eject);
-    MenuState (const MenuState& src);
-    Entry GetCurrentEntry () const;
-    void MoveToNextEntry();
-    void MoveToPreviousEntry();
-    MenuState& operator=(const MenuState& src);
+    EjectPreventedWidget(Adafruit_SSD1306 *graph, Rectangle bounds, Size charBounds);
+    virtual void Display ();
   private:
-    Entry currentEntry;
+    Size charBounds;
   };
-  
 }

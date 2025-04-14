@@ -83,4 +83,3 @@ void MenuState::MoveToPreviousEntry() {
   }
   }
 }
-

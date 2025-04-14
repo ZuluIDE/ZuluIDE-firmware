@@ -797,13 +797,9 @@ bool IDEATAPIDevice::atapi_cmd_ok()
 
 bool IDEATAPIDevice::atapi_test_unit_ready(const uint8_t *cmd)
 {
-    if (m_devinfo.removable && m_removable.ejected)
+    if (m_devinfo.removable && m_removable.ejected && m_removable.reinsert_media_after_eject && check_time_after_eject())
     {
-        if (m_removable.reinsert_media_after_eject && check_time_after_eject())
-        {
-            insert_next_media(m_image);
-        }
-        return atapi_cmd_not_ready_error();
+        insert_next_media(m_image);
     }
     else if (!has_image())
     {
@@ -872,6 +868,7 @@ bool IDEATAPIDevice::atapi_prevent_allow_removal(const uint8_t *cmd)
 
         // We can't actually prevent SD card from being removed
         dbgmsg("-- Host requested prevent=", (int)m_removable.prevent_removable, " persistent=", (int)m_removable.prevent_persistent);
+        g_StatusController.SetIsPreventRemovable(m_removable.prevent_removable);
     }
     return atapi_cmd_ok();
 }
