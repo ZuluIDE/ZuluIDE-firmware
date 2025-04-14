@@ -47,10 +47,6 @@ static struct {
     int udma_mode;
     volatile bool watchdog_error;
 
-    int crc_errors;
-    uint32_t block_crc0;
-    uint32_t block_crc1;
-
     uint32_t bufferidx; // Index of next buffer in g_idebuffers to use
 } g_ide_phy;
 
@@ -62,7 +58,7 @@ static ide_phy_capabilities_t g_ide_phy_capabilities = {
     .min_pio_cycletime_no_iordy = 240,
     .min_pio_cycletime_with_iordy = 180,
 
-    .max_udma_mode = -1,
+    .max_udma_mode = 0,
 };
 
 static void ide_phy_post_request(uint32_t request)
@@ -210,8 +206,9 @@ void ide_phy_set_regs(const ide_registers_t *regs)
 
 void ide_phy_start_write(uint32_t blocklen, int udma_mode)
 {
-    assert(udma_mode < 0); // TODO: Implement UDMA
+    g_idecomm.udma_mode = udma_mode;
     g_idecomm.datablocksize = blocklen;
+    g_idecomm.udma_checksum_errors = 0;
 
     // Actual write is started when first block is written
 }
@@ -229,18 +226,37 @@ void ide_phy_write_block(const uint8_t *buf, uint32_t blocklen)
 
     // Copy data to a block that remains valid for duration of transfer
     // Data must be aligned so that it ends at the end of the block.
-    // We also need 16 bit -> 32 bit padding.
+    // We also need 16 bit -> 32 bit padding for PIO
     uint8_t *block = g_idebuffers[g_ide_phy.bufferidx++ % IDECOMM_BUFFERCOUNT];
     block += IDECOMM_MAX_BLOCKSIZE - blocklen * 2;
 
-    const uint16_t *src = (const uint16_t*)buf;
-    uint32_t *dst = (uint32_t*)block;
-    for (int i = 0; i < blocklen / 2; i++)
+    if (g_idecomm.udma_mode < 0)
     {
-        *dst++ = (*src++) | IDECOMM_DATA_PATTERN;
+        // PIO data requires special formatting
+        const uint16_t *src = (const uint16_t*)buf;
+        uint32_t *dst = (uint32_t*)block;
+        uint32_t count = blocklen / 2;
+        while (count >= 4)
+        {
+            *dst++ = IDECOMM_DATAFORMAT_PIO(*src++);
+            *dst++ = IDECOMM_DATAFORMAT_PIO(*src++);
+            *dst++ = IDECOMM_DATAFORMAT_PIO(*src++);
+            *dst++ = IDECOMM_DATAFORMAT_PIO(*src++);
+            count -= 4;
+        }
+        while (count > 0)
+        {
+            *dst++ = IDECOMM_DATAFORMAT_PIO(*src++);
+            count--;
+        }
+    }
+    else
+    {
+        // UDMA data can be copied directly
+        memcpy(block, buf, blocklen);
     }
 
-    // dbgmsg("Write block ptr ", (uint32_t)block, " length ", (int)blocklen);
+    dbgmsg("Write block ptr ", (uint32_t)block, " length ", (int)blocklen, " udma ", g_idecomm.udma_mode);
 
     // Give the transmit pointer to core 1
     sio_hw->fifo_wr = (uint32_t)block;
@@ -275,7 +291,7 @@ static void data_out_give_next_block()
 
 void ide_phy_start_read(uint32_t blocklen, int udma_mode)
 {
-    assert(udma_mode < 0); // TODO: Implement UDMA
+    g_idecomm.udma_mode = udma_mode;
     g_idecomm.datablocksize = blocklen;
 
     data_out_give_next_block();
@@ -329,6 +345,8 @@ void ide_phy_stop_transfers(int *crc_errors)
     {
         (void)sio_hw->fifo_rd;
     }
+
+    if (*crc_errors) *crc_errors = g_idecomm.udma_checksum_errors;
 }
 
 void ide_phy_assert_irq(uint8_t ide_status)

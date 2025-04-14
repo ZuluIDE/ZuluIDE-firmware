@@ -95,9 +95,9 @@ SECTIONS
     .core1 : {
         __core1_load_start__ = .;
         KEEP(*(.core1.vectors))
-        KEEP(*:*rp2350_core1_register_access*(.text .text*))
-        KEEP(*:*rp2350_core1_register_access*(.data*))
-        KEEP(*:*rp2350_core1_register_access*(.bss*))
+        KEEP(*:*rp2350_core1_*(.text .text*))
+        KEEP(*:*rp2350_core1_*(.data*))
+        KEEP(*:*rp2350_core1_*(.bss*))
         KEEP(*(.text.core1*))
         __core1_load_end__ = .;
     } > RAM_CORE1_CODE AT >FLASH

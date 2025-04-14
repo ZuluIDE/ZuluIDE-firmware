@@ -60,6 +60,14 @@ extern struct idecomm_t {
     // Request flags set by core0, cleared by core1
     // Core1 should be waken up by setting IRQ7 in PIO0.
     uint32_t requests;
+
+    // UDMA mode must be set before START_DATAIN/DATAOUT request and
+    // not changed until transfer is done.
+    // If set to -1, PIO data transfer is used.
+    int udma_mode;
+
+    // Number of UDMA checksum errors
+    int udma_checksum_errors;
 } g_idecomm;
 
 #define IDE_PIO                pio0
@@ -78,6 +86,7 @@ extern struct idecomm_t {
 #define IDECOMM_MAX_BLOCK_PAYLOAD 4096
 #define IDECOMM_BUFFERCOUNT 8
 #define IDECOMM_DATA_PATTERN 0x80060000
+#define IDECOMM_DATAFORMAT_PIO(x) ((x) | IDECOMM_DATA_PATTERN)
 extern uint8_t g_idebuffers[IDECOMM_BUFFERCOUNT][IDECOMM_MAX_BLOCKSIZE];
 
 void zuluide_rp2350b_core1_run();
