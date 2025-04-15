@@ -50,9 +50,9 @@ void IDEATAPIDevice::initialize(int devidx)
     m_removable.reinsert_media_after_eject = ini_getbool("IDE", "reinsert_media_after_eject", true, CONFIGFILE);
     m_removable.reinsert_media_on_inquiry = ini_getbool("IDE", "reinsert_media_on_inquiry", true, CONFIGFILE);
     m_removable.reinsert_media_after_sd_insert = ini_getbool("IDE", "reinsert_media_on_sd_insert", true, CONFIGFILE);
-    m_removable.ignore_prevent_removal = ini_getbool("IDE", "ignore_prevent_removal", false, CONFIGFILE);
-    if (m_removable.ignore_prevent_removal)
-        logmsg("Ignoring host from preventing removal of media");
+    m_removable.ignore_prevent_removal = ini_getbool("IDE", "ignore_prevent_removal", true, CONFIGFILE);
+    if (m_devinfo.removable && !m_removable.ignore_prevent_removal)
+        logmsg("Respecting host preventing removal of media");
     memset(&m_atapi_state, 0, sizeof(m_atapi_state));
     IDEDevice::initialize(devidx);
 }
@@ -797,7 +797,7 @@ bool IDEATAPIDevice::atapi_cmd_ok()
 
 bool IDEATAPIDevice::atapi_test_unit_ready(const uint8_t *cmd)
 {
-    if (m_devinfo.removable && m_removable.ejected && m_removable.reinsert_media_after_eject && check_time_after_eject())
+    if (m_devinfo.removable && m_removable.ejected && m_removable.reinsert_media_after_eject)
     {
         insert_next_media(m_image);
     }
@@ -857,17 +857,12 @@ bool IDEATAPIDevice::atapi_load_unload_medium(const uint8_t *cmd)
 
 bool IDEATAPIDevice::atapi_prevent_allow_removal(const uint8_t *cmd)
 {
-    if (m_removable.ignore_prevent_removal)
-    {
-        dbgmsg("-- Ignoring host request to change prevent removable via ini file setting");
-    }
-    else
-    {
-        m_removable.prevent_removable = cmd[4] & 1;
-        m_removable.prevent_persistent = cmd[4] & 2;
+    m_removable.prevent_removable = cmd[4] & 1;
+    m_removable.prevent_persistent = cmd[4] & 2;
+    dbgmsg("-- Host requested prevent=", (int)m_removable.prevent_removable, " persistent=", (int)m_removable.prevent_persistent);
 
-        // We can't actually prevent SD card from being removed
-        dbgmsg("-- Host requested prevent=", (int)m_removable.prevent_removable, " persistent=", (int)m_removable.prevent_persistent);
+    if (!m_removable.ignore_prevent_removal)
+    {
         g_StatusController.SetIsPreventRemovable(m_removable.prevent_removable);
     }
     return atapi_cmd_ok();
@@ -889,7 +884,7 @@ bool IDEATAPIDevice::atapi_inquiry(const uint8_t *cmd)
     if (req_bytes < count) count = req_bytes;
     atapi_send_data(inquiry, count);
 
-    if (m_removable.reinsert_media_on_inquiry && check_time_after_eject())
+    if (m_removable.reinsert_media_on_inquiry)
     {
         insert_next_media(m_image);
     }
@@ -1354,7 +1349,7 @@ void IDEATAPIDevice::eject_button_poll(bool immediate)
 
 void IDEATAPIDevice::button_eject_media()
 {
-    if (!m_removable.prevent_removable)
+    if (!m_removable.prevent_removable || m_removable.ignore_prevent_removal)
         eject_media();
     else
         dbgmsg("Attempted to eject media but host has set drive to prevent removable");
@@ -1362,22 +1357,22 @@ void IDEATAPIDevice::button_eject_media()
 
 void IDEATAPIDevice::eject_media()
 {
-    if (m_image)
-    {
-        char filename[MAX_FILE_PATH+1];
-        m_image->get_image_name(filename, sizeof(filename));
-        logmsg("Device ejecting media: \"", filename, "\"");
-    }
-    else
-    {
-        logmsg("Device ejecting media, image already cleared");
-    }
-
     if (!m_removable.ejected)
     {
+        if (m_image)
+        {
+            char filename[MAX_FILE_PATH+1];
+            m_image->get_image_name(filename, sizeof(filename));
+            logmsg("Device ejecting media: \"", filename, "\"");
+        }
+        else
+        {
+            logmsg("Device ejecting media, image already cleared");
+        }
         m_removable.ejected = true;
-        m_removable.eject_time = millis();
     }
+    else
+        dbgmsg("---- Eject request ignored or delayed");
 }
 
 void IDEATAPIDevice::insert_media(IDEImage *image)
@@ -1493,9 +1488,4 @@ void IDEATAPIDevice::set_not_ready(bool not_ready)
 {
     if (ini_getbool("IDE", "set_not_ready_on_insert", 0, CONFIGFILE))
         m_atapi_state.not_ready = not_ready;
-}
-
-bool IDEATAPIDevice::check_time_after_eject()
-{
-    return ((uint32_t)(millis() - m_removable.eject_time)) > 500;
 }

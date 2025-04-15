@@ -136,6 +136,7 @@ protected:
         bool prevent_removable;
         bool prevent_persistent;
         bool ignore_prevent_removal;
+        bool receiving_event_status_notifications;
         uint32_t eject_time;
         bool is_load_deferred;
         char deferred_image_name[MAX_FILE_PATH+1];
@@ -222,6 +223,4 @@ protected:
     // Set not ready if enabled via config ini
     virtual void set_not_ready(bool not_ready);
 
-    // Wait a moment after ejection before reinsertion
-    bool check_time_after_eject();
 };
