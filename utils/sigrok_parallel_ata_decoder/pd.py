@@ -442,7 +442,7 @@ class Decoder(srd.Decoder):
             ior = pins[Pins.IOR]
             data = bitpack(pins[Pins.D0:Pins.D16])
 
-            if not ior and not iow and pins[Pins.DATA_SEL] is not None:
+            if not ior and not iow and 1 not in pins[0:Pins.D16]:
                 start = self.samplenum
 
                 while not pins[Pins.IOW] and not pins[Pins.IOR]:
@@ -476,7 +476,7 @@ class Decoder(srd.Decoder):
 
                 while not pins[Pins.IOW]:
                     prev_pins = pins
-                    pins = self.wait(wait_conditions)
+                    pins = self.wait()
 
                 self.handle_write(start, self.samplenum, prev_pins)
 
@@ -485,7 +485,7 @@ class Decoder(srd.Decoder):
 
                 while not pins[Pins.IOR]:
                     prev_pins = pins
-                    pins = self.wait(wait_conditions)
+                    pins = self.wait()
 
                 self.handle_read(start, self.samplenum, prev_pins)
 
