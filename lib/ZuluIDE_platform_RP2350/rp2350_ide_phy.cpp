@@ -156,6 +156,7 @@ ide_event_t ide_phy_get_events()
     if (flags & CORE1_EVT_CMD_RECEIVED)
     {
         // dbgmsg("IDE_EVENT_CMD, status ", g_idecomm.phyregs.regs.status);
+        g_idecomm.udma_mode = -1; // For ATAPI packets
         return IDE_EVENT_CMD;
     }
     else if (flags & CORE1_EVT_HWRST)
@@ -293,6 +294,7 @@ void ide_phy_start_read(uint32_t blocklen, int udma_mode)
 {
     g_idecomm.udma_mode = udma_mode;
     g_idecomm.datablocksize = blocklen;
+    g_idecomm.udma_checksum_errors = 0;
 
     data_out_give_next_block();
 }
@@ -318,13 +320,23 @@ void ide_phy_read_block(uint8_t *buf, uint32_t blocklen, bool continue_transfer)
     assert(sio_hw->fifo_st & SIO_FIFO_ST_VLD_BITS);
     const uint32_t *rxbuf = (const uint32_t*)sio_hw->fifo_rd;
 
-    // Narrowing conversion from 32 bits
-    uint16_t *dst = (uint16_t*)buf;
-    for (int i = 0; i < blocklen / 2; i++)
+    if (g_idecomm.udma_mode < 0)
     {
-        *dst++ = *rxbuf++;
+        // TODO: unroll
+        // Narrowing conversion from 32 bits
+        uint16_t *dst = (uint16_t*)buf;
+        for (int i = 0; i < blocklen / 2; i++)
+        {
+            *dst++ = *rxbuf++;
+        }
+    }
+    else
+    {
+        // UDMA data can be copied directly
+        memcpy(buf, rxbuf, blocklen);
     }
 
+    // TODO: Move this earlier for better performance
     if (continue_transfer)
     {
         data_out_give_next_block();
