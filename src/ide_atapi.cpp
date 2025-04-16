@@ -624,7 +624,13 @@ bool IDEATAPIDevice::atapi_recv_data(uint8_t *data, size_t blocksize, size_t num
         ide_phy_read_block(data + blocksize * i, blocksize, continue_transfer);
     }
 
-    ide_phy_stop_transfers();
+    ide_phy_stop_transfers(&m_atapi_state.crc_errors);
+    if (m_atapi_state.crc_errors > 0)
+    {
+        // Return false to stop writing incorrect data to drive
+        logmsg("IDEATAPIDevice::atapi_recv_data UDMA checksum errors: ", (int)m_atapi_state.crc_errors);
+        return false;
+    }
     return true;
 }
 
@@ -661,7 +667,14 @@ bool IDEATAPIDevice::atapi_recv_data_block(uint8_t *data, uint16_t blocksize)
     }
 
     ide_phy_read_block(data, blocksize);
-    ide_phy_stop_transfers();
+
+    ide_phy_stop_transfers(&m_atapi_state.crc_errors);
+    if (m_atapi_state.crc_errors > 0)
+    {
+        // Return false to stop writing incorrect data to drive
+        logmsg("IDEATAPIDevice::atapi_recv_data UDMA checksum errors: ", (int)m_atapi_state.crc_errors);
+        return false;
+    }
     return true;
 }
 
