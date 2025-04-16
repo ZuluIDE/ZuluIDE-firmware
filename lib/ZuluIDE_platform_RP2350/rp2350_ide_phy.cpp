@@ -257,7 +257,7 @@ void ide_phy_write_block(const uint8_t *buf, uint32_t blocklen)
         memcpy(block, buf, blocklen);
     }
 
-    dbgmsg("Write block ptr ", (uint32_t)block, " length ", (int)blocklen, " udma ", g_idecomm.udma_mode);
+    // dbgmsg("Write block ptr ", (uint32_t)block, " length ", (int)blocklen, " udma ", g_idecomm.udma_mode);
 
     // Give the transmit pointer to core 1
     sio_hw->fifo_wr = (uint32_t)block;
@@ -320,6 +320,12 @@ void ide_phy_read_block(uint8_t *buf, uint32_t blocklen, bool continue_transfer)
     assert(sio_hw->fifo_st & SIO_FIFO_ST_VLD_BITS);
     const uint32_t *rxbuf = (const uint32_t*)sio_hw->fifo_rd;
 
+    if (continue_transfer)
+    {
+        // Next block reception can be started immediately
+        data_out_give_next_block();
+    }
+
     if (g_idecomm.udma_mode < 0)
     {
         // TODO: unroll
@@ -334,12 +340,6 @@ void ide_phy_read_block(uint8_t *buf, uint32_t blocklen, bool continue_transfer)
     {
         // UDMA data can be copied directly
         memcpy(buf, rxbuf, blocklen);
-    }
-
-    // TODO: Move this earlier for better performance
-    if (continue_transfer)
-    {
-        data_out_give_next_block();
     }
 }
 
