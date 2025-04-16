@@ -48,6 +48,7 @@
 #include "ZuluIDE_platform_gpio.h"
 #include "rp2350_sniffer.h"
 #include <zuluide_rp2350b_core1.h>
+#include <sdio_rp2350.h>
 // #include "display/display_ssd1306.h"
 // #include "rotary_control.h"
 // #include <zuluide/i2c/i2c_server.h>
@@ -954,3 +955,15 @@ extern "C" void runtime_init_per_core_bootrom_reset()
 }
 
 #endif
+
+// These functions are not used for SDIO mode but are needed to avoid build error.
+void sdCsInit(SdCsPin_t pin) {}
+void sdCsWrite(SdCsPin_t pin, bool level) {}
+
+// SDIO configuration for main program
+SdioConfig g_sd_sdio_config(DMA_SDIO);
+
+void platform_set_sd_callback(sd_callback_t func, const uint8_t *buffer)
+{
+    rp2350_sdio_sdfat_set_callback(func, buffer);
+}
