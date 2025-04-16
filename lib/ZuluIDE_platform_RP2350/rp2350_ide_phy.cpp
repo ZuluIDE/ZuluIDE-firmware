@@ -67,6 +67,11 @@ static void ide_phy_post_request(uint32_t request)
     IDE_PIO->irq_force = (1 << IDE_CORE1_WAKEUP_IRQ);
 }
 
+static void ide_phy_clear_event(uint32_t event)
+{
+    __atomic_fetch_and(&g_idecomm.events, ~event, __ATOMIC_ACQ_REL);
+}
+
 void core1_log_poll();
 
 void ide_phy_reset(const ide_phy_config_t* config)
@@ -151,16 +156,11 @@ void ide_phy_print_debug()
 
 ide_event_t ide_phy_get_events()
 {
-    uint32_t flags = __atomic_exchange_n(&g_idecomm.events, 0, __ATOMIC_ACQ_REL);
+    uint32_t flags = g_idecomm.events;
 
-    if (flags & CORE1_EVT_CMD_RECEIVED)
+    if (flags & CORE1_EVT_HWRST)
     {
-        // dbgmsg("IDE_EVENT_CMD, status ", g_idecomm.phyregs.regs.status);
-        g_idecomm.udma_mode = -1; // For ATAPI packets
-        return IDE_EVENT_CMD;
-    }
-    else if (flags & CORE1_EVT_HWRST)
-    {
+        ide_phy_clear_event(CORE1_EVT_HWRST);
         delay(1);
         if (g_idecomm.events & CORE1_EVT_HWRST)
         {
@@ -175,7 +175,20 @@ ide_event_t ide_phy_get_events()
     else if (flags & CORE1_EVT_SWRST)
     {
         // Software reset
+        ide_phy_clear_event(CORE1_EVT_SWRST);
         return IDE_EVENT_SWRST;
+    }
+    else if (flags & CORE1_EVT_CMD_RECEIVED)
+    {
+        // dbgmsg("IDE_EVENT_CMD, status ", g_idecomm.phyregs.regs.status);
+        ide_phy_clear_event(CORE1_EVT_CMD_RECEIVED);
+        g_idecomm.udma_mode = -1; // For ATAPI packets
+        return IDE_EVENT_CMD;
+    }
+    else if (flags & CORE1_EVT_DATA_DONE)
+    {
+        ide_phy_clear_event(CORE1_EVT_DATA_DONE);
+        return IDE_EVENT_DATA_TRANSFER_DONE;
     }
 
     return IDE_EVENT_NONE;
@@ -199,14 +212,12 @@ void ide_phy_set_regs(const ide_registers_t *regs)
 
     ide_phy_post_request(CORE1_REQ_SET_REGS);
     // dbgmsg("SET_REGS, status ", regs->status, " error ", regs->error, " lba_high ", regs->lba_high, " data_in ", (int)g_idecomm.phyregs.state_datain);
-
-    delay(2);
-    phy_ide_registers_t phyregs = g_idecomm.phyregs;
-    // dbgmsg("READBACK status ", phyregs.regs.status, " error ", phyregs.regs.error, " lba_high ", phyregs.regs.lba_high, " data_in ", (int)phyregs.state_datain);
 }
 
 void ide_phy_start_write(uint32_t blocklen, int udma_mode)
 {
+    if (blocklen & 1) blocklen++;
+
     g_idecomm.udma_mode = udma_mode;
     g_idecomm.datablocksize = blocklen;
     g_idecomm.udma_checksum_errors = 0;
@@ -221,9 +232,10 @@ bool ide_phy_can_write_block()
 
 void ide_phy_write_block(const uint8_t *buf, uint32_t blocklen)
 {
+    if (blocklen & 1) blocklen++;
+
     assert(blocklen == g_idecomm.datablocksize);
     assert(sio_hw->fifo_st & SIO_FIFO_ST_RDY_BITS);
-    assert((blocklen & 1) == 0);
 
     // Copy data to a block that remains valid for duration of transfer
     // Data must be aligned so that it ends at the end of the block.
@@ -259,6 +271,8 @@ void ide_phy_write_block(const uint8_t *buf, uint32_t blocklen)
 
     // dbgmsg("Write block ptr ", (uint32_t)block, " length ", (int)blocklen, " udma ", g_idecomm.udma_mode);
 
+    ide_phy_clear_event(CORE1_EVT_DATA_DONE);
+
     // Give the transmit pointer to core 1
     sio_hw->fifo_wr = (uint32_t)block;
 
@@ -270,10 +284,7 @@ bool ide_phy_is_write_finished()
     if (g_idecomm.phyregs.state_datain)
         return false; // Still in progress
 
-    if (g_idecomm.requests & CORE1_REQ_START_DATAIN)
-        return false; // Not even started yet
-
-    return true;
+    return g_idecomm.events & CORE1_EVT_DATA_DONE;
 }
 
 static void data_out_give_next_block()
@@ -292,6 +303,8 @@ static void data_out_give_next_block()
 
 void ide_phy_start_read(uint32_t blocklen, int udma_mode)
 {
+    if (blocklen & 1) blocklen++;
+
     g_idecomm.udma_mode = udma_mode;
     g_idecomm.datablocksize = blocklen;
     g_idecomm.udma_checksum_errors = 0;
@@ -316,7 +329,9 @@ void ide_phy_start_read_buffer(uint32_t blocklen)
 
 void ide_phy_read_block(uint8_t *buf, uint32_t blocklen, bool continue_transfer)
 {
-    assert(blocklen == g_idecomm.datablocksize);
+    uint32_t blocklen_even = blocklen;
+    if (blocklen & 1) blocklen_even++;
+    assert(blocklen_even == g_idecomm.datablocksize);
     assert(sio_hw->fifo_st & SIO_FIFO_ST_VLD_BITS);
     const uint32_t *rxbuf = (const uint32_t*)sio_hw->fifo_rd;
 
@@ -350,6 +365,7 @@ void ide_phy_ata_read_block(uint8_t *buf, uint32_t blocklen, bool continue_trans
 void ide_phy_stop_transfers(int *crc_errors)
 {
     ide_phy_post_request(CORE1_REQ_STOP_TRANSFERS);
+    ide_phy_clear_event(CORE1_EVT_DATA_DONE);
     g_idecomm.datablocksize = 0;
 
     // Drain FIFO
@@ -358,7 +374,7 @@ void ide_phy_stop_transfers(int *crc_errors)
         (void)sio_hw->fifo_rd;
     }
 
-    if (*crc_errors) *crc_errors = g_idecomm.udma_checksum_errors;
+    if (crc_errors) *crc_errors = g_idecomm.udma_checksum_errors;
 }
 
 void ide_phy_assert_irq(uint8_t ide_status)

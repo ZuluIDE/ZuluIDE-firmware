@@ -16,6 +16,7 @@
 #define CORE1_EVT_CMD_RECEIVED      0x0001
 #define CORE1_EVT_HWRST             0x0002
 #define CORE1_EVT_SWRST             0x0004
+#define CORE1_EVT_DATA_DONE         0x0008
 
 // Requests are written by core0 to g_idecomm.requests
 #define CORE1_REQ_SET_REGS          0x0001
