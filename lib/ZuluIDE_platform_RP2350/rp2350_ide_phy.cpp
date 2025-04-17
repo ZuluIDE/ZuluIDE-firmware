@@ -44,6 +44,7 @@
 static struct {
     ide_phy_config_t config;
     bool transfer_running;
+    uint32_t transfer_block_start_time;
     int udma_mode;
     volatile bool watchdog_error;
 
@@ -196,7 +197,7 @@ ide_event_t ide_phy_get_events()
 
 bool ide_phy_is_command_interrupted()
 {
-    return (g_idecomm.events & (CORE1_EVT_CMD_RECEIVED | CORE1_EVT_HWRST | CORE1_EVT_SWRST));
+    return g_ide_phy.watchdog_error || (g_idecomm.events & (CORE1_EVT_CMD_RECEIVED | CORE1_EVT_HWRST | CORE1_EVT_SWRST));
 }
 
 void ide_phy_get_regs(ide_registers_t *regs)
@@ -277,6 +278,7 @@ void ide_phy_write_block(const uint8_t *buf, uint32_t blocklen)
     sio_hw->fifo_wr = (uint32_t)block;
 
     ide_phy_post_request(CORE1_REQ_START_DATAIN);
+    g_ide_phy.transfer_block_start_time = millis();
 }
 
 bool ide_phy_is_write_finished()
@@ -284,7 +286,14 @@ bool ide_phy_is_write_finished()
     if (g_idecomm.phyregs.state_datain)
         return false; // Still in progress
 
-    return g_idecomm.events & CORE1_EVT_DATA_DONE;
+    if ((uint32_t)(millis() - g_ide_phy.transfer_block_start_time) < 5)
+    {
+        // The transfer might still be starting, check for done event
+        // instead of trusting the progress status.
+        return g_idecomm.events & CORE1_EVT_DATA_DONE;
+    }
+
+    return true; // Transfer is no longer in progress
 }
 
 static void data_out_give_next_block()
@@ -299,6 +308,7 @@ static void data_out_give_next_block()
     sio_hw->fifo_wr = (uint32_t)block;
 
     ide_phy_post_request(CORE1_REQ_START_DATAOUT);
+    g_ide_phy.transfer_block_start_time = millis();
 }
 
 void ide_phy_start_read(uint32_t blocklen, int udma_mode)
@@ -319,7 +329,18 @@ void ide_phy_start_ata_read(uint32_t blocklen, int udma_mode)
 
 bool ide_phy_can_read_block()
 {
-    return sio_hw->fifo_st & SIO_FIFO_ST_VLD_BITS;
+    bool status = sio_hw->fifo_st & SIO_FIFO_ST_VLD_BITS;
+
+    if (!status && (uint32_t)(millis() - g_ide_phy.transfer_block_start_time) > 5000)
+    {
+        if (!g_ide_phy.watchdog_error)
+        {
+            logmsg("ide_phy_can_read_block() detected transfer timeout");
+            g_ide_phy.watchdog_error = true;
+        }
+    }
+
+    return status;
 }
 
 void ide_phy_start_read_buffer(uint32_t blocklen)
