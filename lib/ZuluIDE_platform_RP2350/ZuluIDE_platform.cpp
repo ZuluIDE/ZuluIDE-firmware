@@ -110,6 +110,11 @@ void platform_minimal_init()
 
     // Status LED
     gpio_conf(STATUS_LED,     GPIO_FUNC_SIO, false,false, true,  false, false);
+
+    /* Initialize logging to SWO pin (UART0) */
+    gpio_conf(SWO_PIN,        GPIO_FUNC_UART_AUX,false,false, true,  false, true);
+    uart_init(uart0, 1000000); // Debug UART at 1 MHz baudrate
+    g_uart_initialized = true;
 }
 
 void platform_init()
@@ -367,6 +372,19 @@ void platform_emergency_log_save()
     crashfile.close();
 }
 
+static void dump_stack(uint32_t *sp)
+{
+    uint32_t *p = (uint32_t*)((uint32_t)sp & ~3);
+
+    for (int i = 0; i < 16; i++)
+    {
+        if (p == &__StackTop) break; // End of stack
+
+        logmsg("STACK ", (uint32_t)p, ":    ", p[0], " ", p[1], " ", p[2], " ", p[3]);
+        p += 4;
+    }
+}
+
 extern "C" __attribute__((noinline))
 void show_hardfault(uint32_t *sp, uint32_t r4, uint32_t r5, uint32_t r6, uint32_t r7)
 {
@@ -395,15 +413,7 @@ void show_hardfault(uint32_t *sp, uint32_t r4, uint32_t r5, uint32_t r6, uint32_
     logmsg("R6: ", r6, (sec_fault ? " (SFAR)" : ""));
     logmsg("R7: ", r7, (sec_fault ? " (SFSR)" : ""));
 
-    uint32_t *p = (uint32_t*)((uint32_t)sp & ~3);
-
-    for (int i = 0; i < 16; i++)
-    {
-        if (p == &__StackTop) break; // End of stack
-
-        logmsg("STACK ", (uint32_t)p, ":    ", p[0], " ", p[1], " ", p[2], " ", p[3]);
-        p += 4;
-    }
+    dump_stack(sp);
 
     platform_emergency_log_save();
 
@@ -439,6 +449,46 @@ void isr_hardfault(void)
         "mov r3, r6\n"
         "mov r4, r7\n"
         "bl show_hardfault": : : "r0");
+}
+
+extern "C" void __assert_func(const char *file, int line, const char *func, const char *failedexpr)
+{
+    logmsg("Assert failed: ", file, ":", line, " ", func, " ", failedexpr);
+
+    uint32_t stack = 0;
+    dump_stack(&stack);
+
+    platform_emergency_log_save();
+
+    platform_set_blink_status(false);
+    while(1)
+    {
+        usb_log_poll();
+        LED_OFF();
+        sleep_ms(100);
+        LED_ON();
+        sleep_ms(100);
+    }
+}
+
+extern "C" void panic(const char *fmt, ...)
+{
+    logmsg("Panic: ", fmt);
+
+    uint32_t stack = 0;
+    dump_stack(&stack);
+
+    platform_emergency_log_save();
+
+    platform_set_blink_status(false);
+    while(1)
+    {
+        usb_log_poll();
+        LED_OFF();
+        sleep_ms(100);
+        LED_ON();
+        sleep_ms(100);
+    }
 }
 
 /*****************************************/
