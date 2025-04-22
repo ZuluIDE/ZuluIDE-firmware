@@ -52,6 +52,8 @@ SECTIONS
     /* If ZuluIDE SD card bootloader is included, it goes in next 128 kB */
    .text.bootloader : ALIGN(16) SUBALIGN(16)
     {
+        . = ALIGN(4);
+        __bootloader_begin__ = .;
         KEEP(*(.text.btldr*))
         . = ALIGN(131072);
         CHECK_BOOTLOADER_SIZE = 1 / (. <= 131072);

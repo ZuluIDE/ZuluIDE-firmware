@@ -31,12 +31,11 @@
 
  MEMORY
 {
-    /* The bootloader is linked to begin at 0x12000100.
-     * First 256 bytes are reserved for RP2040 second stage bootloader,
-     * which comes as part of the main firmware.elf and is never overwritten.
+    /* The bootloader is linked to begin at 0x10020000.
+     * First 128 kB is used by core1 encrypted image
      */
-    FLASH(rx) : ORIGIN = 0x10000100, LENGTH = 128k-256
-    RAM(rwx) : ORIGIN = 0x20000000, LENGTH = 240k  /* Leave space for pico-debug */
+    FLASH(rx) : ORIGIN = 0x10020000, LENGTH = 128k
+    RAM(rwx) : ORIGIN = 0x20000000, LENGTH = 240k
     SCRATCH_X(rwx) : ORIGIN = 0x20040000, LENGTH = 4k
     SCRATCH_Y(rwx) : ORIGIN = 0x20041000, LENGTH = 4k
 }
@@ -46,6 +45,17 @@ SECTIONS
     .flash_begin : {
         __flash_binary_start = .;
     } > FLASH
+
+    /* Discard code that is not used in bootloader mode to
+     * reduce the flash usage.
+     */
+    /DISCARD/ : {
+        *libzuluide*(*)
+        *printf*(*)
+        *scanf*(*)
+        *dtoa*(*)
+        *strtod*(*)
+    }
 
     .text : {
         __logical_binary_start = .;
@@ -72,6 +82,7 @@ SECTIONS
         *(.text .text*)
         . = ALIGN(4);
     } > FLASH
+
     .rodata : {
         . = ALIGN(4);
         *(SORT_BY_ALIGNMENT(SORT_BY_NAME(.flashdata*)))

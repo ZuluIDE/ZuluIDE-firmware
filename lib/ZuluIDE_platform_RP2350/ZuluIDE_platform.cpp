@@ -816,7 +816,28 @@ void platform_poll()
 
 extern uint32_t __real_vectors_start;
 extern uint32_t __StackTop;
-static volatile void *g_bootloader_exit_req;
+
+// Check if we are currently running in ARM Secure state.
+// If not, we need to reboot before reflashing.
+static bool is_secure_mode()
+{
+    // This uses the TT instruction to check if the current
+    // running location is configured as secure memory.
+    uint32_t addr = (uint32_t)&is_secure_mode;
+    uint32_t result = 0;
+    asm("tt %0, %1" : "=r"(result) : "r"(addr) : "cc");
+    return result & (1 << 22);
+}
+
+// Reboot and instruct the encrypted code bootloader to boot main firmware in secure mode.
+// Core1 code will not be available to run, so normal IDE functionality is not available
+// until next reboot.
+static void reboot_to_secure()
+{
+    watchdog_hw->scratch[7] = 0x70ADC0DE;
+    watchdog_hw->ctrl = WATCHDOG_CTRL_TRIGGER_BITS;
+    while(1);
+}
 
 __attribute__((section(".time_critical.platform_rewrite_flash_page")))
 bool platform_rewrite_flash_page(uint32_t offset, uint8_t buffer[PLATFORM_FLASH_PAGE_SIZE])
@@ -830,12 +851,20 @@ bool platform_rewrite_flash_page(uint32_t offset, uint8_t buffer[PLATFORM_FLASH_
         }
     }
 
-    // if (nvic_hw->iser & 1 << 14)
-    // {
-    //     logmsg("Disabling USB during firmware flashing");
-    //     nvic_hw->icer = 1 << 14;
-    //     usb_hw->main_ctrl = 0;
-    // }
+#ifdef ARM_NONSECURE_MODE
+    if (!is_secure_mode())
+    {
+        logmsg("Rebooting to secure mode for flashing");
+        reboot_to_secure();
+    }
+#endif
+
+    if (nvic_hw->iser[0] & (1 << 14))
+    {
+        logmsg("Disabling USB during firmware flashing");
+        nvic_hw->icer[0] = 1 << 14;
+        usb_hw->main_ctrl = 0;
+    }
 
     dbgmsg("Writing flash at offset ", offset, " data ", bytearray(buffer, 4));
     assert(offset % PLATFORM_FLASH_PAGE_SIZE == 0);
@@ -843,14 +872,6 @@ bool platform_rewrite_flash_page(uint32_t offset, uint8_t buffer[PLATFORM_FLASH_
 
     // Avoid any mbed timer interrupts triggering during the flashing.
     uint32_t saved_irq = save_and_disable_interrupts();
-
-    // For some reason any code executed after flashing crashes
-    // unless we disable the XIP cache.
-    // Not sure why this happens, as flash_range_program() is flushing
-    // the cache correctly.
-    // The cache is now enabled from bootloader start until it starts
-    // flashing, and again after reset to main firmware.
-    xip_ctrl_hw->ctrl = 0;
 
     flash_range_erase(offset, PLATFORM_FLASH_PAGE_SIZE);
     flash_range_program(offset, buffer, PLATFORM_FLASH_PAGE_SIZE);
@@ -876,19 +897,32 @@ bool platform_rewrite_flash_page(uint32_t offset, uint8_t buffer[PLATFORM_FLASH_
 
 void platform_boot_to_main_firmware()
 {
-    // To ensure that the system state is reset properly, we perform
-    // a SYSRESETREQ and jump straight from the reset vector to main application.
-    g_bootloader_exit_req = &g_bootloader_exit_req;
-    scb_hw->aircr = 0x05FA0004;
-    while(1);
+#ifdef ARM_NONSECURE_MODE
+    if (is_secure_mode())
+    {
+        // Reboot to non-secure mode and the reset handler will jump to main firmware.
+        watchdog_hw->scratch[6] = 0xB007;
+        watchdog_hw->scratch[7] = 0;
+        watchdog_hw->ctrl = WATCHDOG_CTRL_TRIGGER_BITS;
+    }
+#endif
+
+    // Jump directly to main firmware
+    uint32_t *application_base = (uint32_t*)(XIP_BASE + PLATFORM_BOOTLOADER_SIZE);
+    scb_hw->vtor = (uint32_t)application_base;
+    __asm__(
+        "msr msp, %0\n\t"
+        "bx %1" : : "r" (application_base[0]),
+                    "r" (application_base[1]) : "memory");
 }
 
 void btldr_reset_handler()
 {
     uint32_t* application_base = &__real_vectors_start;
-    if (g_bootloader_exit_req == &g_bootloader_exit_req)
+    if (watchdog_hw->scratch[6] == 0xB007)
     {
         // Boot to main application
+        watchdog_hw->scratch[6] = 0;
         application_base = (uint32_t*)(XIP_BASE + PLATFORM_BOOTLOADER_SIZE);
     }
 
