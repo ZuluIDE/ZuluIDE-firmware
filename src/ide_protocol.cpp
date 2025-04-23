@@ -501,7 +501,7 @@ void IDEDevice::initialize(int devidx)
 
     m_phy_caps = *ide_phy_get_capabilities();
     m_devconfig.max_pio_mode = ini_getl("IDE", "max_pio", 3, CONFIGFILE);
-    m_devconfig.max_udma_mode = ini_getl("IDE", "max_udma", 0, CONFIGFILE);
+    m_devconfig.max_udma_mode = ini_getl("IDE", "max_udma", 2, CONFIGFILE);
     m_devconfig.max_blocksize = ini_getl("IDE", "max_blocksize", m_phy_caps.max_blocksize, CONFIGFILE);
     logmsg("Device ", devidx, " configuration:");
     logmsg("-- Max PIO mode: ", m_devconfig.max_pio_mode, " (phy max ", m_phy_caps.max_pio_mode, ")");

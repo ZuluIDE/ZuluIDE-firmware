@@ -261,8 +261,14 @@ void IDEATAPIDevice::atapi_identify_packet_device_response(uint16_t *idf)
     if (m_phy_caps.max_udma_mode >= 0)
     {
         idf[IDE_IDENTIFY_OFFSET_CAPABILITIES_1] |= (1 << 8);
-        idf[IDE_IDENTIFY_OFFSET_MODEINFO_ULTRADMA] = 0x0001;
-        if (m_atapi_state.udma_mode == 0) idf[IDE_IDENTIFY_OFFSET_MODEINFO_ULTRADMA] |= (1 << 8);
+
+        // Bitmask of supported UDMA modes
+        idf[IDE_IDENTIFY_OFFSET_MODEINFO_ULTRADMA] = (2 << m_phy_caps.max_udma_mode) - 1;
+        if (m_atapi_state.udma_mode >= 0)
+        {
+            // Active UDMA mode
+            idf[IDE_IDENTIFY_OFFSET_MODEINFO_ULTRADMA] |= (1 << (8 + m_atapi_state.udma_mode));
+        }
     }
 }
 

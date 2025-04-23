@@ -69,6 +69,11 @@ extern struct idecomm_t {
 
     // Number of UDMA checksum errors
     int udma_checksum_errors;
+
+    // CPU clock rate
+    // This is needed for UDMA timing setup and is not directly available for
+    // the code running in different security context.
+    int cpu_freq_hz;
 } g_idecomm;
 
 #define IDE_PIO                pio0
