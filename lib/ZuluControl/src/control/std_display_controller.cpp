@@ -68,6 +68,11 @@ UIControllerBase* StdDisplayController::getControllerByMode(const Mode mode) {
   }
 }
 
+Mode StdDisplayController::GetMode() const
+{
+  return currentState.GetCurrentMode();
+}
+
 void StdDisplayController::SetMode(Mode newMode)
 {
   current = getControllerByMode(newMode);
