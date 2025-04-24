@@ -43,9 +43,8 @@
 
 static struct {
     ide_phy_config_t config;
-    bool transfer_running;
+    bool transfer_running; // Purely for debugging
     uint32_t transfer_block_start_time;
-    int udma_mode;
     volatile bool watchdog_error;
 
     uint32_t bufferidx; // Index of next buffer in g_idebuffers to use
@@ -133,11 +132,16 @@ void ide_phy_reset_from_watchdog()
     g_ide_phy.watchdog_error = true;
 }
 
+extern void core1_log_poll();
+
 void ide_phy_print_debug()
 {
     if (!g_log_debug) return;
 
-    dbgmsg("Transfer running: ", (int)g_ide_phy.transfer_running, " UDMA: ", (int)g_ide_phy.udma_mode);
+    ide_phy_post_request(CORE1_REQ_PRINT_DEBUG);
+
+    dbgmsg("Transfer running: ", (int)g_ide_phy.transfer_running, " UDMA: ", g_idecomm.udma_mode);
+    dbgmsg("Checksum errors: ", g_idecomm.udma_checksum_errors);
     dbgmsg("Core1 requests: ", g_idecomm.requests, " events: ", g_idecomm.events);
     ide_registers_t regs = g_idecomm.phyregs.regs;
     dbgmsg("IDE regs:",
@@ -154,6 +158,8 @@ void ide_phy_print_debug()
            " Datain: ", (int)(g_idecomm.phyregs.state_datain != 0),
            " Dataout: ", (int)(g_idecomm.phyregs.state_dataout != 0));
     dbgmsg("GPIO in: ", sio_hw->gpio_in, " out: ", sio_hw->gpio_out, " oe: ", sio_hw->gpio_oe);
+
+    core1_log_poll();
 }
 
 ide_event_t ide_phy_get_events()
@@ -223,6 +229,7 @@ void ide_phy_start_write(uint32_t blocklen, int udma_mode)
     g_idecomm.udma_mode = udma_mode;
     g_idecomm.datablocksize = blocklen;
     g_idecomm.udma_checksum_errors = 0;
+    g_ide_phy.transfer_running = true;
 
     // Actual write is started when first block is written
 }
@@ -319,6 +326,7 @@ void ide_phy_start_read(uint32_t blocklen, int udma_mode)
     g_idecomm.udma_mode = udma_mode;
     g_idecomm.datablocksize = blocklen;
     g_idecomm.udma_checksum_errors = 0;
+    g_ide_phy.transfer_running = true;
 
     data_out_give_next_block();
 }
@@ -389,6 +397,7 @@ void ide_phy_stop_transfers(int *crc_errors)
     ide_phy_post_request(CORE1_REQ_STOP_TRANSFERS);
     ide_phy_clear_event(CORE1_EVT_DATA_DONE);
     g_idecomm.datablocksize = 0;
+    g_ide_phy.transfer_running = false;
 
     // Drain FIFO
     while (sio_hw->fifo_st & SIO_FIFO_ST_VLD_BITS)

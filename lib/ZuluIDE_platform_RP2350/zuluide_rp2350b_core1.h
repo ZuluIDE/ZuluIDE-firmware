@@ -20,10 +20,11 @@
 
 // Requests are written by core0 to g_idecomm.requests
 #define CORE1_REQ_SET_REGS          0x0001
-#define CORE1_REQ_ASSERT_IRQ            0x0002
-#define CORE1_REQ_START_DATAIN          0x0004
-#define CORE1_REQ_START_DATAOUT         0x0008
-#define CORE1_REQ_STOP_TRANSFERS        0x0010
+#define CORE1_REQ_ASSERT_IRQ        0x0002
+#define CORE1_REQ_START_DATAIN      0x0004
+#define CORE1_REQ_START_DATAOUT     0x0008
+#define CORE1_REQ_STOP_TRANSFERS    0x0010
+#define CORE1_REQ_PRINT_DEBUG       0x0020
 
 typedef struct {
     ide_registers_t regs;

@@ -750,7 +750,7 @@ void core1_log_poll()
 {
     static uint32_t core1_log_readpos = 0;
 
-    if (g_idecomm.logpos > core1_log_readpos)
+    while (g_idecomm.logpos > core1_log_readpos)
     {
         char linebuf[128];
         int len = 0;
