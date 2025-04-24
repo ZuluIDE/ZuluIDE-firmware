@@ -26,6 +26,10 @@
 #define CORE1_REQ_STOP_TRANSFERS    0x0010
 #define CORE1_REQ_PRINT_DEBUG       0x0020
 
+// This is set and cleared by core1 to indicate whether
+// it is busy handling previous requests.
+#define CORE1_REQ_BUSY              0x80000000
+
 typedef struct {
     ide_registers_t regs;
     int state_irqreq: 1; // Interrupt is being asserted to host

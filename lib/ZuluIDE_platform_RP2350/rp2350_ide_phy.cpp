@@ -141,7 +141,7 @@ void ide_phy_print_debug()
     ide_phy_post_request(CORE1_REQ_PRINT_DEBUG);
 
     dbgmsg("Transfer running: ", (int)g_ide_phy.transfer_running, ", watchdog error: ", (int)g_ide_phy.watchdog_error);
-    dbgmsg("UDMA: ", g_idecomm.udma_mode, "Checksum errors: ", g_idecomm.udma_checksum_errors);
+    dbgmsg("UDMA: ", g_idecomm.udma_mode, " Checksum errors: ", g_idecomm.udma_checksum_errors);
     dbgmsg("Core1 requests: ", g_idecomm.requests, " events: ", g_idecomm.events);
     ide_registers_t regs = g_idecomm.phyregs.regs;
     dbgmsg("IDE regs:",
@@ -195,11 +195,12 @@ ide_event_t ide_phy_get_events()
         g_ide_phy.transfer_block_start_time = millis();
         return IDE_EVENT_CMD;
     }
-    else if (flags & CORE1_EVT_DATA_DONE)
-    {
-        ide_phy_clear_event(CORE1_EVT_DATA_DONE);
-        return IDE_EVENT_DATA_TRANSFER_DONE;
-    }
+    // Not used currently by application code
+    // else if (flags & CORE1_EVT_DATA_DONE)
+    // {
+    //     ide_phy_clear_event(CORE1_EVT_DATA_DONE);
+    //     return IDE_EVENT_DATA_TRANSFER_DONE;
+    // }
 
     return IDE_EVENT_NONE;
 }
@@ -293,17 +294,13 @@ void ide_phy_write_block(const uint8_t *buf, uint32_t blocklen)
 
 bool ide_phy_is_write_finished()
 {
-    if (g_idecomm.phyregs.state_datain)
-        return false; // Still in progress
-
-    if ((uint32_t)(millis() - g_ide_phy.transfer_block_start_time) < 5)
+    uint32_t requests = g_idecomm.requests;
+    if ((requests & CORE1_REQ_START_DATAIN) || (requests & CORE1_REQ_BUSY))
     {
-        // The transfer might still be starting, check for done event
-        // instead of trusting the progress status.
-        return g_idecomm.events & CORE1_EVT_DATA_DONE;
+        return false; // Busy starting the data in request
     }
 
-    return true; // Transfer is no longer in progress
+    return !g_idecomm.phyregs.state_datain;
 }
 
 static void data_out_give_next_block()
