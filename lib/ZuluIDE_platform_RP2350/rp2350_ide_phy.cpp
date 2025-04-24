@@ -140,8 +140,8 @@ void ide_phy_print_debug()
 
     ide_phy_post_request(CORE1_REQ_PRINT_DEBUG);
 
-    dbgmsg("Transfer running: ", (int)g_ide_phy.transfer_running, " UDMA: ", g_idecomm.udma_mode);
-    dbgmsg("Checksum errors: ", g_idecomm.udma_checksum_errors);
+    dbgmsg("Transfer running: ", (int)g_ide_phy.transfer_running, ", watchdog error: ", (int)g_ide_phy.watchdog_error);
+    dbgmsg("UDMA: ", g_idecomm.udma_mode, "Checksum errors: ", g_idecomm.udma_checksum_errors);
     dbgmsg("Core1 requests: ", g_idecomm.requests, " events: ", g_idecomm.events);
     ide_registers_t regs = g_idecomm.phyregs.regs;
     dbgmsg("IDE regs:",
@@ -180,10 +180,11 @@ ide_event_t ide_phy_get_events()
             return IDE_EVENT_HWRST;
         }
     }
-    else if (flags & CORE1_EVT_SWRST)
+    else if ((flags & CORE1_EVT_SWRST) || g_ide_phy.watchdog_error)
     {
         // Software reset
         ide_phy_clear_event(CORE1_EVT_SWRST);
+        g_ide_phy.watchdog_error = false;
         return IDE_EVENT_SWRST;
     }
     else if (flags & CORE1_EVT_CMD_RECEIVED)
@@ -191,6 +192,7 @@ ide_event_t ide_phy_get_events()
         // dbgmsg("IDE_EVENT_CMD, status ", g_idecomm.phyregs.regs.status);
         ide_phy_clear_event(CORE1_EVT_CMD_RECEIVED);
         g_idecomm.udma_mode = -1; // For ATAPI packets
+        g_ide_phy.transfer_block_start_time = millis();
         return IDE_EVENT_CMD;
     }
     else if (flags & CORE1_EVT_DATA_DONE)
