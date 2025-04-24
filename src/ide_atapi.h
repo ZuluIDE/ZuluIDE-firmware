@@ -202,6 +202,9 @@ protected:
     virtual bool atapi_read(const uint8_t *cmd);
     virtual bool atapi_write(const uint8_t *cmd);
 
+    // Fill in data fields of identify packet device response
+    virtual void atapi_identify_packet_device_response(uint16_t *idf);
+
     // Read handlers
     virtual bool doRead(uint32_t lba, uint32_t transfer_len);
     virtual ssize_t read_callback(const uint8_t *data, size_t blocksize, size_t num_blocks);
