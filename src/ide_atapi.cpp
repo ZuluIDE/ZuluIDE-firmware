@@ -1255,6 +1255,12 @@ bool IDEATAPIDevice::doWrite(uint32_t lba, uint32_t transfer_len)
     {
         return atapi_cmd_ok();
     }
+    else if (m_atapi_state.crc_errors > 0)
+    {
+        logmsg("-- Detected ", m_atapi_state.crc_errors, " CRC errors during write to LBA ",
+            (int)lba, ", reporting error to host");
+        return atapi_cmd_error(ATAPI_SENSE_HARDWARE_ERROR, ATAPI_ASC_CRC_ERROR);
+    }
     else
     {
         return atapi_cmd_error(ATAPI_SENSE_MEDIUM_ERROR, 0);
