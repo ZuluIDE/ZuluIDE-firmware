@@ -298,6 +298,7 @@ bool IDEATAPIDevice::cmd_packet(ide_registers_t *regs)
         m_atapi_state.bytes_req = 128;
     }
 
+#ifdef IDE_PHY_NO_DIRECT_ATAPI_SUPPORT
     // Check if PHY has already received command
     if (!ide_phy_can_read_block() && (regs->status & IDE_STATUS_BSY))
     {
@@ -309,6 +310,7 @@ bool IDEATAPIDevice::cmd_packet(ide_registers_t *regs)
         // Start the data transfer and clear BSY
         ide_phy_start_read(12);
     }
+#endif
 
     uint32_t start = millis();
     while (!ide_phy_can_read_block())
