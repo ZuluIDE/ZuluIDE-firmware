@@ -25,6 +25,8 @@
 #define CORE1_REQ_START_DATAOUT     0x0008
 #define CORE1_REQ_STOP_TRANSFERS    0x0010
 #define CORE1_REQ_PRINT_DEBUG       0x0020
+#define CORE1_REQ_SET_SIGNALS       0x0040
+#define CORE1_REQ_GET_SIGNALS       0x0080
 
 // This is set and cleared by core1 to indicate whether
 // it is busy handling previous requests.
@@ -79,6 +81,11 @@ extern struct idecomm_t {
     // This is needed for UDMA timing setup and is not directly available for
     // the code running in different security context.
     int cpu_freq_hz;
+
+    // Slow diagnostic signals (IDE_SIGNAL_DASP, IDE_SIGNAL_PDIAG).
+    // Access with CORE1_REQ_SET_SIGNALS and CORE1_REQ_GET_SIGNALS
+    uint8_t set_signals;
+    uint8_t get_signals;
 } g_idecomm;
 
 #define IDE_PIO                pio0

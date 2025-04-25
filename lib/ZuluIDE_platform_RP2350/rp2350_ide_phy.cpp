@@ -416,11 +416,23 @@ void ide_phy_assert_irq(uint8_t ide_status)
 
 void ide_phy_set_signals(uint8_t signals)
 {
+    g_idecomm.set_signals = signals;
+    ide_phy_post_request(CORE1_REQ_SET_SIGNALS);
 }
 
 uint8_t ide_phy_get_signals()
 {
-    return 0;
+    ide_phy_post_request(CORE1_REQ_GET_SIGNALS);
+    uint32_t start = millis();
+    while (g_idecomm.requests & (CORE1_REQ_GET_SIGNALS | CORE1_REQ_BUSY))
+    {
+        if ((uint32_t)(millis() - start) > 10)
+        {
+            logmsg("ide_phy_get_signals timeout");
+            break;
+        }
+    }
+    return g_idecomm.get_signals & ~g_idecomm.set_signals;
 }
 
 const ide_phy_capabilities_t *ide_phy_get_capabilities()
