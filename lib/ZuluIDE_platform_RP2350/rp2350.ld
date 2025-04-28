@@ -282,7 +282,8 @@ SECTIONS
     /* Start and end symbols must be word-aligned */
     .scratch_x : {
         __scratch_x_start__ = .;
-        *(.scratch_x.*)
+        /* Scratch X memory area is reserved for core1 usage */
+        *:*core1*(.scratch_x.*)
         . = ALIGN(4);
         __scratch_x_end__ = .;
     } > SCRATCH_X AT > FLASH
