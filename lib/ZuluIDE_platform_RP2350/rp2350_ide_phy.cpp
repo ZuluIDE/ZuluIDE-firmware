@@ -422,17 +422,21 @@ void ide_phy_set_signals(uint8_t signals)
 
 uint8_t ide_phy_get_signals()
 {
-    ide_phy_post_request(CORE1_REQ_GET_SIGNALS);
-    uint32_t start = millis();
-    while (g_idecomm.requests & (CORE1_REQ_GET_SIGNALS | CORE1_REQ_BUSY))
+    return 0;
+/* FIXME: Test and debug, occasionally disturbs bus traffic
+    static uint32_t last_poll = 0;
+
+    // The DASP and PDIAG signals are held for several seconds
+    // so we don't need to poll them that often.
+    uint32_t time_now = millis();
+    if ((uint32_t)(time_now - last_poll) > 50)
     {
-        if ((uint32_t)(millis() - start) > 10)
-        {
-            logmsg("ide_phy_get_signals timeout");
-            break;
-        }
+        last_poll = time_now;
+        ide_phy_post_request(CORE1_REQ_GET_SIGNALS);
     }
-    return g_idecomm.get_signals & ~g_idecomm.set_signals;
+
+    return g_idecomm.get_signals;
+*/
 }
 
 const ide_phy_capabilities_t *ide_phy_get_capabilities()
