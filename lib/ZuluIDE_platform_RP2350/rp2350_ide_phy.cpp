@@ -422,8 +422,6 @@ void ide_phy_set_signals(uint8_t signals)
 
 uint8_t ide_phy_get_signals()
 {
-    return 0;
-/* FIXME: Test and debug, occasionally disturbs bus traffic
     static uint32_t last_poll = 0;
 
     // The DASP and PDIAG signals are held for several seconds
@@ -436,7 +434,6 @@ uint8_t ide_phy_get_signals()
     }
 
     return g_idecomm.get_signals;
-*/
 }
 
 const ide_phy_capabilities_t *ide_phy_get_capabilities()
