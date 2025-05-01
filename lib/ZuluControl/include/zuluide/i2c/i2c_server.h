@@ -27,9 +27,11 @@
 #include <zuluide/images/image_iterator.h>
 #include <string>
 
-#define I2C_API_VERSION "2.0.0"
+#define I2C_API_VERSION "3.0.0"
 
 #define I2C_SERVER_API_VERSION  0x1
+#define I2C_SERVER_UPDATE_FILENAME_CACHE 0x8
+#define I2C_SERVER_IMAGE_FILENAME 0x9
 #define I2C_SERVER_SYSTEM_STATUS_JSON  0xA
 #define I2C_SERVER_IMAGE_JSON  0xB
 #define I2C_SERVER_POLL_CLIENT 0xC
@@ -40,6 +42,7 @@
 #define I2C_CLIENT_NOOP 0x0
 
 #define I2C_CLIENT_API_VERSION 0x01
+#define I2C_CLIENT_FETCH_FILENAMES 0x09
 #define I2C_CLIENT_SUBSCRIBE_STATUS_JSON  0xA
 #define I2C_CLIENT_LOAD_IMAGE  0xB
 #define I2C_CLIENT_EJECT_IMAGE  0xC
@@ -104,13 +107,20 @@ namespace zuluide::i2c {
      */
     bool WifiCredentialsSet();
 
+    /**
+        Requests I2C client to being consuming filenames from this I2C server
+     */
+    void UpdateFilenames();
+
   private:
     TwoWire* wire;
     DeviceControlSafe* deviceControl;
     bool isSubscribed;
     bool devControlSet;
+    bool sendFilenames;
     bool sendFiles;
     bool sendNextImage;
+    bool updateFilenameCache;
     bool isIterating;
     bool isPresent;
     zuluide::images::ImageIterator iterator;

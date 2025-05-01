@@ -65,9 +65,14 @@ namespace zuluide::status {
      **/
     std::vector<queue_t*> observerQueues;
     /***
-        Stores updates that come from another thread. These are processed through calss to ProcessUpdates.
+        Stores updates that come from another thread. These are processed through class to ProcessUpdates.
      **/
     queue_t updateQueue;
+
+    /***
+        Receives updates that come from another thread in the opposite direction of the updateQueue 
+     */
+    queue_t receiveQueue;
 
     /***
         Simple class for storing updates. As we currently only have the load or eject image updates,
@@ -80,6 +85,16 @@ namespace zuluide::status {
        **/
       std::unique_ptr<zuluide::images::Image> ToLoad;
     };
+
+    /***
+        Simple class for storing updates. As we currently only have the load or eject image updates,
+        this class is overly simple.
+     **/
+    class ReceiveAction {
+    public:
+      bool ImageFilenamesChanged;
+    };
   };
+
   
 }
