@@ -29,6 +29,11 @@
 
 #define I2C_API_VERSION "3.0.0"
 
+// Delay between reading the filenames off the SD card in milliseconds
+#ifndef I2C_FILENAME_TRANSFER_DELAY
+#define I2C_FILENAME_TRANSFER_DELAY 200
+#endif
+
 #define I2C_SERVER_API_VERSION  0x1
 #define I2C_SERVER_UPDATE_FILENAME_CACHE 0x8
 #define I2C_SERVER_IMAGE_FILENAME 0x9

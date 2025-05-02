@@ -73,12 +73,12 @@ bool I2CServer::CheckForDevice() {
   isPresent = writeLengthPrefacedString(wire, I2C_SERVER_RESET, 0, buf);
   return isPresent;
 }
-
 void I2CServer::HandleUpdate(const SystemStatus& current) {
   static bool lastCardPresentStatus = false;
-  if (lastCardPresentStatus != current.IsCardPresent()) {
+  bool card_present = current.IsCardPresent();
+  if (lastCardPresentStatus != card_present) {
     logmsg("============== detected SD card presense change ==============");
-    lastCardPresentStatus = current.IsCardPresent();
+    lastCardPresentStatus = card_present;
     updateFilenameCache = true;
   }
 
@@ -101,22 +101,23 @@ void I2CServer::Poll() {
   }
 
   if (sendFilenames && isSubscribed) {
-    mutex_enter_blocking(platform_get_log_mutex());
+
     sendFilenames = false;
     iterator.Reset();
+    mutex_enter_blocking(platform_get_log_mutex());
     while (iterator.MoveNext()) {
       auto msgBuf = iterator.Get().GetFilename();
       logmsg("Sending filename: ", msgBuf.c_str());
       writeLengthPrefacedString(wire, I2C_SERVER_IMAGE_FILENAME, msgBuf.size(), msgBuf.c_str());
+      delay(I2C_FILENAME_TRANSFER_DELAY);
     }
 
     auto emptyMsgBuf = "";
     logmsg("Sending end of filenames as empty string");
-    writeLengthPrefacedString(wire, I2C_SERVER_IMAGE_FILENAME, 0, emptyMsgBuf);
-
-    iterator.Cleanup();
     mutex_exit(platform_get_log_mutex());
-
+    delay(I2C_FILENAME_TRANSFER_DELAY);
+    writeLengthPrefacedString(wire, I2C_SERVER_IMAGE_FILENAME, 0, emptyMsgBuf);
+    iterator.Cleanup();
   }
   if (sendFiles) {
     mutex_enter_blocking(platform_get_log_mutex());
