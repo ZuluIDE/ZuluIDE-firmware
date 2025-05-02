@@ -25,15 +25,14 @@
 
 namespace zuluide::control {
 
-  class MenuState : public BaseState {
+  class EjectPreventedState : public BaseState {
   public:
-    enum class Entry { Eject, Select, Back, Info };
-    MenuState (Entry value = Entry::Eject);
-    MenuState (const MenuState& src);
+    enum class Entry { Back };
+    EjectPreventedState (Entry value = Entry::Back);
+    EjectPreventedState (const EjectPreventedState& src);
     Entry GetCurrentEntry () const;
-    void MoveToNextEntry();
-    void MoveToPreviousEntry();
-    MenuState& operator=(const MenuState& src);
+    void MoveToNextCurrentEntry();
+    EjectPreventedState& operator=(const EjectPreventedState& src);
   private:
     Entry currentEntry;
   };

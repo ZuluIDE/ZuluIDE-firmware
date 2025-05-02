@@ -34,6 +34,7 @@ namespace zuluide {
     virtual void Update (const zuluide::control::DisplayState &disp);
   private:
     ScrollingText imagename;
+    ScrollingText deferred_load;
     Size charBounds;
     uint8_t cdrom_loaded[27] = {
 	0x01, 0xc0, 0x00, 0x1f, 0xfc, 0x00, 0x7f, 0xff, 0x00, 0x7f, 0x7f, 0x00, 0xfe, 0x3f, 0x80, 0x7f, 

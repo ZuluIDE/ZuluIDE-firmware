@@ -38,11 +38,6 @@ DisplayState::DisplayState(SelectState &state) :
   selectState(state)
 {}
 
-DisplayState::DisplayState(NewImageState &state) :
-  currentMode(Mode::NewImage),
-  newImageState(state)
-{}
-
 DisplayState::DisplayState() :
   currentMode(Mode::Splash),
   splashState(SplashState())
@@ -59,15 +54,20 @@ DisplayState::DisplayState(SplashState& state) :
 {}
 
 
+DisplayState::DisplayState(EjectPreventedState& state) :
+  currentMode(Mode::EjectPrevented),
+  ejectPreventedState(state)
+{}
+
 DisplayState::DisplayState(const DisplayState& state) :
   currentMode(state.currentMode),
   statusState(state.statusState),
   menuState(state.menuState),
   selectState(state.selectState),
-  newImageState(state.newImageState),
   ejectState(state.ejectState),
   infoState(state.infoState),
-  splashState(state.splashState)
+  splashState(state.splashState),
+  ejectPreventedState(state.ejectPreventedState)
 {}
 
 DisplayState& DisplayState::operator=(DisplayState&& src) {
@@ -75,8 +75,8 @@ DisplayState& DisplayState::operator=(DisplayState&& src) {
   statusState = src.statusState;
   menuState = std::move(src.menuState);
   selectState = std::move(src.selectState);
-  newImageState = std::move(src.newImageState);
   ejectState = std::move(src.ejectState);
+  ejectPreventedState = std::move(src.ejectPreventedState);
   infoState = std::move(src.infoState);
   splashState = std::move(src.splashState);
   return *this;
@@ -88,9 +88,9 @@ DisplayState::DisplayState(DisplayState&& src) :
   statusState = std::move(src.statusState);
   menuState = std::move(src.menuState);
   selectState = std::move(src.selectState);
-  newImageState = std::move(src.newImageState);
   ejectState = std::move(src.ejectState);
   splashState = std::move(src.splashState);
+  ejectPreventedState = std::move(src.ejectPreventedState);
 }
 
 DisplayState::DisplayState(InfoState &state) :
@@ -108,6 +108,11 @@ const MenuState& DisplayState::GetMenuState() const {
 const EjectState& DisplayState::GetEjectState() const {
   return ejectState;
 }
+
+const EjectPreventedState& DisplayState::GetEjectPreventedState() const {
+  return ejectPreventedState;
+}
+
 
 const SelectState& DisplayState::GetSelectState() const {
   return selectState;

@@ -20,7 +20,6 @@
 **/
 
 #include "std_display_controller.h"
-#include "new_controller.h"
 #include "eject_controller.h"
 #include "menu_controller.h"
 #include "info_controller.h"
@@ -49,12 +48,15 @@ UIControllerBase* StdDisplayController::getControllerByMode(const Mode mode) {
     return &ejectController;
   }
 
+  case Mode::EjectPrevented: {
+    EjectPreventedState empty;
+    UpdateState(empty);
+    ejectPreventedController.SetState(empty);
+    return &ejectPreventedController;
+  }
+    
   case Mode::Select: {
     return &selectController;
-  }
-
-  case Mode::NewImage: {
-    return &newController;
   }
 
   case Mode::Info: {
@@ -97,14 +99,14 @@ void StdDisplayController::UpdateState(SelectState& newState)
   notifyObservers();
 }
 
-void StdDisplayController::UpdateState(NewImageState& newState)
+void StdDisplayController::UpdateState(EjectState& newState)
 {
   // Copy the new state into a new memory location.
   currentState = std::move(DisplayState(newState));
   notifyObservers();
 }
 
-void StdDisplayController::UpdateState(EjectState& newState)
+void StdDisplayController::UpdateState(EjectPreventedState& newState)
 {
   // Copy the new state into a new memory location.
   currentState = std::move(DisplayState(newState));
@@ -147,12 +149,12 @@ EjectController& StdDisplayController::GetEjectController() {
   return ejectController;
 }
 
-SelectController& StdDisplayController::GetSelectController() {
-  return selectController;
+EjectPreventedController& StdDisplayController::GetEjectPreventedController() {
+  return ejectPreventedController;
 }
 
-NewController& StdDisplayController::GetNewController() {
-  return newController;
+SelectController& StdDisplayController::GetSelectController() {
+  return selectController;
 }
 
 InfoController& StdDisplayController::GetInfoController() {
@@ -165,10 +167,10 @@ SplashController& StdDisplayController::GetSplashController() {
 
 StdDisplayController::StdDisplayController(zuluide::status::StatusController* statCtrlr) : statController(statCtrlr),
 											   current(NULL),
-											   menuController(this),
+											   menuController(this, statController),
 											   ejectController(this, statController),
+                         ejectPreventedController(this, statController),
 											   selectController(this, statController),
-											   newController(this, statController),
 											   infoController(this),
 											   splashController(this),
 											   statusController(this) {

@@ -19,39 +19,25 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
 **/
 
-#include "new_controller.h"
-#include "std_display_controller.h"
+#pragma once
 
-using namespace zuluide::control;
+#include <zuluide/status/device_control_safe.h>
+#include <zuluide/control/display_state.h>
+#include "ui_controller_base.h"
 
-NewController::NewController(StdDisplayController* cntrlr, zuluide::status::StatusController* statCtrlr) :
-  UIControllerBase(cntrlr), statusController(statCtrlr) {
-}
-
-void NewController::IncrementImageIndex() {
-  state++;
-    // TODO: Check image indices
-  controller->UpdateState(state);
-}
-
-void NewController::DecreaseImageIndex() {
-  state--;
-    // TODO: Check image indices
-  controller->UpdateState(state);
-}
-
-void NewController::ResetImageIndex() {
-  state = NewImageState(0);
-    // TODO: Check image indices
-  controller->UpdateState(state);
-}
-
-void NewController::CreateAndSelect() {
-  // TODO: Create image
-  controller->SetMode(Mode::Status);
-}
-
-DisplayState NewController::Reset() {
-  state = NewImageState();
-  return DisplayState(state);
+namespace zuluide::control {
+  class StdDisplayController;
+  /**
+     Controls state when the UI is showing the menu.
+   */
+  class EjectPreventedController : public UIControllerBase {
+  public:
+    EjectPreventedController(StdDisplayController* cntrlr, zuluide::status::DeviceControlSafe* statCtrlr);
+    void GoBack();
+    void SetState(const EjectPreventedState newState);
+    virtual DisplayState Reset();
+  private:
+    EjectPreventedState state;
+    zuluide::status::DeviceControlSafe *statusController;
+  };
 }

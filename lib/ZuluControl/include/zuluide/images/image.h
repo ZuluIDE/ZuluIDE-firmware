@@ -23,7 +23,7 @@
 
 #include <string>
 #include <stdint.h>
-#include <zuluide/ide_drive_type.h>>
+#include <zuluide/ide_drive_type.h>
 
 namespace zuluide::images {
 

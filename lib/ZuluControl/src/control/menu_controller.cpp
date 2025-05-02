@@ -24,7 +24,7 @@
 
 using namespace zuluide::control;
 
-MenuController::MenuController(StdDisplayController* cntrlr) : UIControllerBase(cntrlr) {
+MenuController::MenuController(StdDisplayController* cntrlr, zuluide::status::DeviceControlSafe* statCtrlr) : UIControllerBase(cntrlr), statusController (statCtrlr) {
 }
 
 void MenuController::MoveToNextEntry() {
@@ -40,7 +40,10 @@ void MenuController::MoveToPreviousEntry() {
 void MenuController::ChangeToSelectedEntry() {
   switch (state.GetCurrentEntry()) {
   case MenuState::Entry::Eject: {
-    controller->SetMode(Mode::Eject);
+    if (statusController->IsPreventRemovable())
+      controller->SetMode(Mode::EjectPrevented);
+    else
+      controller->SetMode(Mode::Eject);
     break;
   }
     
@@ -53,12 +56,7 @@ void MenuController::ChangeToSelectedEntry() {
     controller->SetMode(Mode::Info);
     break;
   }
-    
-  case MenuState::Entry::New: {
-    controller->SetMode(Mode::NewImage);
-    break;
-  }
-    
+
   case MenuState::Entry::Back: {
     controller->SetMode(Mode::Status);
     break;
