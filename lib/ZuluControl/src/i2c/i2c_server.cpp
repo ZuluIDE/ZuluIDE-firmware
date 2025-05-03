@@ -31,7 +31,7 @@
 
 using namespace zuluide::i2c;
 
-I2CServer::I2CServer() : deviceControl(nullptr), isSubscribed(false), devControlSet(false), sendFilenames(false), sendFiles(false), sendNextImage(false), updateFilenameCache(false), isIterating(false), isPresent(false), remoteMajorVersion(0){
+I2CServer::I2CServer() : filenameTransferState(FilenameTransferState::Idle), deviceControl(nullptr), isSubscribed(false), devControlSet(false), sendFilenames(false), sendFiles(false), sendNextImage(false), updateFilenameCache(false), isIterating(false), isPresent(false), remoteMajorVersion(0){
 }
 
 void I2CServer::SetI2c(TwoWire* wireValue) {
@@ -78,7 +78,6 @@ void I2CServer::HandleUpdate(const SystemStatus& current) {
   bool card_present = current.IsCardPresent();
   if (lastCardPresentStatus != card_present) {
     logmsg("============== detected SD card presense change ==============");
-    lastCardPresentStatus = card_present;
     updateFilenameCache = true;
   }
 
@@ -100,25 +99,58 @@ void I2CServer::Poll() {
     return;
   }
 
-  if (sendFilenames && isSubscribed) {
-
-    sendFilenames = false;
-    iterator.Reset();
+  if (updateFilenameCache && isSubscribed) {
     mutex_enter_blocking(platform_get_log_mutex());
-    while (iterator.MoveNext()) {
-      auto msgBuf = iterator.Get().GetFilename();
-      logmsg("Sending filename: ", msgBuf.c_str());
-      writeLengthPrefacedString(wire, I2C_SERVER_IMAGE_FILENAME, msgBuf.size(), msgBuf.c_str());
-      delay(I2C_FILENAME_TRANSFER_DELAY);
-    }
-
-    auto emptyMsgBuf = "";
-    logmsg("Sending end of filenames as empty string");
+    logmsg("Requesting client to update their cache of filenames");
     mutex_exit(platform_get_log_mutex());
-    delay(I2C_FILENAME_TRANSFER_DELAY);
-    writeLengthPrefacedString(wire, I2C_SERVER_IMAGE_FILENAME, 0, emptyMsgBuf);
-    iterator.Cleanup();
+    updateFilenameCache = false;
+    filenameTransferState = FilenameTransferState::Start;
+    auto buf = "";
+    writeLengthPrefacedString(wire, I2C_SERVER_UPDATE_FILENAME_CACHE, 0, buf);
   }
+
+  static uint32_t filenameXferTime = 0;
+  static uint32_t filenameXferWait = 2000;
+  static bool first_run = true;
+  
+  if (first_run)
+  {
+    first_run = false;
+    filenameXferTime = millis();
+    mutex_enter_blocking(platform_get_log_mutex());
+    mutex_exit(platform_get_log_mutex());
+
+  }
+
+  if ( isSubscribed
+      && (filenameTransferState == FilenameTransferState::Start 
+        || filenameTransferState == FilenameTransferState::Sending)
+      && ((uint32_t)(millis() - filenameXferTime) > filenameXferWait))
+    {
+    filenameXferTime = millis();
+    filenameXferWait = 150;
+    if (filenameTransferState == FilenameTransferState::Start) {
+      fn_iterator.Reset();
+      filenameTransferState = FilenameTransferState::Sending;
+    }
+    else
+    {
+      mutex_enter_blocking(platform_get_log_mutex());
+      if(fn_iterator.MoveNext()) {
+        auto msgBuf = fn_iterator.Get().GetFilename();
+        // logmsg("Sending filename: ", msgBuf.c_str());
+        writeLengthPrefacedString(wire, I2C_SERVER_IMAGE_FILENAME, msgBuf.size(), msgBuf.c_str());
+      } else {
+        filenameTransferState = FilenameTransferState::Idle;
+        auto emptyMsgBuf = "";
+        // logmsg("Sending end of filenames as empty string");
+        writeLengthPrefacedString(wire, I2C_SERVER_IMAGE_FILENAME, 0, emptyMsgBuf);
+        iterator.Cleanup();
+      }
+      mutex_exit(platform_get_log_mutex());
+    }
+  }
+
   if (sendFiles) {
     mutex_enter_blocking(platform_get_log_mutex());
     iterator.Reset();
@@ -135,16 +167,6 @@ void I2CServer::Poll() {
 
     iterator.Cleanup();
     mutex_exit(platform_get_log_mutex());
-  }
-
-  if (updateFilenameCache && isSubscribed) {
-    mutex_enter_blocking(platform_get_log_mutex());
-    logmsg("Requesting client to update their cache of filenames");
-    mutex_exit(platform_get_log_mutex());
-    updateFilenameCache = false;
-    sendFilenames = true;
-    auto buf = "";
-    writeLengthPrefacedString(wire, I2C_SERVER_UPDATE_FILENAME_CACHE, 0, buf);
   }
 
   if (sendNextImage) {

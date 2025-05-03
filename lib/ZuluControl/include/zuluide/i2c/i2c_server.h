@@ -118,6 +118,7 @@ namespace zuluide::i2c {
     void UpdateFilenames();
 
   private:
+    enum class FilenameTransferState {Idle, Start, Sending} filenameTransferState;
     TwoWire* wire;
     DeviceControlSafe* deviceControl;
     bool isSubscribed;
@@ -128,6 +129,7 @@ namespace zuluide::i2c {
     bool updateFilenameCache;
     bool isIterating;
     bool isPresent;
+    zuluide::images::ImageIterator fn_iterator;
     zuluide::images::ImageIterator iterator;
     std::string status;
     std::string ssid;
