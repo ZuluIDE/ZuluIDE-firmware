@@ -29,7 +29,7 @@ static volatile bool g_control_input_flag = false;
 #define DEBOUNCE_IN_MS 20
 #endif
 
-void RotaryControl::SetReciever(InputReceiver* receiver) {
+void RotaryControl::SetReceiver(InputReceiver* receiver) {
   inputReceiver = receiver;
 }
 
@@ -59,7 +59,7 @@ bool RotaryControl::GetDeviceExists()
 }
 
 RotaryControl::RotaryControl(int addr) :
-  pcaAddr(addr), isSending(false), clockHigh(false), tickCount(0), deviceExists(false) {
+  pcaAddr(addr), deviceExists(false), isSending(false), tick_count(0), going_cw(true), number_of_ticks(1), rotary_state(ROTARY_TICK_000) {
 }
 
 uint8_t RotaryControl::getValue() {
@@ -75,6 +75,10 @@ uint8_t RotaryControl::getValue() {
   }
   
   return input_byte;
+}
+
+void RotaryControl::SetSensitivity(uint8_t transitions) {
+  number_of_ticks = transitions;
 }
 
 void RotaryControl::SetI2c(TwoWire* i2c) {
@@ -105,19 +109,53 @@ void RotaryControl::Poll() {
   if (buttonIsPressed(rotateButton, &rotate_btn_millis, check_time)) {
     inputReceiver->RotaryButtonPressed();
   }
+  uint8_t chan_a = 1 & (input_byte >> EXP_ROT_A_PIN);
+  uint8_t chan_b = 1 & (input_byte >> EXP_ROT_B_PIN);
+  uint8_t rotaryInputState =  chan_b << 1 | chan_a;
+  rotary_state = rotary_transition_lut[rotary_state & 0x0F][rotaryInputState];
+  rotary_direction_t rotaryDirection = (rotary_direction_t) (rotary_state & 0x30);
 
+  if (going_cw) {
+    if (rotaryDirection == ROTARY_DIR_CW) {
+      if (tick_count < number_of_ticks - 1) {
+        tick_count++;
+      } else {
+        inputReceiver->RotaryUpdate(-1);
+        tick_count = 0;
+      }
+    } else  if (rotaryDirection == ROTARY_DIR_CCW) {
+      tick_count = 1;
+      if (tick_count > number_of_ticks - 1) {
+        inputReceiver->RotaryUpdate(1);
+      }
+      going_cw = false;
+    }
+  } else {
+    if (rotaryDirection == ROTARY_DIR_CCW) {
+      if (tick_count < number_of_ticks - 1) {
+        tick_count++;
+      } else {
+        inputReceiver->RotaryUpdate(1);
+        tick_count = 0;
+      }
+    } else if (rotaryDirection == ROTARY_DIR_CW) {
+      tick_count = 1;
+      if (tick_count > number_of_ticks - 1) {
+        inputReceiver->RotaryUpdate(-1);
+      }
+      going_cw = true;
+    }
+  }
+/* 
   // Current state of the encoder pins.
   int8_t l = 1 & (input_byte >> EXP_ROT_A_PIN);
   if(!clockHigh && l > 0) {
     // Clock went high.
     clockHigh = true;
-  } else if (clockHigh && l == 0) {
-    // Clock dropped.
     int8_t r = 1 & (input_byte >> EXP_ROT_B_PIN);
-    clockHigh = false;
-    if (r == 0) {
+    if (r == 1) {
       if (goingRight) {
-        if (tickCount < 3) {          
+        if (tickCount < number_of_ticks) {
           tickCount++;
         } else {
           inputReceiver->RotaryUpdate(-1);
@@ -125,11 +163,11 @@ void RotaryControl::Poll() {
         }
       } else {
         tickCount = 1;
-        goingRight = true;        
+        goingRight = false;
       }
     } else {
       if (!goingRight) {
-        if (tickCount < 3) {          
+        if (tickCount < number_of_ticks) {
           tickCount++;
         } else {
           inputReceiver->RotaryUpdate(1);
@@ -137,10 +175,39 @@ void RotaryControl::Poll() {
         }
       } else {
         tickCount = 1;
-        goingRight = false;        
+        goingRight = true;
       }
-    }   
-  }
+    }
+  } else if (clockHigh && l == 0) {
+    // Clock dropped.
+    int8_t r = 1 & (input_byte >> EXP_ROT_B_PIN);
+    clockHigh = false;
+    if (r == 0) {
+      if (goingRight) {
+        if (tickCount < number_of_ticks) {
+          tickCount++;
+        } else {
+          inputReceiver->RotaryUpdate(-1);
+          tickCount = 0;
+        }
+      } else {
+        tickCount = 1;
+        goingRight = true;
+      }
+    } else {
+      if (!goingRight) {
+        if (tickCount < number_of_ticks) {
+          tickCount++;
+        } else {
+          inputReceiver->RotaryUpdate(1);
+          tickCount = 0;
+        }
+      } else {
+        tickCount = 1;
+        goingRight = false;
+      }
+    }
+  } */
 }
 
 bool RotaryControl::buttonIsPressed(bool isDown, uint32_t* lastDownMillis, uint32_t checkTime) {
@@ -159,3 +226,22 @@ bool RotaryControl::buttonIsPressed(bool isDown, uint32_t* lastDownMillis, uint3
     return isPressed;    
   }
 }
+
+
+const uint8_t RotaryControl::rotary_transition_lut[7][4] = 
+{
+  // From ROTARY_TICK_000
+  {ROTARY_TICK_000,      ROTARY_START_CW_010,   ROTARY_START_CCW_100,  ROTARY_TICK_000},
+  // From ROTARY_LAST_CW_001
+  {ROTARY_CONT_CW_011,   ROTARY_TICK_000,       ROTARY_LAST_CW_001,    ROTARY_TICK_000 | ROTARY_DIR_CW},
+  // From ROTARY_START_CW_001
+  {ROTARY_CONT_CW_011,   ROTARY_START_CW_010,   ROTARY_TICK_000,       ROTARY_TICK_000},
+  // From ROTARY_CONT_CW_011
+  {ROTARY_CONT_CW_011,   ROTARY_START_CW_010,   ROTARY_LAST_CW_001,    ROTARY_TICK_000},
+  // From ROTARY_START_CCW_100
+  {ROTARY_CONT_CCW_110,  ROTARY_TICK_000,       ROTARY_START_CCW_100,  ROTARY_TICK_000},
+  // From ROTARY_LAST_CCW_101
+  {ROTARY_CONT_CCW_110,  ROTARY_LAST_CCW_101,   ROTARY_TICK_000,       ROTARY_TICK_000 | ROTARY_DIR_CCW},
+  // from ROTARY_CONT_CCW_110
+  {ROTARY_CONT_CCW_110,  ROTARY_LAST_CCW_101,   ROTARY_START_CCW_100,  ROTARY_TICK_000},
+};
