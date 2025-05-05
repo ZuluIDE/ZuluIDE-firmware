@@ -327,7 +327,9 @@ void platform_set_display_controller(zuluide::Observable<zuluide::control::Displ
 
 void platform_set_input_interface(zuluide::control::InputReceiver* inputReceiver) {
   logmsg("Initialized platform controller with input receiver.");
-  g_rotary_input.SetReciever(inputReceiver);
+  uint8_t ticks = ini_getl("UI", "ticks", 1, CONFIGFILE);
+  g_rotary_input.SetSensitivity(ticks);
+  g_rotary_input.SetReceiver(inputReceiver);
   g_rotary_input.StartSendingEvents();
 }
 

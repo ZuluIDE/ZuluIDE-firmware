@@ -53,6 +53,12 @@ namespace zuluide::status {
     bool IsCardPresent() const;
     void SetIsCardPresent(bool value);
 
+    bool IsPreventRemovable() const;
+    void SetIsPreventRemovable(bool disabled);
+
+    bool IsDeferred() const;
+    void SetIsDeferred(bool defer);
+
     std::string ToJson() const;
   private:
     std::unique_ptr<IDeviceStatus> primary;
@@ -60,5 +66,7 @@ namespace zuluide::status {
     std::unique_ptr<zuluide::images::Image> loadedImage;
     bool isPrimary;
     bool isCardPresent;
+    bool isPreventRemovable;
+    bool isDeferred;
   };
 }

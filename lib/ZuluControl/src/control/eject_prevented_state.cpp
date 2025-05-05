@@ -19,29 +19,23 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
 **/
 
-#include <zuluide/control/display_state.h>
+#include <zuluide/control/eject_prevented_state.h>
 
 using namespace zuluide::control;
 
-NewImageState::NewImageState (int imgIndex) : imageIndex (imgIndex) {}
-
-NewImageState::NewImageState (const NewImageState& src) : imageIndex(src.imageIndex) {}
-
-int NewImageState::GetImageIndex () const {
-  return imageIndex;
+EjectPreventedState::EjectPreventedState (Entry value)
+  : currentEntry(value) {
 }
 
-NewImageState& NewImageState::operator=(const NewImageState& src) {
-  imageIndex = src.imageIndex;
-  return *this;
+EjectPreventedState::EjectPreventedState (const EjectPreventedState& src)
+  : currentEntry(src.currentEntry) {
 }
 
-NewImageState& NewImageState::operator++(int) {
-  imageIndex++;
-  return *this;
+EjectPreventedState::Entry EjectPreventedState::GetCurrentEntry () const {
+  return currentEntry;
 }
 
-NewImageState& NewImageState::operator--(int) {
-  imageIndex--;
+EjectPreventedState& EjectPreventedState::operator=(const EjectPreventedState& src) {
+  currentEntry = src.currentEntry;
   return *this;
 }

@@ -19,22 +19,25 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
 **/
 
-#pragma once
+#include "eject_prevented_controller.h"
+#include "std_display_controller.h"
 
-#include "base_state.h"
+using namespace zuluide::control;
 
-namespace zuluide::control {
+EjectPreventedController::EjectPreventedController(StdDisplayController* cntrlr, zuluide::status::DeviceControlSafe* statCtrlr) :
+  UIControllerBase(cntrlr), statusController(statCtrlr) {
+}
 
-  class NewImageState : public BaseState {
-  public:
-    NewImageState (int imgIndex = 0);
-    NewImageState (const NewImageState& src);
-    int GetImageIndex () const;
-    NewImageState& operator++(int);
-    NewImageState& operator--(int);
-    NewImageState& operator=(const NewImageState& src);
-  private:
-    int imageIndex;
-  };
-  
+void EjectPreventedController::GoBack() {
+  controller->SetMode(Mode::Status);
+}
+
+void EjectPreventedController::SetState(const EjectPreventedState newState) {
+  state = newState;
+}
+
+
+DisplayState EjectPreventedController::Reset() {
+  state = EjectPreventedState();
+  return DisplayState(state);
 }

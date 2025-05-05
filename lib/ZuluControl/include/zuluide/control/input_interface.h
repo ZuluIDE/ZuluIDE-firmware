@@ -57,7 +57,7 @@ namespace zuluide::control {
     /***
         Provides the hardware interface with the receiver that should be notified when events are occuring.
      */
-    virtual void SetReciever(InputReceiver* reciever) = 0;
+    virtual void SetReceiver(InputReceiver* reciever) = 0;
 
     /***
         Tells the hardware interface to start sending events to the receiver.

@@ -29,8 +29,8 @@
 #include "status_controller.h"
 #include "menu_controller.h"
 #include "eject_controller.h"
+#include "eject_prevented_controller.h"
 #include "select_controller.h"
-#include "new_controller.h"
 #include "info_controller.h"
 #include "splash_controller.h"
 
@@ -45,18 +45,18 @@ namespace zuluide::control {
     void AddObserver(std::function<void(const DisplayState& current)> callback);
     Mode GetMode() const;
     zuluide::status::StatusController& GetStatController();
-    zuluide::control::StatusController& GetStatusController();
+    StatusController& GetStatusController();
     MenuController& GetMenuController();
     EjectController& GetEjectController();
+    EjectPreventedController& GetEjectPreventedController();
     SelectController& GetSelectController();
-    NewController& GetNewController();
     InfoController& GetInfoController();
     SplashController& GetSplashController();
     void UpdateState(StatusState& newState);
     void UpdateState(MenuState& newState);
     void UpdateState(SelectState& newState);
     void UpdateState(EjectState& newState);
-    void UpdateState(NewImageState& newState);
+    void UpdateState(EjectPreventedState& newState);
     void UpdateState(InfoState& newState);
     void UpdateState(SplashState& newState);
     void SetMode(Mode value);
@@ -66,13 +66,13 @@ namespace zuluide::control {
     void notifyObservers();
     std::vector<std::function<void(const DisplayState& current)>> observers;
     DisplayState currentState;
-    zuluide::control::StatusController statusController;
+    StatusController statusController;
     zuluide::status::StatusController* statController;
     UIControllerBase* current;
     MenuController menuController;
     EjectController ejectController;
+    EjectPreventedController ejectPreventedController;
     SelectController selectController;
-    NewController newController;
     InfoController infoController;
     SplashController splashController;
     UIControllerBase* getControllerByMode(const Mode mode);

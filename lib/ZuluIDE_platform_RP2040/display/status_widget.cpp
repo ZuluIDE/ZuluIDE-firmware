@@ -28,7 +28,8 @@ using namespace zuluide;
 
 StatusWidget::StatusWidget(Adafruit_SSD1306 *g, Rectangle b, Size cb) :
   Widget(g, b),
-  imagename {g, b.MakeCentered({b.size.width, cb.height})}
+  imagename {g, b.MakeCentered({b.size.width, cb.height})},
+  deferred_load {g, b.MakeCenteredAt(24, {b.size.width, cb.height})}
 {
   charBounds = cb;
 }
@@ -37,6 +38,9 @@ void StatusWidget::Update (const zuluide::status::SystemStatus& status) {
   if (!currentSysStatus || !currentSysStatus->LoadedImagesAreEqual(status)) {
     const char* filename = status.HasLoadedImage() ? status.GetLoadedImage().GetFilename().c_str() : "";
     imagename.SetToDisplay(filename);
+
+    const char* message = status.IsDeferred() ? "To load image, eject device from host system" : "";
+    deferred_load.SetToDisplay(message);
   }
 
   Widget::Update(status);
@@ -44,11 +48,14 @@ void StatusWidget::Update (const zuluide::status::SystemStatus& status) {
 
 void StatusWidget::Update (const zuluide::control::DisplayState &disp) {
   imagename.Reset();
+  deferred_load.Reset();
   Widget::Update(disp);
 }
 
 bool StatusWidget::Refresh () {
-  return imagename.CheckAndUpdateScrolling(get_absolute_time());
+  bool update = imagename.CheckAndUpdateScrolling(get_absolute_time());
+  update = deferred_load.CheckAndUpdateScrolling(get_absolute_time()) || update;
+  return update;
 }
 
 void StatusWidget::Display () {
@@ -59,6 +66,7 @@ void StatusWidget::Display () {
   }
   if (currentSysStatus->HasLoadedImage()) {
     imagename.Display();
+    deferred_load.Display();
 
     auto size = currentSysStatus->GetLoadedImage().GetFileSizeBytes();
     if (size != 0) {
@@ -70,6 +78,7 @@ void StatusWidget::Display () {
     // Draw the icon.
     auto dev_icon = currentSysStatus->GetDeviceType() == drive_type_t::DRIVE_TYPE_ZIP100 ? zipdrive_loaded : cdrom_loaded;
     graph->drawBitmap(0, 0, dev_icon, 18, 9, WHITE);
+
   } else if (!currentSysStatus->IsCardPresent()) {
     auto dev_icon = currentSysStatus->GetDeviceType() == drive_type_t::DRIVE_TYPE_ZIP100 ? zipdrive_empty : cdrom_empty;
     graph->drawBitmap(0, 0, dev_icon, 18, 9, WHITE);

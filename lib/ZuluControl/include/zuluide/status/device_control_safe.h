@@ -34,5 +34,7 @@ namespace zuluide::status {
   public:
     virtual void LoadImageSafe(zuluide::images::Image i) = 0;
     virtual void EjectImageSafe() = 0;
+    virtual bool IsPreventRemovable() = 0;
+    virtual bool IsDeferred() = 0;
   };    
 }
