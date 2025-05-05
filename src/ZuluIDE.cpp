@@ -562,6 +562,8 @@ void zuluide_init(void)
 void zuluide_main_loop(void)
 {
     static uint32_t sd_card_check_time;
+    static uint32_t splash_check_time;
+    static bool splash_over = false;
     static bool first_loop = true;
 
     if (first_loop)
@@ -569,6 +571,7 @@ void zuluide_main_loop(void)
         // Give time for basic initialization to run
         // before checking SD card
         sd_card_check_time = millis() + 1000;
+        splash_check_time = millis();
         first_loop = false;
     }
     platform_reset_watchdog();
@@ -576,7 +579,19 @@ void zuluide_main_loop(void)
     g_ide_device->eject_button_poll(true);
     blink_poll();
 
+
     g_StatusController.ProcessUpdates();
+    
+    // Checks after 3 seconds if we are still on the Splash screen ( for example if there is no SD card)
+    if (!splash_over && (uint32_t)(millis() - splash_check_time) > 3000)
+    {
+      if (g_DisplayController.GetMode() == zuluide::control::Mode::Splash);
+      {
+        // Need to force a status controller update to move beyond the Splash screen
+        g_StatusController.SetFirmwareVersion(std::string(g_log_firmwareversion));
+      }
+      splash_over = true;
+    }
 
     save_logfile();
 
