@@ -84,8 +84,6 @@ static const char* toString(const zuluide::control::MenuState::Entry value) {
     return "[ EJECT ]";
   case zuluide::control::MenuState::Entry::Select:
     return "[ SELECT ]";
-  case zuluide::control::MenuState::Entry::New:
-    return "[ NEW ]";
   case zuluide::control::MenuState::Entry::Back:
     return "[ BACK ]";
   case zuluide::control::MenuState::Entry::Info:

@@ -118,3 +118,26 @@ void StatusController::SetIsCardPresent(bool value) {
   
   notifyObservers();
 }
+
+
+void StatusController::SetIsPreventRemovable(bool prevent)
+{
+  status.SetIsPreventRemovable(prevent);
+}
+
+bool StatusController::IsPreventRemovable()
+{
+  return status.IsPreventRemovable();
+}
+
+void StatusController::SetIsDeferred(bool defer)
+{
+  status.SetIsDeferred(defer);
+  if (!defer)
+    notifyObservers();
+}
+
+bool StatusController::IsDeferred()
+{
+  return status.IsDeferred();
+}

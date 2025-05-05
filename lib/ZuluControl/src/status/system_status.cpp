@@ -30,7 +30,7 @@ SystemStatus::SystemStatus()
 }
 
 SystemStatus::SystemStatus(const SystemStatus& src)
-  : firmwareVersion(src.firmwareVersion), isCardPresent(src.isCardPresent), isPrimary(src.isPrimary)
+  : firmwareVersion(src.firmwareVersion), isCardPresent(src.isCardPresent), isPrimary(src.isPrimary), isPreventRemovable(src.isPreventRemovable), isDeferred(src.isDeferred)
 {
   if (src.primary) {
     primary = std::move(src.primary->Clone());
@@ -48,6 +48,8 @@ SystemStatus::SystemStatus(SystemStatus&& src)
   loadedImage = std::move(src.loadedImage);
   isCardPresent = src.isCardPresent;
   isPrimary = src.isPrimary;
+  isPreventRemovable = src.isPreventRemovable;
+  isDeferred = src.isDeferred;
 }
 
 SystemStatus& SystemStatus::operator= (SystemStatus&& src) {
@@ -56,6 +58,8 @@ SystemStatus& SystemStatus::operator= (SystemStatus&& src) {
   loadedImage = std::move(src.loadedImage);
   isCardPresent = src.isCardPresent;
   isPrimary = src.isPrimary;
+  isPreventRemovable = src.isPreventRemovable;  
+  isDeferred = src.isDeferred;
   return *this;
 }
 
@@ -72,6 +76,8 @@ SystemStatus& SystemStatus::operator= (const SystemStatus& src) {
 
   isCardPresent = src.isCardPresent;
   isPrimary = src.isPrimary;
+  isPreventRemovable = src.isPreventRemovable;
+  isDeferred = src.isDeferred;
 
   return *this;
 }
@@ -132,6 +138,21 @@ void SystemStatus::SetIsCardPresent(bool value) {
   isCardPresent = value;
 }
 
+bool SystemStatus::IsPreventRemovable() const {
+  return isPreventRemovable;
+}
+
+void SystemStatus::SetIsPreventRemovable(bool prevent){
+  isPreventRemovable = prevent;
+}
+
+bool SystemStatus::IsDeferred() const {
+  return isDeferred;
+}
+void SystemStatus::SetIsDeferred(bool defer){
+  isDeferred = defer;
+}
+
 static const char* toString(bool value) {
   if (value) {
     return "true";
@@ -166,6 +187,10 @@ std::string SystemStatus::ToJson() const {
   outputField(output, "isPrimary", isPrimary);
   output.append(",");
   outputField(output, "isCardPresent", isCardPresent);
+  output.append(",");
+  outputField(output, "isPreventRemovable", isPreventRemovable),
+  output.append(",");
+  outputField(output, "isDeferred", isDeferred),
   output.append(",");
   outputField(output, "fwVer", firmwareVersion);
   if (loadedImage) {
