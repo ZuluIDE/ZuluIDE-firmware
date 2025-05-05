@@ -146,68 +146,6 @@ void RotaryControl::Poll() {
       going_cw = true;
     }
   }
-/* 
-  // Current state of the encoder pins.
-  int8_t l = 1 & (input_byte >> EXP_ROT_A_PIN);
-  if(!clockHigh && l > 0) {
-    // Clock went high.
-    clockHigh = true;
-    int8_t r = 1 & (input_byte >> EXP_ROT_B_PIN);
-    if (r == 1) {
-      if (goingRight) {
-        if (tickCount < number_of_ticks) {
-          tickCount++;
-        } else {
-          inputReceiver->RotaryUpdate(-1);
-          tickCount = 0;
-        }
-      } else {
-        tickCount = 1;
-        goingRight = false;
-      }
-    } else {
-      if (!goingRight) {
-        if (tickCount < number_of_ticks) {
-          tickCount++;
-        } else {
-          inputReceiver->RotaryUpdate(1);
-          tickCount = 0;
-        }
-      } else {
-        tickCount = 1;
-        goingRight = true;
-      }
-    }
-  } else if (clockHigh && l == 0) {
-    // Clock dropped.
-    int8_t r = 1 & (input_byte >> EXP_ROT_B_PIN);
-    clockHigh = false;
-    if (r == 0) {
-      if (goingRight) {
-        if (tickCount < number_of_ticks) {
-          tickCount++;
-        } else {
-          inputReceiver->RotaryUpdate(-1);
-          tickCount = 0;
-        }
-      } else {
-        tickCount = 1;
-        goingRight = true;
-      }
-    } else {
-      if (!goingRight) {
-        if (tickCount < number_of_ticks) {
-          tickCount++;
-        } else {
-          inputReceiver->RotaryUpdate(1);
-          tickCount = 0;
-        }
-      } else {
-        tickCount = 1;
-        goingRight = false;
-      }
-    }
-  } */
 }
 
 bool RotaryControl::buttonIsPressed(bool isDown, uint32_t* lastDownMillis, uint32_t checkTime) {
@@ -223,7 +161,7 @@ bool RotaryControl::buttonIsPressed(bool isDown, uint32_t* lastDownMillis, uint3
     // Reset our timestamp for this button.
     *lastDownMillis = 0;
 
-    return isPressed;    
+    return isPressed;
   }
 }
 
