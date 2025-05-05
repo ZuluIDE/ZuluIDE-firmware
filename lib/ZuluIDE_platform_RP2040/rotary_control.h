@@ -30,11 +30,36 @@
 #endif
 
 namespace zuluide::control {
+
+  enum rotary_direction_t {
+    ROTARY_DIR_NONE = 0,
+    ROTARY_DIR_CW   = 0x10,
+    ROTARY_DIR_CCW  = 0x20
+  };
+
+  // first two bits hold state of input
+  // 3rd bit holds rotation direction
+  enum rotatry_state_t {
+    ROTARY_TICK_000 = 0,
+    ROTARY_LAST_CW_001,
+    ROTARY_START_CW_010,
+    ROTARY_CONT_CW_011,
+    ROTARY_START_CCW_100,
+    ROTARY_LAST_CCW_101,
+    ROTARY_CONT_CCW_110,
+  };
+
   class RotaryControl : public InputInterface {
   public:
+
     RotaryControl(int addr = PCA9554_ADDR);
+
+    /*
+      \param ticks how many ticks before registering a change
+     */
+    void SetSensitivity(uint8_t ticks);
     void SetI2c(TwoWire* i2c);
-    virtual void SetReciever(InputReceiver* reciever);
+    virtual void SetReceiver(InputReceiver* receiver);
     virtual void StartSendingEvents();
     virtual void StopSendingEvents();
     virtual bool CheckForDevice() override;
@@ -50,14 +75,17 @@ namespace zuluide::control {
     TwoWire *wire;
     bool buttonIsPressed(bool isDown, uint32_t* lastDownMillis, uint32_t checkTime);
 
-    bool clockHigh;
-    int tickCount;
-    bool goingRight;
+    int tick_count;
+    bool going_cw;
 
+    uint8_t number_of_ticks;
     uint32_t eject_btn_millis;
     uint32_t insert_btn_millis;
     uint32_t rotate_btn_millis;
     uint8_t lrmem;
     int32_t lrsum;
+    uint8_t rotary_state;
+
+    static const uint8_t rotary_transition_lut[7][4];
   };
 }
