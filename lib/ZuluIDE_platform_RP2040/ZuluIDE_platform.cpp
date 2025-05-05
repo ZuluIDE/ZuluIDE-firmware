@@ -327,8 +327,6 @@ void platform_set_display_controller(zuluide::Observable<zuluide::control::Displ
 
 void platform_set_input_interface(zuluide::control::InputReceiver* inputReceiver) {
   logmsg("Initialized platform controller with input receiver.");
-  uint8_t ticks = ini_getl("UI", "ticks", 1, CONFIGFILE);
-  g_rotary_input.SetSensitivity(ticks);
   g_rotary_input.SetReceiver(inputReceiver);
   g_rotary_input.StartSendingEvents();
 }
@@ -888,7 +886,7 @@ void platform_poll()
     static uint32_t prev_poll_time;
     static bool license_log_done = false;
     static bool license_from_sd_done = false;
-
+    static bool updated_controller_board = false;
     // No point polling the USB hardware more often than once per millisecond
     uint32_t time_now = millis();
     if (time_now == prev_poll_time)
@@ -939,6 +937,14 @@ void platform_poll()
         }
 
         license_log_done = true;
+    }
+
+    // update settings for the controller board the first time SD is read
+    if (g_sdcard_present && !updated_controller_board)
+    {
+        uint8_t ticks = ini_getl("UI", "ticks", 1, CONFIGFILE);
+        g_rotary_input.SetSensitivity(ticks);
+        updated_controller_board = true;
     }
 
     // Monitor supply voltage and process USB events
