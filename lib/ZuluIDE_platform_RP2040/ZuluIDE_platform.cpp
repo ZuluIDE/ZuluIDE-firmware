@@ -940,10 +940,10 @@ void platform_poll()
     }
 
     // update settings for the controller board the first time SD is read
-    if (g_sdcard_present && !updated_controller_board)
+    if (!updated_controller_board && g_sdcard_present && g_rotary_input.GetDeviceExists())
     {
-        uint8_t ticks = ini_getl("UI", "ticks", 1, CONFIGFILE);
-        g_rotary_input.SetSensitivity(ticks);
+        uint8_t ticks = ini_getl("UI", "rotary_encoder_ticks", 1, CONFIGFILE);
+        g_rotary_input.SetTicks(ticks);
         updated_controller_board = true;
     }
 
