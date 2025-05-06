@@ -298,6 +298,7 @@ bool IDEATAPIDevice::cmd_packet(ide_registers_t *regs)
         m_atapi_state.bytes_req = 128;
     }
 
+#ifdef IDE_PHY_NO_DIRECT_ATAPI_SUPPORT
     // Check if PHY has already received command
     if (!ide_phy_can_read_block() && (regs->status & IDE_STATUS_BSY))
     {
@@ -309,6 +310,7 @@ bool IDEATAPIDevice::cmd_packet(ide_registers_t *regs)
         // Start the data transfer and clear BSY
         ide_phy_start_read(12);
     }
+#endif
 
     uint32_t start = millis();
     while (!ide_phy_can_read_block())
@@ -624,7 +626,13 @@ bool IDEATAPIDevice::atapi_recv_data(uint8_t *data, size_t blocksize, size_t num
         ide_phy_read_block(data + blocksize * i, blocksize, continue_transfer);
     }
 
-    ide_phy_stop_transfers();
+    ide_phy_stop_transfers(&m_atapi_state.crc_errors);
+    if (m_atapi_state.crc_errors > 0)
+    {
+        // Return false to stop writing incorrect data to drive
+        logmsg("IDEATAPIDevice::atapi_recv_data UDMA checksum errors: ", (int)m_atapi_state.crc_errors);
+        return false;
+    }
     return true;
 }
 
@@ -661,7 +669,14 @@ bool IDEATAPIDevice::atapi_recv_data_block(uint8_t *data, uint16_t blocksize)
     }
 
     ide_phy_read_block(data, blocksize);
-    ide_phy_stop_transfers();
+
+    ide_phy_stop_transfers(&m_atapi_state.crc_errors);
+    if (m_atapi_state.crc_errors > 0)
+    {
+        // Return false to stop writing incorrect data to drive
+        logmsg("IDEATAPIDevice::atapi_recv_data UDMA checksum errors: ", (int)m_atapi_state.crc_errors);
+        return false;
+    }
     return true;
 }
 
@@ -1241,6 +1256,12 @@ bool IDEATAPIDevice::doWrite(uint32_t lba, uint32_t transfer_len)
     if (status)
     {
         return atapi_cmd_ok();
+    }
+    else if (m_atapi_state.crc_errors > 0)
+    {
+        logmsg("-- Detected ", m_atapi_state.crc_errors, " CRC errors during write to LBA ",
+            (int)lba, ", reporting error to host");
+        return atapi_cmd_error(ATAPI_SENSE_HARDWARE_ERROR, ATAPI_ASC_CRC_ERROR);
     }
     else
     {
