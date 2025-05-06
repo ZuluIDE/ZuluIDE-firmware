@@ -57,7 +57,7 @@ namespace zuluide::control {
     /*
       \param ticks how many ticks before registering a change
      */
-    void SetSensitivity(uint8_t ticks);
+    void SetTicks(uint8_t ticks);
     void SetI2c(TwoWire* i2c);
     virtual void SetReceiver(InputReceiver* receiver);
     virtual void StartSendingEvents();

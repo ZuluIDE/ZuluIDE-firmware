@@ -20,6 +20,7 @@
 **/
 
 #include "rotary_control.h"
+#include <ZuluIDE_log.h>
 
 using namespace zuluide::control;
 
@@ -77,8 +78,9 @@ uint8_t RotaryControl::getValue() {
   return input_byte;
 }
 
-void RotaryControl::SetSensitivity(uint8_t transitions) {
-  number_of_ticks = transitions;
+void RotaryControl::SetTicks(uint8_t ticks) {
+  number_of_ticks = ticks;
+  logmsg("Rotary encoder set to ", (int) number_of_ticks, " ticks before registering a rotation");
 }
 
 void RotaryControl::SetI2c(TwoWire* i2c) {
