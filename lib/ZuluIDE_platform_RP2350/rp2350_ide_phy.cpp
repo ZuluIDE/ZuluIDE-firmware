@@ -416,12 +416,17 @@ void ide_phy_assert_irq(uint8_t ide_status)
 
 void ide_phy_set_signals(uint8_t signals)
 {
+    /* FIXME: This might be responsible for occassionally disturbing bus communication
     g_idecomm.set_signals = signals;
     ide_phy_post_request(CORE1_REQ_SET_SIGNALS);
+    */
 }
 
 uint8_t ide_phy_get_signals()
 {
+    return IDE_SIGNAL_DASP | IDE_SIGNAL_PDIAG;
+
+    /* FIXME: This occassionally disturbs bus communications.
     static uint32_t last_poll = 0;
 
     // The DASP and PDIAG signals are held for several seconds
@@ -433,7 +438,7 @@ uint8_t ide_phy_get_signals()
         ide_phy_post_request(CORE1_REQ_GET_SIGNALS);
     }
 
-    return g_idecomm.get_signals;
+    return g_idecomm.get_signals;*/
 }
 
 const ide_phy_capabilities_t *ide_phy_get_capabilities()
