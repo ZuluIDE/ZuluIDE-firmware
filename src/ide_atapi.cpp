@@ -201,7 +201,25 @@ bool IDEATAPIDevice::cmd_identify_packet_device(ide_registers_t *regs)
     copy_id_string(&idf[IDE_IDENTIFY_OFFSET_MODEL_NUMBER], 20, m_devconfig.ata_model);
 
     idf[IDE_IDENTIFY_OFFSET_GENERAL_CONFIGURATION] = 0x8000 | (m_devinfo.devtype << 8) | (m_devinfo.removable ? 0x80 : 0); // Device type
-    idf[IDE_IDENTIFY_OFFSET_GENERAL_CONFIGURATION] |= (1 << 5); // Interrupt DRQ mode
+
+    const ide_phy_config_t *phycfg = ide_protocol_get_config();
+    if (phycfg->enable_packet_intrq)
+    {
+        // Setting IRQ when device is ready to receive ATAPI packet is defined
+        // in the ATAPI standard but seems to be rarely used and poorly supported
+        // in the real world. Use it only if specifically requested in the ini file.
+        idf[IDE_IDENTIFY_OFFSET_GENERAL_CONFIGURATION] |= (1 << 5);
+    }
+    else
+    {
+       // When the PHY directly starts ATAPI PACKET command reception,
+       // we can set bit 6 in the identify response so that host will
+       // poll faster and get better perforamnce.
+#ifndef IDE_PHY_NO_DIRECT_ATAPI_SUPPORT
+       idf[IDE_IDENTIFY_OFFSET_GENERAL_CONFIGURATION] |= (2 << 5);  // DRQ within 50 µs
+#endif
+    }
+
     idf[IDE_IDENTIFY_OFFSET_CAPABILITIES_1] = 0x0200; // LBA supported
     idf[IDE_IDENTIFY_OFFSET_STANDARD_VERSION_MAJOR] = 0x0078; // Version ATAPI-6
     idf[IDE_IDENTIFY_OFFSET_STANDARD_VERSION_MINOR] = 0x0019; // Minor version rev 3a
@@ -212,7 +230,6 @@ bool IDEATAPIDevice::cmd_identify_packet_device(ide_registers_t *regs)
     idf[IDE_IDENTIFY_OFFSET_BYTE_COUNT_ZERO] = 128; // Number of bytes transferred when bytes_req = 0
 
     // Diagnostics results
-    const ide_phy_config_t *phycfg = ide_protocol_get_config();
     if (m_devconfig.dev_index == 0)
     {
         idf[IDE_IDENTIFY_OFFSET_HARDWARE_RESET_RESULT] = 0x4009; // Device 0 passed diagnostics
