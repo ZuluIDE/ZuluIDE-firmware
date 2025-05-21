@@ -839,16 +839,31 @@ static void reboot_to_secure()
     while(1);
 }
 
+#define BOOTLOADER_OFFSET (128 * 1024)
+#define MAINAPP_OFFSET (256 * 1024)
+
 __attribute__((section(".time_critical.platform_rewrite_flash_page")))
 bool platform_rewrite_flash_page(uint32_t offset, uint8_t buffer[PLATFORM_FLASH_PAGE_SIZE])
 {
-    if (offset == PLATFORM_BOOTLOADER_SIZE)
+    if (offset == 0)
     {
-        if (buffer[3] != 0x20 || buffer[7] != 0x10)
+        // Recognize either the magic word that starts the encrypted HSL library,
+        // or the start of a normal unencrypted vector table. This is used to reject
+        // clearly garbage files.
+        bool is_hsl = (buffer[0] == 0x5A && buffer[1] == 0x48 && buffer[2] == 0x53 && buffer[3] == 0x4C);
+        bool is_raw = (buffer[3] == 0x20 && buffer[7] == 0x10);
+
+        if (!is_hsl && !is_raw)
         {
             logmsg("Invalid firmware file, starts with: ", bytearray(buffer, 16));
             return false;
         }
+    }
+
+    if (offset >= BOOTLOADER_OFFSET && offset < MAINAPP_OFFSET)
+    {
+        logmsg("Skipping bootloader area at offset ", offset);
+        return true;
     }
 
 #ifdef ARM_NONSECURE_MODE
@@ -908,7 +923,7 @@ void platform_boot_to_main_firmware()
 #endif
 
     // Jump directly to main firmware
-    uint32_t *application_base = (uint32_t*)(XIP_BASE + PLATFORM_BOOTLOADER_SIZE);
+    uint32_t *application_base = (uint32_t*)(XIP_BASE + MAINAPP_OFFSET);
     scb_hw->vtor = (uint32_t)application_base;
     __asm__(
         "msr msp, %0\n\t"
@@ -923,7 +938,7 @@ void btldr_reset_handler()
     {
         // Boot to main application
         watchdog_hw->scratch[6] = 0;
-        application_base = (uint32_t*)(XIP_BASE + PLATFORM_BOOTLOADER_SIZE);
+        application_base = (uint32_t*)(XIP_BASE + MAINAPP_OFFSET);
     }
 
     scb_hw->vtor = (uint32_t)application_base;

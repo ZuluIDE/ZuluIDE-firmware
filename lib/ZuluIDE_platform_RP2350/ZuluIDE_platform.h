@@ -150,10 +150,21 @@ void platform_poll_input();
 
 
 // Reprogram firmware in main program area.
+// The flash is divided to three sections in rp2350.ld:
+// 1. 128 kB encrypted HSL
+// 2. 128 kB SD card bootloader
+// 3. 768 kB main firmware
+//
+// We want to upgrade 1. and 3., but not 2.
+// This sets PLATFORM_BOOTLOADER_SIZE to 0 so that ZuluIDE_bootloader.cpp
+// gives us the full firmware.
+//
+// The section 2 programming commands are ignored in platform_rewrite_flash_page()
+// to avoid overwriting the bootloader itself.
 #define PLATFORM_FLASH_TOTAL_SIZE (1020 * 1024)
 #define PLATFORM_FLASH_PAGE_SIZE 4096
 #ifndef RP2040_DISABLE_BOOTLOADER
-#define PLATFORM_BOOTLOADER_SIZE (256 * 1024)
+#define PLATFORM_BOOTLOADER_SIZE 0
 bool platform_rewrite_flash_page(uint32_t offset, uint8_t buffer[PLATFORM_FLASH_PAGE_SIZE]);
 void platform_boot_to_main_firmware();
 #endif
