@@ -332,7 +332,7 @@ void ide_phy_start_read(uint32_t blocklen, int udma_mode)
 
 void ide_phy_start_ata_read(uint32_t blocklen, int udma_mode)
 {
-    assert(false); // TODO: implement
+    ide_phy_start_read(blocklen, udma_mode);
 }
 
 bool ide_phy_can_read_block()
@@ -389,6 +389,7 @@ void ide_phy_read_block(uint8_t *buf, uint32_t blocklen, bool continue_transfer)
 
 void ide_phy_ata_read_block(uint8_t *buf, uint32_t blocklen, bool continue_transfer)
 {
+    ide_phy_read_block(buf, blocklen, continue_transfer);
 }
 
 void ide_phy_stop_transfers(int *crc_errors)

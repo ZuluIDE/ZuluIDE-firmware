@@ -70,7 +70,7 @@ public:
 
     virtual inline void sd_card_inserted() override {;}
 
-    virtual inline void insert_media(IDEImage *image = nullptr) override {;}
+    virtual void insert_media(IDEImage *image = nullptr) override;
 
     virtual inline void insert_next_media(IDEImage *image = nullptr) override {;}
 

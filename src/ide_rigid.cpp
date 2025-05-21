@@ -157,6 +157,12 @@ void IDERigidDevice::set_image(IDEImage *image)
     // m_atapi_state.sense_asc = ATAPI_ASC_MEDIUM_CHANGE;
 }
 
+void IDERigidDevice::insert_media(IDEImage *image)
+{
+    m_image = image;
+}
+
+
 bool IDERigidDevice::handle_command(ide_registers_t *regs)
 {
     delay(m_devconfig.access_delay);
