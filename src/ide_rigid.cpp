@@ -88,6 +88,12 @@ void IDERigidDevice::post_image_setup()
     else if (cap <= IDE_CHS_528MB_LIMIT_BYTES)
     {
         found_chs = find_chs_capacity(lba, 1024, 1, m_devinfo.cylinders, m_devinfo.heads, m_devinfo.sectors_per_track);
+        if (!found_chs)
+        {
+            m_devinfo.heads = 16;
+            m_devinfo.sectors_per_track = 63;
+            m_devinfo.cylinders = lba / (m_devinfo.heads * m_devinfo.sectors_per_track);
+        }
         method = "image";
     }
     else if (cap <= IDE_CHS_8GB_WITH_GAP_LIMIT_BYTES)
@@ -97,6 +103,13 @@ void IDERigidDevice::post_image_setup()
             found_chs = find_chs_capacity(lba, 32767, 5, m_devinfo.cylinders, m_devinfo.heads, m_devinfo.sectors_per_track);
         if (!found_chs)
             found_chs = find_chs_capacity(lba, 65535, 1, m_devinfo.cylinders, m_devinfo.heads, m_devinfo.sectors_per_track);
+        if (!found_chs)
+        {
+            m_devinfo.heads = 16;
+            m_devinfo.sectors_per_track = 63;
+            m_devinfo.cylinders = lba / (m_devinfo.heads * m_devinfo.sectors_per_track);
+
+        }
         method = "image";
     }
     else
@@ -113,6 +126,11 @@ void IDERigidDevice::post_image_setup()
     logmsg("Selected Cylinders/Heads/Sectors settings from ", method, " with size ", (int) (capacity() / 1000000), "MB (total sectors = ", (int)lba,") as C: ", (int) m_devinfo.cylinders,
         " H: ",(int) m_devinfo.heads,
         " S: ", (int) m_devinfo.sectors_per_track);
+    if (!found_chs)
+    {
+        uint32_t difference = lba - (m_devinfo.cylinders * m_devinfo.heads * m_devinfo.sectors_per_track);
+        logmsg("Reported CHS has ", (int) difference, " less blocks than the image's LBA capacity which does not exactly fit in any CHS combination");
+    }
     m_devinfo.writable = true;
 
     set_ident_strings("ZuluIDE Hard Drive", "123456789", "1.0");
