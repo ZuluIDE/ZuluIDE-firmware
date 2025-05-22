@@ -202,6 +202,7 @@ void ide_protocol_poll()
                 return;
             }
 
+            regs.error = 0;
             ide_phy_set_signals(g_ide_signals | IDE_SIGNAL_DASP); // Set motherboard IDE status led
             bool status = device->handle_command(&regs);
             ide_phy_set_signals(g_ide_signals);
