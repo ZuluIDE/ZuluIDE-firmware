@@ -406,6 +406,13 @@ void ide_phy_read_block(uint8_t *buf, uint32_t blocklen, bool continue_transfer)
 void ide_phy_ata_read_block(uint8_t *buf, uint32_t blocklen, bool continue_transfer)
 {
     ide_phy_read_block(buf, blocklen, continue_transfer);
+
+    if (!continue_transfer)
+    {
+        // Transfer has ended, assert the interrupt.
+        // TODO: Why is this done here instead of in ide_rigid.cpp?
+        ide_phy_assert_irq(IDE_STATUS_DEVRDY | IDE_STATUS_DSC);
+    }
 }
 
 void ide_phy_stop_transfers(int *crc_errors)
