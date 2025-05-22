@@ -242,6 +242,27 @@ bool ide_phy_can_write_block()
     return (sio_hw->fifo_st & SIO_FIFO_ST_RDY_BITS);
 }
 
+// Get a block pointer that can be used for transmitting or receiving.
+// The block is aligned so that it always ends at buffer boundary.
+// This alignment is used by the core1 code.
+static uint8_t *get_block_pointer()
+{
+    uint8_t *block = g_idebuffers[g_ide_phy.bufferidx++ % IDECOMM_BUFFERCOUNT];
+
+    if (g_idecomm.udma_mode < 0)
+    {
+        // In PIO mode the data is packed into 32 bits per each 16 bit word
+        block += IDECOMM_MAX_BLOCKSIZE - g_idecomm.datablocksize * 2;
+    }
+    else
+    {
+        // In UDMA mode the data is as-is.
+        block += IDECOMM_MAX_BLOCKSIZE - g_idecomm.datablocksize;
+    }
+
+    return block;
+}
+
 void ide_phy_write_block(const uint8_t *buf, uint32_t blocklen)
 {
     if (blocklen & 1) blocklen++;
@@ -250,10 +271,7 @@ void ide_phy_write_block(const uint8_t *buf, uint32_t blocklen)
     assert(sio_hw->fifo_st & SIO_FIFO_ST_RDY_BITS);
 
     // Copy data to a block that remains valid for duration of transfer
-    // Data must be aligned so that it ends at the end of the block.
-    // We also need 16 bit -> 32 bit padding for PIO
-    uint8_t *block = g_idebuffers[g_ide_phy.bufferidx++ % IDECOMM_BUFFERCOUNT];
-    block += IDECOMM_MAX_BLOCKSIZE - blocklen * 2;
+    uint8_t *block = get_block_pointer();
 
     if (g_idecomm.udma_mode < 0)
     {
@@ -306,9 +324,7 @@ bool ide_phy_is_write_finished()
 static void data_out_give_next_block()
 {
     // Select a buffer for the transfer
-    // Data must be aligned so that it ends at the end of the block.
-    uint8_t *block = g_idebuffers[g_ide_phy.bufferidx++ % IDECOMM_BUFFERCOUNT];
-    block += IDECOMM_MAX_BLOCKSIZE - g_idecomm.datablocksize;
+    uint8_t *block = get_block_pointer();
 
     // Tell core1 to receive the block
     assert(sio_hw->fifo_st & SIO_FIFO_ST_RDY_BITS);
