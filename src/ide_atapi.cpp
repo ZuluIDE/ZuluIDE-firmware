@@ -266,7 +266,6 @@ void IDEATAPIDevice::atapi_identify_packet_device_response(uint16_t *idf)
 bool IDEATAPIDevice::cmd_identify_packet_device(ide_registers_t *regs)
 {
     uint16_t idf[256] = {0};
-
     atapi_identify_packet_device_response(idf);
 
     // Calculate checksum
@@ -292,6 +291,11 @@ bool IDEATAPIDevice::cmd_identify_packet_device(ide_registers_t *regs)
             return false;
         }
     }
+
+    // This is a hack to get the blue and white G3 CD-ROM OS 9.2.1 boot CD emulation working
+    // 64 NOPs was hit and miss 128 seems to work solidly
+    for(uint8_t i = 0; i < 128; i++)
+        asm("nop;");
 
     regs->error = 0;
     ide_phy_set_regs(regs);
