@@ -297,8 +297,6 @@ void platform_late_init()
     logmsg("I2S audio to expansion header enabled");
     reclock_for_audio();
     logmsg("-- System clock is set to ", (int) clock_get_hz(clk_sys),  "Hz");
-#endif
-#ifdef ENABLE_AUDIO_OUTPUT
     // one-time control setup for DMA channels and second core
     audio_init();
 #endif

@@ -29,13 +29,13 @@
 #include <pico/multicore.h>
 #include "audio.h"
 #include <CUEParser.h>
-#include "ZuluIDE_audio.h"
-#include "ZuluIDE_config.h"
-#include "ZuluIDE_log.h"
-#include "ZuluIDE_platform.h"
-#include "ide_imagefile.h"
-#include "ide_atapi.h"
-#include <ZuluI2S.h>
+#include <ZuluIDE_audio.h>
+#include <ZuluIDE_config.h>
+#include <ZuluIDE_platform_gpio.h>
+#include <ZuluIDE_log.h>
+#include <ZuluIDE_platform.h>
+#include <ide_imagefile.h>
+#include "ZuluI2S.h"
 
 
 extern SdFs SD;
@@ -383,9 +383,7 @@ void audio_init() {
     i2s.setBCLK(GPIO_I2S_BCLK);
     i2s.setDATA(GPIO_I2S_DOUT);
     i2s.setBitsPerSample(16);
-    // 44.1KHz to the nearest integer with a sys clk of 135.43MHz and 2 x 16-bit samples with the pio clock running 2x I2S clock
-    // 135.43Mhz / 16 / 2 / 2 / 44.1KHz = 47.98 ~= 48
-    i2s.setDivider(48, 0);
+    i2s.setDivider(I2S_PIO_DIVIDER, 0);
     i2s.begin(I2S_PIO_HW, I2S_PIO_SM);
     dma_channel_claim(SOUND_DMA_CHA);
 	dma_channel_claim(SOUND_DMA_CHB);
@@ -394,8 +392,19 @@ void audio_init() {
     irq_set_enabled(DMA_IRQ_0, true);
 }
 
+void audio_disable()
+{
+    if (audio_is_active())
+        audio_stop();
+    i2s.end();
+    dma_channel_unclaim(SOUND_DMA_CHA);
+    dma_channel_unclaim(SOUND_DMA_CHB);
+    irq_remove_handler(DMA_IRQ_0, audio_dma_irq);
+
+}
 
 void audio_poll() {
+
     if (audio_idle) return;
 
     static bool set_pause_buf = true;

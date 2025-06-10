@@ -56,6 +56,7 @@
 
 #ifdef ENABLE_AUDIO_OUTPUT
 #  include "audio.h"
+#  include "ZuluIDE_audio.h"
 #endif // ENABLE_AUDIO_OUTPUT
 
 #define CONTROLLER_TYPE_BOARD 1
@@ -95,6 +96,43 @@ static void gpio_conf(uint gpio, gpio_function_t fn, bool pullup, bool pulldown,
         gpio_set_slew_rate(gpio, GPIO_SLEW_RATE_SLOW);
     }
 }
+
+#ifdef ENABLE_AUDIO_OUTPUT
+// Increases clk_sys and clk_peri to 135.428571MHz at runtime to support
+// division to audio output rates. Invoke before anything is using clk_peri
+// except for the logging UART, which is handled below.
+static void reclock_for_audio() {
+    // ensure UART is fully drained before we mess up its clock
+    uart_tx_wait_blocking(uart0);
+    // switch clk_sys and clk_peri to pll_usb
+    // see code in 2.15.6.1 of the datasheet for useful comments
+    clock_configure(clk_sys,
+            CLOCKS_CLK_SYS_CTRL_SRC_VALUE_CLKSRC_CLK_SYS_AUX,
+            CLOCKS_CLK_SYS_CTRL_AUXSRC_VALUE_CLKSRC_PLL_USB,
+            48 * MHZ,
+            48 * MHZ);
+    clock_configure(clk_peri,
+            0,
+            CLOCKS_CLK_PERI_CTRL_AUXSRC_VALUE_CLKSRC_PLL_USB,
+            48 * MHZ,
+            48 * MHZ);
+    // reset PLL for 152.4MHz
+    pll_init(pll_sys, 1, 1524000000, 5, 2);
+    // switch clocks back to pll_sys
+    clock_configure(clk_sys,
+            CLOCKS_CLK_SYS_CTRL_SRC_VALUE_CLKSRC_CLK_SYS_AUX,
+            CLOCKS_CLK_SYS_CTRL_AUXSRC_VALUE_CLKSRC_PLL_SYS,
+            152400000,
+            152400000);
+    clock_configure(clk_peri,
+            0,
+            CLOCKS_CLK_PERI_CTRL_AUXSRC_VALUE_CLKSRC_PLL_SYS,
+            152400000,
+            152400000);
+    // reset UART for the new clock speed
+    uart_init(uart0, 1000000);
+}
+#endif
 
 void platform_minimal_init()
 {
@@ -225,7 +263,13 @@ void platform_init()
 // late_init() only runs in main application
 void platform_late_init()
 {
-
+#ifdef ENABLE_AUDIO_OUTPUT
+    logmsg("I2S audio to expansion header enabled");
+    reclock_for_audio();
+    logmsg("-- System clock is set to ", (int) clock_get_hz(clk_sys),  "Hz");
+    // one-time control setup for DMA channels and second core
+    audio_init();
+#endif
 }
 
 uint8_t platform_check_for_controller()
@@ -804,6 +848,19 @@ void platform_poll()
     usb_command_poll();
 
 #ifdef ENABLE_AUDIO_OUTPUT
+    static bool update_volume = false;
+    if (!update_volume && g_sdcard_present)
+    {
+        uint8_t max_volume = (uint8_t) ini_getl("IDE", "max_volume", 100, CONFIGFILE);
+        if (max_volume > 100)
+        {
+            max_volume = 100;
+            logmsg("The setting max_volume was set higher than 100, setting to 100 from ", (int) max_volume);
+        }
+        audio_set_max_volume(max_volume);
+        update_volume = true;
+        logmsg("Max volume set to ", (int) max_volume, "/100");
+    }
     audio_poll();
 #endif // ENABLE_AUDIO_OUTPUT
 }
@@ -976,6 +1033,9 @@ void processStatusUpdate(const zuluide::status::SystemStatus &currentStatus) {
 
 bool platform_enable_sniffer(const char *filename, bool passive)
 {
+  # ifdef ENABLE_AUDIO_OUTPUT
+    audio_disable();
+  # endif
     if (passive)
     {
         // Stop IDE phy and configure pins for passive input

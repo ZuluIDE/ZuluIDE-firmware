@@ -48,4 +48,5 @@ private:
     PIOProgram *_i2s;
     PIO _pio;
     int _sm;
+    int _offset;
 };

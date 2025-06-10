@@ -33,6 +33,7 @@ I2S::I2S() {
     _sm = 1;
     _pinBCLK = 26;
     _pinDOUT = 28;
+    _offset = 0;
 }
 
 I2S::~I2S() {
@@ -40,7 +41,7 @@ I2S::~I2S() {
 }
 
 bool I2S::setBCLK(pin_size_t pin) {
-    if (_running || (pin > 28)) {
+    if (_running) {
         return false;
     }
     _pinBCLK = pin;
@@ -48,7 +49,7 @@ bool I2S::setBCLK(pin_size_t pin) {
 }
 
 bool I2S::setDATA(pin_size_t pin) {
-    if (_running || (pin > 29)) {
+    if (_running) {
         return false;
     }
     _pinDOUT = pin;
@@ -84,10 +85,12 @@ bool I2S::begin(PIO pio, uint sm) {
     _pio = pio;
     _sm = sm;
     _running = true;
-    int off = 0;
+    _offset = 0;
+    if (_pinBCLK + 1 > 31 || _pinDOUT > 31)
+        pio_set_gpio_base(_pio, 16);
     pio_sm_claim(_pio, _sm);
-    off = pio_add_program(_pio, &pio_i2s_out_program);
-    pio_i2s_out_program_init(_pio, _sm, off, _pinDOUT, _pinBCLK, _bps);
+    _offset = pio_add_program(_pio, &pio_i2s_out_program);
+    pio_i2s_out_program_init(_pio, _sm, _offset, _pinDOUT, _pinBCLK, _bps);
     pio_sm_set_clkdiv_int_frac(_pio, _sm, _div_int, _div_frac);
     pio_sm_set_enabled(_pio, _sm, true);
     return true;
@@ -96,6 +99,9 @@ bool I2S::begin(PIO pio, uint sm) {
 void I2S::end() {
     if (_running) {
         pio_sm_set_enabled(_pio, _sm, false);
+        pio_remove_program(_pio, &pio_i2s_out_program, _offset);
+        pio_set_gpio_base(_pio, 0);
+        pio_sm_unclaim(_pio, _sm);
         _running = false;
     }
 }

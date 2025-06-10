@@ -24,15 +24,6 @@
 
 #include <stdint.h>
 
-
-// i2s PIO settings
-#define I2S_PIO_HW pio0_hw
-#define I2S_PIO_SM 1
-
-// audio subsystem DMA channels
-#define SOUND_DMA_CHA 6
-#define SOUND_DMA_CHB 7
-
 // size of the two audio sample buffers, in bytes
 // #define AUDIO_BUFFER_SIZE 8192 // reduce memory usage
 #define AUDIO_BUFFER_SIZE 2352 * 4
@@ -49,6 +40,11 @@ bool audio_is_active();
  * of platform_late_init().
  */
 void audio_init();
+
+/**
+ * Shutdown the audio subsystem and free system resources
+ */
+void audio_disable();
 
 /**
  * Set Max volume percentage
