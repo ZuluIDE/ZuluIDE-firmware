@@ -1945,6 +1945,7 @@ size_t IDECDROMDevice::atapi_get_mode_page(uint8_t page_ctrl, uint8_t page_idx, 
 #endif
         write_be16(&buffer[12], 64); // read buffer (64KB)
         write_be16(&buffer[14],6292);  // current max read speed, state (40, ~6292KB/s)
+        return 16;
     }
     return IDEATAPIDevice::atapi_get_mode_page(page_ctrl, page_idx, buffer, max_bytes);
 }
