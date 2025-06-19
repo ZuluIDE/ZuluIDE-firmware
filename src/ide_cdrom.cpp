@@ -1575,10 +1575,14 @@ bool IDECDROMDevice::getFirstLastTrackInfo(CUETrackInfo &first, CUETrackInfo &la
 uint64_t IDECDROMDevice::capacity_lba()
 {
     if (!m_image) return 0;
+    if (m_cached_capacity_lba == 0)
+    {
+        CUETrackInfo first, last;
+        getFirstLastTrackInfo(first, last);
+        m_cached_capacity_lba = (uint64_t)getLeadOutLBA(&last);
+    }
 
-    CUETrackInfo first, last;
-    getFirstLastTrackInfo(first, last);
-    return (uint64_t)getLeadOutLBA(&last);
+    return m_cached_capacity_lba;
 }
 
 
@@ -1798,6 +1802,7 @@ CUETrackInfo IDECDROMDevice::getTrackFromLBA(uint32_t lba)
 void IDECDROMDevice::clear_cached_track_info()
 {
     m_cached_end_lba = 0;
+    m_cached_capacity_lba = 0;
     memset(&m_cached_track_result, 0, sizeof(m_cached_track_result));
 }
 

@@ -123,8 +123,7 @@ protected:
     void clear_cached_track_info();
     CUETrackInfo m_cached_track_result;
     uint32_t m_cached_end_lba;
-
-
+    uint64_t m_cached_capacity_lba;
 
     // If the .cue file has data split across multiple files,
     // this function will reopen m_imagefile when track is changed.
