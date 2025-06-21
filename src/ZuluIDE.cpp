@@ -41,6 +41,8 @@
 #include <zuluide/status/device_status.h>
 #include <zuluide/status/system_status.h>
 #include <zuluide/images/image_iterator.h>
+#include <zuluide/pipe/filename_request_pipe.h>
+#include <zuluide/pipe/filename_response_pipe.h>
 #include "control/std_display_controller.h"
 #include "control/control_interface.h"
 
@@ -59,7 +61,9 @@ static IDEDevice *g_ide_device;
 static bool loadedFirstImage = false;
 
 zuluide::status::StatusController g_StatusController;
-zuluide::control::StdDisplayController g_DisplayController(&g_StatusController);
+zuluide::pipe::FilenameResponsePipe g_FilenameResponsePipe;
+zuluide::pipe::FilenameRequestPipe g_FilenameRequestPipe;
+zuluide::control::StdDisplayController g_DisplayController(&g_StatusController, &g_FilenameRequestPipe);
 zuluide::control::ControlInterface g_ControlInterface;
 zuluide::status::SystemStatus g_previous_controller_status;
 void status_observer(const zuluide::status::SystemStatus& current);
@@ -67,6 +71,9 @@ void loadFirstImage();
 void load_image(const zuluide::images::Image& toLoad, bool insert = true);
 
 static zuluide::ObserverTransfer<zuluide::status::SystemStatus> uiSafeStatusUpdater;
+
+
+// static zuluide::ObserverTransfer<zuluide::pipe::FilenameRequest> fileRequestSafeUpdater;
 
 #ifndef SD_SPEED_CLASS_WARN_BELOW
 #define SD_SPEED_CLASS_WARN_BELOW 10
@@ -263,6 +270,10 @@ drive_type_t searchForDriveType() {
 */
 void setupStatusController()
 {
+  g_FilenameRequestPipe.Reset();
+  g_FilenameResponsePipe.Reset();
+  g_FilenameRequestPipe.AddObserver([](zuluide::pipe::FilenameRequest t){g_FilenameResponsePipe.HandleUpdate(t);});
+  platform_set_filename_response_pipe(&g_FilenameResponsePipe);
   g_StatusController.Reset();
   g_StatusController.SetFirmwareVersion(std::string(g_log_firmwareversion));
   bool isPrimary = platform_get_device_id() == 0;
@@ -557,6 +568,8 @@ void zuluide_main_loop(void)
     blink_poll();
 
     g_StatusController.ProcessUpdates();
+    g_FilenameRequestPipe.ProcessUpdates();
+
 
     save_logfile();
 

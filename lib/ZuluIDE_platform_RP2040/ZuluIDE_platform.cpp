@@ -47,6 +47,7 @@
 #include "display/display_ssd1306.h"
 #include "rotary_control.h"
 #include <zuluide/i2c/i2c_server.h>
+#include <zuluide/pipe/filename_response.h>
 #include <minIni.h>
 
 #ifdef ENABLE_AUDIO_OUTPUT
@@ -67,10 +68,13 @@ static zuluide::control::RotaryControl g_rotary_input;
 static TwoWire g_wire(i2c1, GPIO_I2C_SDA, GPIO_I2C_SCL);
 static zuluide::DisplaySSD1306 display;
 static uint8_t g_eject_buttons = 0;
+
+
+static zuluide::pipe::FilenameResponsePipe* filenameResponsePipe;
+
 static zuluide::i2c::I2CServer g_I2cServer;
 static mutex_t logMutex;
 static zuluide::ObserverTransfer<zuluide::status::SystemStatus> *uiStatusController;
-
 void processStatusUpdate(const zuluide::status::SystemStatus &update);
 
 //void mbed_error_hook(const mbed_error_ctx * error_context);
@@ -318,6 +322,11 @@ void platform_set_status_controller(zuluide::ObserverTransfer<zuluide::status::S
   display.init(&g_wire);
   statusController->AddObserver(processStatusUpdate);
   uiStatusController = statusController;
+}
+
+void platform_set_filename_response_pipe(zuluide::pipe::FilenameResponsePipe *fnRequestPipe) {
+    logmsg("Initialized platform with filename request pipe");
+    filenameResponsePipe = fnRequestPipe;
 }
 
 void platform_set_display_controller(zuluide::Observable<zuluide::control::DisplayState>& displayController) {
@@ -1080,7 +1089,7 @@ void zuluide_main_loop1(void)
             // If no updates happend, refresh the display (enables animation)
             display.Refresh();
         }
-
+        filenameResponsePipe->ProcessUpdates();
         g_I2cServer.Poll();
     }
 }

@@ -21,6 +21,8 @@
 
 #include "select_controller.h"
 #include "std_display_controller.h"
+#include "zuluide/pipe/filename_request_pipe.h"
+#include "zuluide/pipe/filename_request.h"
 #include "ZuluIDE_log.h"
 
 using namespace zuluide::control;
@@ -47,8 +49,8 @@ DisplayState SelectController::Reset() {
   return DisplayState(state);
 }
 
-SelectController::SelectController(StdDisplayController* cntrlr, zuluide::status::DeviceControlSafe* statCtrlr) :
-  UIControllerBase(cntrlr), statusController(statCtrlr), imgIterator() {
+SelectController::SelectController(StdDisplayController* cntrlr, zuluide::status::DeviceControlSafe* statCtrlr, zuluide::pipe::FilenameRequestPipe* frPipe) :
+  UIControllerBase(cntrlr), statusController(statCtrlr), filenameRequestPipe(frPipe), imgIterator() {
 }
 
 void SelectController::IncrementImageNameOffset() {
@@ -89,25 +91,27 @@ void SelectController::ChangeToMenu() {
 }
 
 void SelectController::GetNextImageEntry() {
-  if (imgIterator.IsLast() && !state.IsShowingBack()) {
-    // We are currently on the last item, show the back.
-    state.SetIsShowingBack(true);
-    state.SetCurrentImage(nullptr);
-  } else if (imgIterator.IsLast() && state.IsShowingBack() && imgIterator.MoveFirst()) {
-    state.SetCurrentImage(std::make_unique<Image>(imgIterator.Get()));
-    state.SetIsShowingBack(false);
-  } else if (imgIterator.IsFirst() && state.IsShowingBack()) {
-    state.SetCurrentImage(std::make_unique<Image>(imgIterator.Get()));
-    state.SetIsShowingBack(false);
-  } else if (imgIterator.MoveNext()) {
-    state.SetCurrentImage(std::make_unique<Image>(imgIterator.Get()));
-    state.SetIsShowingBack(false);
-  } else {
-    // Otherwise, we have no images on the card.
-    state.SetIsShowingBack(true);
-  }  
+  zuluide::pipe::FilenameRequest filename_request = zuluide::pipe::FilenameRequest();
+  filename_request.SetRequest(zuluide::pipe::filename_request_t::Next);
+  filenameRequestPipe->RequestFilenamesSafe(filename_request);
+  // if (imgIterator.IsLast() && !state.IsShowingBack()) {
+  //   // We are currently on the last item, show the back.
+  //   state.SetIsShowingBack(true);
+  //   state.SetCurrentImage(nullptr);
+  // } else if (imgIterator.IsLast() && state.IsShowingBack() && imgIterator.MoveFirst()) {
+  //   state.SetCurrentImage(std::make_unique<Image>(imgIterator.Get()));
+  //   state.SetIsShowingBack(false);
+  // } else if (imgIterator.IsFirst() && state.IsShowingBack()) {
+  //   state.SetCurrentImage(std::make_unique<Image>(imgIterator.Get()));
+  //   state.SetIsShowingBack(false);
+  // } else if (imgIterator.MoveNext()) {
+  //   state.SetCurrentImage(std::make_unique<Image>(imgIterator.Get()));
+  //   state.SetIsShowingBack(false);
+  // } else {
+  //   // Otherwise, we have no images on the card.
+  //   state.SetIsShowingBack(true);
 
-  controller->UpdateState(state);
+  // controller->UpdateState(state);
 }
 
 void SelectController::GetPreviousImageEntry() {

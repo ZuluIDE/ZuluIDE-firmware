@@ -34,7 +34,7 @@
 #include <zuluide/control/display_state.h>
 #include <zuluide/status/system_status.h>
 #include <zuluide/status/device_control_safe.h>
-
+#include <zuluide/pipe/filename_response_pipe.h>
 #include <pico/util/queue.h>
 
 /* These are used in debug output and default SCSI strings */
@@ -124,6 +124,11 @@ void platform_set_display_controller(zuluide::Observable<zuluide::control::Displ
    Sets the controller that is used by the UI to change the system state.
  */
 void platform_set_device_control(zuluide::status::DeviceControlSafe* deviceControl);
+
+/**
+   Sets the filename request pipe that is used by controllers to request filenames from a different core safely.
+ */
+void platform_set_filename_response_pipe(zuluide::pipe::FilenameResponsePipe *filenameResponsePipe);
 
 /**
    This mutex is used to prevent saving the log file to the SD card while reading the file system.

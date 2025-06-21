@@ -24,6 +24,7 @@
 #include "../status/status_controller.h"
 #include <zuluide/status/device_control_safe.h>
 #include <zuluide/control/display_state.h>
+#include <zuluide/pipe/filename_request_pipe.h>
 #include "ui_controller_base.h"
 
 namespace zuluide::control {
@@ -33,7 +34,7 @@ namespace zuluide::control {
    */
   class SelectController : public UIControllerBase {
   public:
-    SelectController(StdDisplayController* cntrlr, zuluide::status::DeviceControlSafe* statCtrlr);
+    SelectController(StdDisplayController* cntrlr, zuluide::status::DeviceControlSafe* statCtrlr, zuluide::pipe::FilenameRequestPipe* frPipe);
     void IncrementImageNameOffset();
     void DecreaseImageNameOffset();
     void ResetImageNameOffset();
@@ -46,5 +47,6 @@ namespace zuluide::control {
     zuluide::status::DeviceControlSafe* statusController;
     SelectState state;
     zuluide::images::ImageIterator imgIterator;
+    zuluide::pipe::FilenameRequestPipe *filenameRequestPipe;
   };
 }

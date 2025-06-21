@@ -163,11 +163,11 @@ SplashController& StdDisplayController::GetSplashController() {
   return splashController;
 }
 
-StdDisplayController::StdDisplayController(zuluide::status::StatusController* statCtrlr) : statController(statCtrlr),
+StdDisplayController::StdDisplayController(zuluide::status::StatusController* statCtrlr, zuluide::pipe::FilenameRequestPipe* frPipe) : statController(statCtrlr),
 											   current(NULL),
 											   menuController(this),
 											   ejectController(this, statController),
-											   selectController(this, statController),
+											   selectController(this, statController, frPipe),
 											   newController(this, statController),
 											   infoController(this),
 											   splashController(this),

@@ -24,10 +24,11 @@
 #include "image.h"
 #include <memory>
 #include <SdFat.h>
-#include <ZuluIDE_config.h>
 #include <CUEParser.h>
 
 #define MAX_CUE_SHEET_SIZE 4096
+// Maximum path length for files on SD card
+#define MAX_FILE_PATH 255
 
 namespace zuluide::images {
 
