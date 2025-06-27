@@ -19,27 +19,27 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
 **/
 
-#pragma once
+#include "eject_prevented_widget.h"
+#include "ZuluIDE_log.h"
 
-#include <zuluide/control/display_state.h>
-#include "../status/status_controller.h"
-#include "ui_controller_base.h"
+#define EJECT_MENU_TEXT "-- Host Eject Only --"
+#define MENU_OFFSET 1
 
-namespace zuluide::control {
-  class StdDisplayController;
-  /**
-     Controls state when the UI is creating a new image.
-   */
-  class NewController : public UIControllerBase {
-  public:
-    NewController(StdDisplayController* cntrlr, zuluide::status::StatusController* statCtrlr);
-    void IncrementImageIndex();
-    void DecreaseImageIndex();
-    void ResetImageIndex();
-    void CreateAndSelect();
-    virtual DisplayState Reset();
-  private:
-    NewImageState state;
-    zuluide::status::StatusController *statusController;
-  };
+using namespace zuluide;
+
+EjectPreventedWidget::EjectPreventedWidget(Adafruit_SSD1306 *g, Rectangle b, Size cb) :
+  Widget(g, b)
+{
+  charBounds = cb;
+}
+
+void EjectPreventedWidget::Display () {
+  graph->setTextColor(WHITE, BLACK);
+
+  DrawCenteredTextAt (EJECT_MENU_TEXT, 0);
+
+  const char* selectMenuText = " Back ";
+  graph->setTextColor(BLACK, WHITE);
+  DrawCenteredTextAt (selectMenuText, 16 + MENU_OFFSET);
+  graph->setTextColor(WHITE, BLACK);
 }

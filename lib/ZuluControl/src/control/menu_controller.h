@@ -23,6 +23,7 @@
 
 #include <zuluide/control/display_state.h>
 #include "ui_controller_base.h"
+#include <status/status_controller.h>
 
 namespace zuluide::control {
   class StdDisplayController;
@@ -31,12 +32,13 @@ namespace zuluide::control {
    */
   class MenuController : public UIControllerBase {
   public:
-    MenuController(StdDisplayController* cntrlr);
+    MenuController(StdDisplayController* cntrlr, zuluide::status::DeviceControlSafe* statCtrlr);
     void MoveToNextEntry();
     void MoveToPreviousEntry();
     void ChangeToSelectedEntry();
     virtual DisplayState Reset();
   private:
+    zuluide::status::DeviceControlSafe *statusController;
     MenuState state;
   };
 }

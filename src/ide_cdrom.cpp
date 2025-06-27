@@ -693,6 +693,7 @@ bool IDECDROMDevice::atapi_read_cd_msf(const uint8_t *cmd)
 
 bool IDECDROMDevice::atapi_get_event_status_notification(const uint8_t *cmd)
 {
+    m_removable.receiving_event_status_notifications = true;
     uint8_t *buf = m_buffer.bytes;
     if (!(cmd[1] & 1))
     {
@@ -797,6 +798,16 @@ bool IDECDROMDevice::atapi_get_event_status_notification(const uint8_t *cmd)
             buf[6] = 0; // Start slot
             buf[7] = 0; // End slot
             set_esn_event(esn_event_t::NoChange);
+
+            // Insert after eject and no change
+            if (m_devinfo.removable && m_removable.ejected && m_removable.reinsert_media_after_eject && m_removable.ignore_prevent_removal)
+            {
+                insert_next_media(m_image);
+            }
+            else if (!has_image())
+            {
+                return atapi_cmd_not_ready_error();
+            }
         }
     }
     else
@@ -1564,10 +1575,14 @@ bool IDECDROMDevice::getFirstLastTrackInfo(CUETrackInfo &first, CUETrackInfo &la
 uint64_t IDECDROMDevice::capacity_lba()
 {
     if (!m_image) return 0;
+    if (m_cached_capacity_lba == 0)
+    {
+        CUETrackInfo first, last;
+        getFirstLastTrackInfo(first, last);
+        m_cached_capacity_lba = (uint64_t)getLeadOutLBA(&last);
+    }
 
-    CUETrackInfo first, last;
-    getFirstLastTrackInfo(first, last);
-    return (uint64_t)getLeadOutLBA(&last);
+    return m_cached_capacity_lba;
 }
 
 
@@ -1575,22 +1590,29 @@ void IDECDROMDevice::eject_media()
 {
     doStopAudio();
 
-    if (!m_removable.ejected)
-    {
-        set_esn_event(esn_event_t::MMediaRemoval);
-    }
-
     IDEATAPIDevice::eject_media();
 }
 
 void IDECDROMDevice::button_eject_media()
 {
-    if (!m_removable.prevent_removable)
+    if (m_removable.prevent_removable)
+    {
+        if (m_removable.ignore_prevent_removal)
+        {
+            eject_media();
+        }
+        else
+        {
+            if (!m_removable.ejected)
+            {
+                set_esn_event(esn_event_t::MEjectRequest);
+            }
+        }
+    }
+    else
     {
         eject_media();
     }
-    else
-        dbgmsg("Attempted to eject media but host has set drive to prevent removable");
 }
 
 void IDECDROMDevice::insert_media(IDEImage *image)
@@ -1780,6 +1802,7 @@ CUETrackInfo IDECDROMDevice::getTrackFromLBA(uint32_t lba)
 void IDECDROMDevice::clear_cached_track_info()
 {
     m_cached_end_lba = 0;
+    m_cached_capacity_lba = 0;
     memset(&m_cached_track_result, 0, sizeof(m_cached_track_result));
 }
 
@@ -1927,6 +1950,7 @@ size_t IDECDROMDevice::atapi_get_mode_page(uint8_t page_ctrl, uint8_t page_idx, 
 #endif
         write_be16(&buffer[12], 64); // read buffer (64KB)
         write_be16(&buffer[14],6292);  // current max read speed, state (40, ~6292KB/s)
+        return 16;
     }
     return IDEATAPIDevice::atapi_get_mode_page(page_ctrl, page_idx, buffer, max_bytes);
 }

@@ -50,9 +50,9 @@ void IDEATAPIDevice::initialize(int devidx)
     m_removable.reinsert_media_after_eject = ini_getbool("IDE", "reinsert_media_after_eject", true, CONFIGFILE);
     m_removable.reinsert_media_on_inquiry = ini_getbool("IDE", "reinsert_media_on_inquiry", true, CONFIGFILE);
     m_removable.reinsert_media_after_sd_insert = ini_getbool("IDE", "reinsert_media_on_sd_insert", true, CONFIGFILE);
-    m_removable.ignore_prevent_removal = ini_getbool("IDE", "ignore_prevent_removal", false, CONFIGFILE);
-    if (m_removable.ignore_prevent_removal)
-        logmsg("Ignoring host from preventing removal of media");
+    m_removable.ignore_prevent_removal = ini_getbool("IDE", "ignore_prevent_removal", true, CONFIGFILE);
+    if (m_devinfo.removable && !m_removable.ignore_prevent_removal)
+        logmsg("Respecting host preventing removal of media");
     memset(&m_atapi_state, 0, sizeof(m_atapi_state));
     IDEDevice::initialize(devidx);
 }
@@ -201,7 +201,25 @@ bool IDEATAPIDevice::cmd_identify_packet_device(ide_registers_t *regs)
     copy_id_string(&idf[IDE_IDENTIFY_OFFSET_MODEL_NUMBER], 20, m_devconfig.ata_model);
 
     idf[IDE_IDENTIFY_OFFSET_GENERAL_CONFIGURATION] = 0x8000 | (m_devinfo.devtype << 8) | (m_devinfo.removable ? 0x80 : 0); // Device type
-    idf[IDE_IDENTIFY_OFFSET_GENERAL_CONFIGURATION] |= (1 << 5); // Interrupt DRQ mode
+
+    const ide_phy_config_t *phycfg = ide_protocol_get_config();
+    if (phycfg->enable_packet_intrq)
+    {
+        // Setting IRQ when device is ready to receive ATAPI packet is defined
+        // in the ATAPI standard but seems to be rarely used and poorly supported
+        // in the real world. Use it only if specifically requested in the ini file.
+        idf[IDE_IDENTIFY_OFFSET_GENERAL_CONFIGURATION] |= (1 << 5);
+    }
+    else
+    {
+       // When the PHY directly starts ATAPI PACKET command reception,
+       // we can set bit 6 in the identify response so that host will
+       // poll faster and get better perforamnce.
+#ifndef IDE_PHY_NO_DIRECT_ATAPI_SUPPORT
+       idf[IDE_IDENTIFY_OFFSET_GENERAL_CONFIGURATION] |= (2 << 5);  // DRQ within 50 µs
+#endif
+    }
+
     idf[IDE_IDENTIFY_OFFSET_CAPABILITIES_1] = 0x0200; // LBA supported
     idf[IDE_IDENTIFY_OFFSET_STANDARD_VERSION_MAJOR] = 0x0078; // Version ATAPI-6
     idf[IDE_IDENTIFY_OFFSET_STANDARD_VERSION_MINOR] = 0x0019; // Minor version rev 3a
@@ -212,7 +230,6 @@ bool IDEATAPIDevice::cmd_identify_packet_device(ide_registers_t *regs)
     idf[IDE_IDENTIFY_OFFSET_BYTE_COUNT_ZERO] = 128; // Number of bytes transferred when bytes_req = 0
 
     // Diagnostics results
-    const ide_phy_config_t *phycfg = ide_protocol_get_config();
     if (m_devconfig.dev_index == 0)
     {
         idf[IDE_IDENTIFY_OFFSET_HARDWARE_RESET_RESULT] = 0x4009; // Device 0 passed diagnostics
@@ -298,6 +315,7 @@ bool IDEATAPIDevice::cmd_packet(ide_registers_t *regs)
         m_atapi_state.bytes_req = 128;
     }
 
+#ifdef IDE_PHY_NO_DIRECT_ATAPI_SUPPORT
     // Check if PHY has already received command
     if (!ide_phy_can_read_block() && (regs->status & IDE_STATUS_BSY))
     {
@@ -309,6 +327,7 @@ bool IDEATAPIDevice::cmd_packet(ide_registers_t *regs)
         // Start the data transfer and clear BSY
         ide_phy_start_read(12);
     }
+#endif
 
     uint32_t start = millis();
     while (!ide_phy_can_read_block())
@@ -624,7 +643,13 @@ bool IDEATAPIDevice::atapi_recv_data(uint8_t *data, size_t blocksize, size_t num
         ide_phy_read_block(data + blocksize * i, blocksize, continue_transfer);
     }
 
-    ide_phy_stop_transfers();
+    ide_phy_stop_transfers(&m_atapi_state.crc_errors);
+    if (m_atapi_state.crc_errors > 0)
+    {
+        // Return false to stop writing incorrect data to drive
+        logmsg("IDEATAPIDevice::atapi_recv_data UDMA checksum errors: ", (int)m_atapi_state.crc_errors);
+        return false;
+    }
     return true;
 }
 
@@ -661,7 +686,14 @@ bool IDEATAPIDevice::atapi_recv_data_block(uint8_t *data, uint16_t blocksize)
     }
 
     ide_phy_read_block(data, blocksize);
-    ide_phy_stop_transfers();
+
+    ide_phy_stop_transfers(&m_atapi_state.crc_errors);
+    if (m_atapi_state.crc_errors > 0)
+    {
+        // Return false to stop writing incorrect data to drive
+        logmsg("IDEATAPIDevice::atapi_recv_data UDMA checksum errors: ", (int)m_atapi_state.crc_errors);
+        return false;
+    }
     return true;
 }
 
@@ -797,13 +829,9 @@ bool IDEATAPIDevice::atapi_cmd_ok()
 
 bool IDEATAPIDevice::atapi_test_unit_ready(const uint8_t *cmd)
 {
-    if (m_devinfo.removable && m_removable.ejected)
+    if (m_devinfo.removable && m_removable.ejected && m_removable.reinsert_media_after_eject)
     {
-        if (m_removable.reinsert_media_after_eject && check_time_after_eject())
-        {
-            insert_next_media(m_image);
-        }
-        return atapi_cmd_not_ready_error();
+        insert_next_media(m_image);
     }
     else if (!has_image())
     {
@@ -861,17 +889,13 @@ bool IDEATAPIDevice::atapi_load_unload_medium(const uint8_t *cmd)
 
 bool IDEATAPIDevice::atapi_prevent_allow_removal(const uint8_t *cmd)
 {
-    if (m_removable.ignore_prevent_removal)
-    {
-        dbgmsg("-- Ignoring host request to change prevent removable via ini file setting");
-    }
-    else
-    {
-        m_removable.prevent_removable = cmd[4] & 1;
-        m_removable.prevent_persistent = cmd[4] & 2;
+    m_removable.prevent_removable = cmd[4] & 1;
+    m_removable.prevent_persistent = cmd[4] & 2;
+    dbgmsg("-- Host requested prevent=", (int)m_removable.prevent_removable, " persistent=", (int)m_removable.prevent_persistent);
 
-        // We can't actually prevent SD card from being removed
-        dbgmsg("-- Host requested prevent=", (int)m_removable.prevent_removable, " persistent=", (int)m_removable.prevent_persistent);
+    if (!m_removable.ignore_prevent_removal)
+    {
+        g_StatusController.SetIsPreventRemovable(m_removable.prevent_removable);
     }
     return atapi_cmd_ok();
 }
@@ -892,7 +916,7 @@ bool IDEATAPIDevice::atapi_inquiry(const uint8_t *cmd)
     if (req_bytes < count) count = req_bytes;
     atapi_send_data(inquiry, count);
 
-    if (m_removable.reinsert_media_on_inquiry && check_time_after_eject())
+    if (m_removable.reinsert_media_on_inquiry)
     {
         insert_next_media(m_image);
     }
@@ -1250,6 +1274,12 @@ bool IDEATAPIDevice::doWrite(uint32_t lba, uint32_t transfer_len)
     {
         return atapi_cmd_ok();
     }
+    else if (m_atapi_state.crc_errors > 0)
+    {
+        logmsg("-- Detected ", m_atapi_state.crc_errors, " CRC errors during write to LBA ",
+            (int)lba, ", reporting error to host");
+        return atapi_cmd_error(ATAPI_SENSE_HARDWARE_ERROR, ATAPI_ASC_CRC_ERROR);
+    }
     else
     {
         return atapi_cmd_error(ATAPI_SENSE_MEDIUM_ERROR, 0);
@@ -1357,7 +1387,7 @@ void IDEATAPIDevice::eject_button_poll(bool immediate)
 
 void IDEATAPIDevice::button_eject_media()
 {
-    if (!m_removable.prevent_removable)
+    if (!m_removable.prevent_removable || m_removable.ignore_prevent_removal)
         eject_media();
     else
         dbgmsg("Attempted to eject media but host has set drive to prevent removable");
@@ -1365,22 +1395,22 @@ void IDEATAPIDevice::button_eject_media()
 
 void IDEATAPIDevice::eject_media()
 {
-    if (m_image)
-    {
-        char filename[MAX_FILE_PATH+1];
-        m_image->get_image_name(filename, sizeof(filename));
-        logmsg("Device ejecting media: \"", filename, "\"");
-    }
-    else
-    {
-        logmsg("Device ejecting media, image already cleared");
-    }
-
     if (!m_removable.ejected)
     {
+        if (m_image)
+        {
+            char filename[MAX_FILE_PATH+1];
+            m_image->get_image_name(filename, sizeof(filename));
+            logmsg("Device ejecting media: \"", filename, "\"");
+        }
+        else
+        {
+            logmsg("Device ejecting media, image already cleared");
+        }
         m_removable.ejected = true;
-        m_removable.eject_time = millis();
     }
+    else
+        dbgmsg("---- Eject request ignored or delayed");
 }
 
 void IDEATAPIDevice::insert_media(IDEImage *image)
@@ -1496,9 +1526,4 @@ void IDEATAPIDevice::set_not_ready(bool not_ready)
 {
     if (ini_getbool("IDE", "set_not_ready_on_insert", 0, CONFIGFILE))
         m_atapi_state.not_ready = not_ready;
-}
-
-bool IDEATAPIDevice::check_time_after_eject()
-{
-    return ((uint32_t)(millis() - m_removable.eject_time)) > 500;
 }

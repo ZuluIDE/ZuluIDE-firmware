@@ -289,7 +289,6 @@ void platform_late_init()
 #ifdef ENABLE_AUDIO_OUTPUT
     // one-time control setup for DMA channels and second core
     audio_init();
-    audio_set_max_volume((uint8_t) ini_getl("IDE", "max_volume", 100, CONFIGFILE));
 #endif
     platform_check_for_controller();
     __USBStart();
@@ -336,7 +335,7 @@ void platform_set_display_controller(zuluide::Observable<zuluide::control::Displ
 
 void platform_set_input_interface(zuluide::control::InputReceiver* inputReceiver) {
   logmsg("Initialized platform controller with input receiver.");
-  g_rotary_input.SetReciever(inputReceiver);
+  g_rotary_input.SetReceiver(inputReceiver);
   g_rotary_input.StartSendingEvents();
 }
 
@@ -895,7 +894,7 @@ void platform_poll()
     static uint32_t prev_poll_time;
     static bool license_log_done = false;
     static bool license_from_sd_done = false;
-
+    static bool updated_controller_board = false;
     // No point polling the USB hardware more often than once per millisecond
     uint32_t time_now = millis();
     if (time_now == prev_poll_time)
@@ -948,12 +947,33 @@ void platform_poll()
         license_log_done = true;
     }
 
+    // update settings for the controller board the first time SD is read
+    if (!updated_controller_board && g_sdcard_present && g_rotary_input.GetDeviceExists())
+    {
+        uint8_t ticks = ini_getl("UI", "rotary_encoder_ticks", 1, CONFIGFILE);
+        g_rotary_input.SetTicks(ticks);
+        updated_controller_board = true;
+    }
+
     // Monitor supply voltage and process USB events
     adc_poll();
     usb_log_poll();
     usb_command_poll();
 
 #ifdef ENABLE_AUDIO_OUTPUT
+    static bool update_volume = false;
+    if (!update_volume && g_sdcard_present)
+    {
+        uint8_t max_volume = (uint8_t) ini_getl("IDE", "max_volume", 100, CONFIGFILE);
+        if (max_volume > 100)
+        {
+            max_volume = 100;
+            logmsg("The setting max_volume was set higher than 100, setting to 100 from ", (int) max_volume);
+        }
+        audio_set_max_volume(max_volume);
+        update_volume = true;
+        logmsg("Max volume set to ", (int) max_volume, "/100");
+    }
     audio_poll();
 #endif // ENABLE_AUDIO_OUTPUT
 }

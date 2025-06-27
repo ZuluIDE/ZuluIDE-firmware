@@ -51,10 +51,14 @@ namespace zuluide::status {
     void SetFirmwareVersion(std::string firmwareVersion);
     const SystemStatus& GetStatus();
     void Reset();
-    virtual void LoadImageSafe(zuluide::images::Image i);
-    virtual void EjectImageSafe();
+    virtual void LoadImageSafe(zuluide::images::Image i) override;
+    virtual void EjectImageSafe() override;
+    virtual bool IsPreventRemovable() override;
+    virtual bool IsDeferred() override;
     void ProcessUpdates();
     void SetIsCardPresent(bool value);
+    void SetIsPreventRemovable(bool prevent);
+    void SetIsDeferred(bool defer);
   private:
     bool isUpdating;
     void notifyObservers();

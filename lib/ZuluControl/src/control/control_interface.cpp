@@ -25,7 +25,6 @@
 #include "menu_controller.h"
 #include "select_controller.h"
 #include "status_controller.h"
-#include "new_controller.h"
 
 using namespace zuluide::control;
 
@@ -87,11 +86,6 @@ void ControlInterface::RotaryUpdate(int offset) {
     break;
   }
 
-  case Mode::NewImage: {
-    displayController->GetNewController().CreateAndSelect();
-    break;
-  }
-
   case Mode::Info: {
     int cur = offset;
     while (cur > 0) {
@@ -112,7 +106,7 @@ void ControlInterface::RotaryUpdate(int offset) {
 void ControlInterface::RotaryButtonPressed() {
   switch(currentDisplayMode) {
   case Mode::Status: {
-    displayController->GetStatusController().ChangeToMenu();
+      displayController->GetStatusController().ChangeToMenu();
     break;
   }
 
@@ -126,13 +120,13 @@ void ControlInterface::RotaryButtonPressed() {
     break;
   }
 
-  case Mode::Select: {
-    displayController->GetSelectController().SelectImage();
+  case Mode::EjectPrevented: {
+    displayController->GetEjectPreventedController().GoBack();
     break;
   }
 
-  case Mode::NewImage: {
-    displayController->GetNewController().CreateAndSelect();
+  case Mode::Select: {
+    displayController->GetSelectController().SelectImage();
     break;
   }
 
@@ -150,7 +144,7 @@ void ControlInterface::PrimaryButtonPressed() {
     break;
   }
   default:
-    break;      
+    break;
   }
 }
 
@@ -163,8 +157,11 @@ void ControlInterface::SecondaryButtonPressed() {
 
   case Mode::Status: {
     if (currentStatus.HasLoadedImage()) {
-      displayController->SetMode(Mode::Eject);
-    }
+      if(statusController && statusController->IsPreventRemovable())
+        displayController->SetMode(Mode::EjectPrevented);
+      else
+        displayController->SetMode(Mode::Eject);
+      }
     
     break;
   }

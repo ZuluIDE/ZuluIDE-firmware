@@ -37,6 +37,7 @@ namespace zuluide::control {
     void ResetImageNameOffset();
     void ChangeToMenu();
     virtual DisplayState Reset();
+    void ChangeToMenuPreventRem();
   private:
     StatusState state;
   };

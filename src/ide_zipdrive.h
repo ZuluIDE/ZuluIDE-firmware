@@ -40,7 +40,14 @@ public:
 
     virtual bool disables_iordy() override { return true; }
 
+    virtual void eject_media() override;
+
     virtual void button_eject_media() override;
+
+    virtual void insert_media(IDEImage *image = nullptr) override;
+
+    virtual bool set_load_deferred(const char* image_name) override;
+    virtual bool is_load_deferred() override;
 
 protected:
     virtual bool cmd_identify_packet_device(ide_registers_t *regs) override;
@@ -52,6 +59,7 @@ protected:
     virtual bool atapi_read_format_capacities(const uint8_t *cmd);
     virtual bool atapi_verify(const uint8_t *cmd);
     virtual bool atapi_inquiry(const uint8_t *cmd) override;
+    virtual bool atapi_start_stop_unit(const uint8_t *cmd) override;
     virtual bool atapi_zip_disk_0x06(const uint8_t *cmd);
     virtual bool atapi_zip_disk_0x0D(const uint8_t *cmd);
 

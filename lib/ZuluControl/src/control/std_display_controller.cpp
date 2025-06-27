@@ -20,7 +20,6 @@
 **/
 
 #include "std_display_controller.h"
-#include "new_controller.h"
 #include "eject_controller.h"
 #include "menu_controller.h"
 #include "info_controller.h"
@@ -37,35 +36,43 @@ void StdDisplayController::AddObserver(std::function<void(const DisplayState& cu
 
 UIControllerBase* StdDisplayController::getControllerByMode(const Mode mode) {
   switch (mode) {  
-    case Mode::Status: {
-      return &statusController;
-    }
-    
-    case Mode::Menu: {
-      return &menuController;
-    }
-    
-    case Mode::Eject: {
-      return &ejectController;
-    }
-    
-    case Mode::Select: {
-      return &selectController;
-    }
-    
-    case Mode::NewImage: {
-      return &newController;
-    }
-    
-    case Mode::Info: {
-      return &infoController;
-    }
-    
-    case Mode::Splash:
-    default: {
-      return &splashController;
-    }
+  case Mode::Status: {
+    return &statusController;
   }
+
+  case Mode::Menu: {
+    return &menuController;
+  }
+
+  case Mode::Eject: {
+    return &ejectController;
+  }
+
+  case Mode::EjectPrevented: {
+    EjectPreventedState empty;
+    UpdateState(empty);
+    ejectPreventedController.SetState(empty);
+    return &ejectPreventedController;
+  }
+    
+  case Mode::Select: {
+    return &selectController;
+  }
+
+  case Mode::Info: {
+    return &infoController;
+  }
+
+  case Mode::Splash:
+  default: {
+    return &splashController;
+  }
+  }
+}
+
+Mode StdDisplayController::GetMode() const
+{
+  return currentState.GetCurrentMode();
 }
 
 void StdDisplayController::SetMode(Mode newMode)
@@ -97,14 +104,14 @@ void StdDisplayController::UpdateState(SelectState& newState)
   notifyObservers();
 }
 
-void StdDisplayController::UpdateState(NewImageState& newState)
+void StdDisplayController::UpdateState(EjectState& newState)
 {
   // Copy the new state into a new memory location.
   currentState = std::move(DisplayState(newState));
   notifyObservers();
 }
 
-void StdDisplayController::UpdateState(EjectState& newState)
+void StdDisplayController::UpdateState(EjectPreventedState& newState)
 {
   // Copy the new state into a new memory location.
   currentState = std::move(DisplayState(newState));
@@ -147,12 +154,12 @@ EjectController& StdDisplayController::GetEjectController() {
   return ejectController;
 }
 
-SelectController& StdDisplayController::GetSelectController() {
-  return selectController;
+EjectPreventedController& StdDisplayController::GetEjectPreventedController() {
+  return ejectPreventedController;
 }
 
-NewController& StdDisplayController::GetNewController() {
-  return newController;
+SelectController& StdDisplayController::GetSelectController() {
+  return selectController;
 }
 
 InfoController& StdDisplayController::GetInfoController() {
@@ -166,14 +173,14 @@ SplashController& StdDisplayController::GetSplashController() {
 StdDisplayController::StdDisplayController(zuluide::status::StatusController* statCtrlr, zuluide::pipe::ImageRequestPipe* imRqPipe,zuluide::pipe::ImageResponsePipe* imRsPipe) : 
                       statController(statCtrlr),
                       current(NULL),
-                      menuController(this),
+                      menuController(this, statController),
                       ejectController(this, statController),
+                      ejectPreventedController(this, statController),
                       selectController(this, statController, imRqPipe, imRsPipe),
-                      newController(this, statController),
                       infoController(this),
                       splashController(this),
                       statusController(this) {
-                      }
+}
 
 zuluide::status::StatusController& StdDisplayController::GetStatController() {
   return *statController;
