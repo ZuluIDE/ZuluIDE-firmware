@@ -56,55 +56,20 @@ void ImageRequestPipe::notifyObservers() {
       // This may be overly conservative if we do not do multi-threaded work
       // and we do not mutate system state in observers. This could be easily
       // verified given this isn't a public API.
-      observer(*filenameRequest);
+      observer(*imageRequest);
     });
-
-    // std::for_each(observerQueues.begin(), observerQueues.end(), [this](auto observer) {
-    //   FilenameRequest *update = new FilenameRequest(filenameRequest);
-    //   queue_try_add(observer, &update);
-    // });
   }
 }
-
-// void ImageRequestPipe::SetFirmwareVersion(std::string firmwareVersion) {
-//   status.SetFirmwareVersion(std::move(firmwareVersion));
-//   notifyObservers();
-// }
-
-// const SystemStatus& ImageRequestPipe::GetStatus() {
-//   return status;
-// }
 
 void ImageRequestPipe::Reset() {
    queue_init(&updateQueue, sizeof(ImageRequest*), 5);
 }
 
-// void ImageRequestPipe::LoadImage(zuluide::images::Image i) {
-//   status.SetLoadedImage(std::make_unique<zuluide::images::Image>(i));
-//   notifyObservers();
-// }
-
-// void ImageRequestPipe::LoadImageSafe(zuluide::images::Image i) {
-//   UpdateAction* actionToExecute = new UpdateAction();
-//   actionToExecute->ToLoad = std::make_unique<zuluide::images::Image>(i);
-//   if(!queue_try_add(&updateQueue, &actionToExecute)) {
-//     logmsg("Load image failed to enqueue.");
-//   }
-// }
-
-// void ImageRequestPipe::EjectImageSafe() {
-//   UpdateAction* actionToExecute = new UpdateAction();
-//   actionToExecute->Eject = std::make_unique<bool>(true);
-//   if(!queue_try_add(&updateQueue, &actionToExecute)) {
-//     logmsg("Eject image failed to enqueue.");
-//   }
-// }
-
 void ImageRequestPipe::RequestImageSafe(ImageRequest image_request) {
   UpdateAction* actionToExecute = new UpdateAction();
-  actionToExecute->requestFilename = std::make_unique<ImageRequest>(image_request);
+  actionToExecute->requestImage = std::make_unique<ImageRequest>(image_request);
   if(!queue_try_add(&updateQueue, &actionToExecute)) {
-    logmsg("Requesting filename action failed to enqueue.");
+    logmsg("Requesting image action failed to enqueue.");
   }
 }
 
@@ -112,76 +77,10 @@ void ImageRequestPipe::ProcessUpdates() {
   UpdateAction* actionToExecute;
   if (queue_try_remove(&updateQueue, &actionToExecute)) {
     // An action was on the queue, execute it.
-    if (actionToExecute->requestFilename) {
-      filenameRequest = std::move(actionToExecute->requestFilename);
+    if (actionToExecute->requestImage) {
+      imageRequest = std::move(actionToExecute->requestImage);
       notifyObservers();
     }
     delete(actionToExecute);
   }
 }
-
-// void ImageRequestPipe::HostProcessUpdates() {
-//   UpdateAction* actionToExecute;
-//   if (queue_try_remove(&updateQueue, &actionToExecute)) {
-//     // An action was on the queue, execute it.
-//     if (actionToExecute->ToLoad) {
-//       LoadImage(*actionToExecute->ToLoad);
-//     }
-
-//     if (actionToExecute->Eject && *actionToExecute->Eject) {
-//       EjectImage();
-//     }
-
-//     if (actionToExecute->requestFilename) {
-//       switch(*actionToExecute->requestFilename) {
-//         case filename_request_action_t::Start:
-          
-//         break;
-//         case filename_request_action_t::Next:
-//         break;
-//         default:
-//           // do nothing
-//       }
-//     }
-   
-//     delete(actionToExecute);
-//   }
-// }
-
-// void ImageRequestPipe::ClientProcessUpdates() {
-//   ReceiveAction* clientActionToExecute;
-//   if (queue_try_remove(&receiveQueue, &clientActionToExecute)) {
-//     // An action was on the queue, execute it.
-//     if (clientActionToExecute->SendFilename) {
-//       switch(clientActionToExecute->SendFilename->state) {
-//         case filename_send_state_t::First:
-//           // \todo send filename to i2c client
-//           break;
-//         case filename_send_state_t::Continue:
-//           // \todo send next filename
-//           break;
-//         case filename_send_state_t::EndOfList:
-//           // \todo end receive before next request
-//           break;
-//         case filename_send_state_t::Empty:
-//           break;
-//         default:
-//           // do nothing
-//       }
-//     }
-//     delete(clientActionToExecute)
-//   }
-// }
-
-void ImageRequestPipe::AddObserver(queue_t* dest) {
-  observerQueues.push_back(dest);
-}
-
-// void ImageRequestPipe::SetIsCardPresent(bool value) {
-//   status.SetIsCardPresent(value);
-//   if (!value) {
-//     status.SetLoadedImage(nullptr);
-//   }
-  
-//   notifyObservers();
-// }

@@ -42,11 +42,14 @@ namespace zuluide::control {
     void SetIsShowingBack(bool value);
     bool AtEnd() const;
     void SetAtEnd(bool value);
+    bool AtStart() const;
+    void SetAtStart(bool value);
   private:
     int imageNameOffset;
     std::unique_ptr<zuluide::images::Image> currentImage;
     bool isShowingBack;
     bool atEnd;
+    bool atStart;
   };
 
 }

@@ -32,7 +32,7 @@
 
 namespace zuluide::pipe {
   
-  enum class image_request_t {First, Next, Prev, Current, Last, Cleanup};
+  enum class image_request_t {First, Next, Prev, Current, Last, Cleanup, Reset};
 
   class ImageRequest{
     public:

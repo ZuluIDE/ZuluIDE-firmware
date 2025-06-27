@@ -61,9 +61,9 @@ static IDEDevice *g_ide_device;
 static bool loadedFirstImage = false;
 
 zuluide::status::StatusController g_StatusController;
-zuluide::pipe::ImageResponsePipe g_ImageResponsePipe;
-zuluide::pipe::ImageRequestPipe g_ImageRequestPipe;
-zuluide::control::StdDisplayController g_DisplayController(&g_StatusController, &g_ImageRequestPipe, &g_ImageResponsePipe);
+zuluide::pipe::ImageResponsePipe g_ControllerImageResponsePipe;
+zuluide::pipe::ImageRequestPipe g_ControllerImageRequestPipe;
+zuluide::control::StdDisplayController g_DisplayController(&g_StatusController, &g_ControllerImageRequestPipe, &g_ControllerImageResponsePipe);
 zuluide::control::ControlInterface g_ControlInterface;
 zuluide::status::SystemStatus g_previous_controller_status;
 void status_observer(const zuluide::status::SystemStatus& current);
@@ -71,9 +71,6 @@ void loadFirstImage();
 void load_image(const zuluide::images::Image& toLoad, bool insert = true);
 
 static zuluide::ObserverTransfer<zuluide::status::SystemStatus> uiSafeStatusUpdater;
-
-
-// static zuluide::ObserverTransfer<zuluide::pipe::FilenameRequest> fileRequestSafeUpdater;
 
 #ifndef SD_SPEED_CLASS_WARN_BELOW
 #define SD_SPEED_CLASS_WARN_BELOW 10
@@ -270,10 +267,10 @@ drive_type_t searchForDriveType() {
 */
 void setupStatusController()
 {
-  g_ImageRequestPipe.Reset();
-  g_ImageResponsePipe.Reset();
-  g_ImageRequestPipe.AddObserver([](zuluide::pipe::ImageRequest t){g_ImageResponsePipe.HandleRequest(t);});
-  platform_set_filename_response_pipe(&g_ImageResponsePipe);
+  g_ControllerImageRequestPipe.Reset();
+  g_ControllerImageResponsePipe.Reset();
+  g_ControllerImageRequestPipe.AddObserver([](zuluide::pipe::ImageRequest t){g_ControllerImageResponsePipe.HandleRequest(t);});
+  platform_set_controller_image_response_pipe(&g_ControllerImageResponsePipe);
   g_StatusController.Reset();
   g_StatusController.SetFirmwareVersion(std::string(g_log_firmwareversion));
   bool isPrimary = platform_get_device_id() == 0;
@@ -360,7 +357,7 @@ void setupStatusController()
 
     // Propogate updates to the control interface from the UI core.
     uiSafeStatusUpdater.AddObserver([](zuluide::status::SystemStatus t) { g_DisplayController.ProcessSystemStatusUpdate(t); });
-    uiSafeStatusUpdater.AddObserver([g_ControlInterface](zuluide::status::SystemStatus t) { g_ControlInterface.HandleSystemStatusUpdate(t); });
+    uiSafeStatusUpdater.AddObserver([](zuluide::status::SystemStatus t) { g_ControlInterface.HandleSystemStatusUpdate(t); });
 
     g_DisplayController.SetMode(zuluide::control::Mode::Splash);
 
@@ -568,7 +565,7 @@ void zuluide_main_loop(void)
     blink_poll();
 
     g_StatusController.ProcessUpdates();
-    g_ImageRequestPipe.ProcessUpdates();
+    g_ControllerImageRequestPipe.ProcessUpdates();
 
 
     save_logfile();

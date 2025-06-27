@@ -51,7 +51,6 @@ void ImageResponsePipe::HandleRequest(zuluide::pipe::ImageRequest& current)
       {
         response->SetStatus(imageIterator.IsLast()? response_status_t::End : response_status_t::More);
         response->SetImage(std::make_unique<zuluide::images::Image>(imageIterator.Get()));
-        logmsg("Get Next: ", response->GetImage().GetFilename().c_str());
       }
       break;
     case image_request_t::Prev:
@@ -135,9 +134,9 @@ void ImageResponsePipe::HandleRequest(zuluide::pipe::ImageRequest& current)
     response->SetIsLast(imageIterator.IsLast());
     response->SetRequest(std::move(std::make_unique<ImageRequest>(current)));
     UpdateAction* actionToExecute = new UpdateAction();
-    actionToExecute->responseFilename = std::move(response);
+    actionToExecute->responseImage = std::move(response);
     if(!queue_try_add(&updateQueue, &actionToExecute)) {
-      logmsg("Responding filename action failed to enqueue.");
+      logmsg("Responding image action failed to enqueue.");
     }
   }
 }
@@ -164,11 +163,6 @@ void ImageResponsePipe::notifyObservers() {
       // verified given this isn't a public API.
       observer(*imageResponse);
     });
-
-    // std::for_each(observerQueues.begin(), observerQueues.end(), [this](auto observer) {
-    //   ImageResponse *update = new ImageResponse(imageResponse);
-    //   queue_try_add(observer, &update);
-    // });
   }
 }
 
@@ -177,11 +171,11 @@ void ImageResponsePipe::Reset() {
    imageIterator.Reset();
 }
 
-void ImageResponsePipe::ResponseFilenamesSafe(ImageResponse filename_request) {
+void ImageResponsePipe::ResponseImageSafe(ImageResponse image_response) {
   UpdateAction* actionToExecute = new UpdateAction();
-  actionToExecute->responseFilename = std::make_unique<ImageResponse>(filename_request);
+  actionToExecute->responseImage = std::make_unique<ImageResponse>(image_response);
   if(!queue_try_add(&updateQueue, &actionToExecute)) {
-    logmsg("Responding filename action failed to enqueue.");
+    logmsg("Responding image action failed to enqueue.");
   }
 }
 
@@ -190,15 +184,10 @@ void ImageResponsePipe::ProcessUpdates() {
   if (queue_try_remove(&updateQueue, &actionToExecute)) {
     // An action was on the queue, execute it.
     if (actionToExecute) {
-      imageResponse = std::move(actionToExecute->responseFilename);
-      actionToExecute->responseFilename = nullptr;
+      imageResponse = std::move(actionToExecute->responseImage);
+      actionToExecute->responseImage = nullptr;
     }
     notifyObservers();
     delete(actionToExecute);
   }
-}
-
-
-void ImageResponsePipe::AddObserver(queue_t* dest) {
-  observerQueues.push_back(dest);
 }

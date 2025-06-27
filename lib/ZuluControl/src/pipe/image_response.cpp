@@ -92,3 +92,13 @@ const ImageRequest ImageResponse::GetRequest() const
 {
   return *request;
 }
+
+const bool ImageResponse::IsLast() const
+{
+  return isLast;
+}
+
+const bool ImageResponse::IsFirst() const
+{
+  return isFirst;
+}

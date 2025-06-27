@@ -22,7 +22,6 @@
 #pragma once
 
 #include <zuluide/observable.h>
-#include <zuluide/observable_safe.h>
 #include <pico/util/queue.h>
 #include "zuluide/pipe/image_request.h"
 #include "zuluide/pipe/image_response_pipe.h"
@@ -33,49 +32,49 @@
 
 namespace zuluide::pipe {
 
-  class ImageRequestPipe : public Observable<ImageRequest>, public ObservableSafe<ImageRequest>
+  class ImageRequestPipe : public Observable<ImageRequest>
   {
   public:
     ImageRequestPipe();
-    
+    /**
+     * Callback to process image request should be the image response pipe
+     */
     void AddObserver(std::function<void(const ImageRequest& current)> callback);
-    void AddObserver(queue_t* dest);
     void BeginUpdate();
     void EndUpdate();
-    void SendRequest(std::unique_ptr<ImageRequest> request);
-    void RequestImageSafe(ImageRequest filename_request);
+    /**
+     * Should be run on the core without SD access, attempts to queue the requested image action
+     */
+    void RequestImageSafe(ImageRequest image_request);
+    /**
+     * Initialized the queue
+     */
     void Reset();
+    /**
+     * To be run on the core with SD access, attempt to remove requests from the other core
+     */
     void ProcessUpdates();
   private:
     bool isUpdating;
-    std::unique_ptr<ImageRequest> filenameRequest;
+    std::unique_ptr<ImageRequest> imageRequest;
     void notifyObservers();
 
     std::vector<std::function<void(const ImageRequest&)>> observers;
-    /***
-        Stores queues where updated system status pointers are copied.
-     **/
-    std::vector<queue_t*> observerQueues;
+
     /***
         Stores updates that come from another thread. These are processed through class to ProcessUpdates.
      **/
     queue_t updateQueue;
 
     /***
-        Receives updates that come from another thread in the opposite direction of the updateQueue 
-     */
-    queue_t receiveQueue;
-
-    /***
-        Simple class for storing updates. As we currently only have the load or eject image updates,
-        this class is overly simple.
+        Simple class for storing updates.
      **/
     class UpdateAction {
     public:
       /***
           If the value is null, ignore.
        **/
-      std::unique_ptr<ImageRequest> requestFilename;
+      std::unique_ptr<ImageRequest> requestImage;
     };
   };
 

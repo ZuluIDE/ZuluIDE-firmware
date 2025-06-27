@@ -70,7 +70,7 @@ static zuluide::DisplaySSD1306 display;
 static uint8_t g_eject_buttons = 0;
 
 
-static zuluide::pipe::ImageResponsePipe* filenameResponsePipe;
+static zuluide::pipe::ImageResponsePipe* g_controllerImageResponsePipe;
 
 static zuluide::i2c::I2CServer g_I2cServer;
 static mutex_t logMutex;
@@ -324,9 +324,9 @@ void platform_set_status_controller(zuluide::ObserverTransfer<zuluide::status::S
   uiStatusController = statusController;
 }
 
-void platform_set_filename_response_pipe(zuluide::pipe::ImageResponsePipe *fnRequestPipe) {
+void platform_set_controller_image_response_pipe(zuluide::pipe::ImageResponsePipe *fnRequestPipe) {
     logmsg("Initialized platform with filename request pipe");
-    filenameResponsePipe = fnRequestPipe;
+    g_controllerImageResponsePipe = fnRequestPipe;
 }
 
 void platform_set_display_controller(zuluide::Observable<zuluide::control::DisplayState>& displayController) {
@@ -1089,7 +1089,7 @@ void zuluide_main_loop1(void)
             // If no updates happend, refresh the display (enables animation)
             display.Refresh();
         }
-        filenameResponsePipe->ProcessUpdates();
+        g_controllerImageResponsePipe->ProcessUpdates();
         g_I2cServer.Poll();
     }
 }

@@ -77,7 +77,6 @@ void I2CServer::HandleUpdate(const SystemStatus& current) {
   static bool lastCardPresentStatus = false;
   bool card_present = current.IsCardPresent();
   if (lastCardPresentStatus != card_present) {
-    logmsg("============== detected SD card presense change ==============");
     updateFilenameCache = true;
   }
 

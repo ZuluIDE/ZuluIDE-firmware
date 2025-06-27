@@ -24,7 +24,6 @@
 #include <zuluide/pipe/image_response.h>
 #include <zuluide/pipe/image_request.h>
 #include <zuluide/observable.h>
-#include <zuluide/observable_safe.h>
 #include <pico/util/queue.h>
 #include <zuluide/images/image_iterator.h>
 
@@ -34,18 +33,28 @@
 
 namespace zuluide::pipe {
 
-  class ImageResponsePipe : public Observable<ImageResponse>, public ObservableSafe<ImageResponse>
+  class ImageResponsePipe : public Observable<ImageResponse>
   {
   public:
     ImageResponsePipe();
+    /**
+     * Functions to call once image data has safely received from the core with SD access
+     */
     void AddObserver(std::function<void(const ImageResponse& current)> callback);
-    void AddObserver(queue_t* dest);
     void BeginUpdate();
     void EndUpdate();
     void Reset();
+    /**
+     * A call back to handle image requests, run via the Image Request Pipe
+     */
     void HandleRequest(zuluide::pipe::ImageRequest& current);
-    void SendResponse(std::unique_ptr<ImageResponse> response);
-    void ResponseFilenamesSafe(ImageResponse filename_request);
+    /**
+     * Attempts to queue the requested image from the imageIterator wth SD access to the other core
+     */
+    void ResponseImageSafe(ImageResponse image_response);
+    /**
+     * Attempts to remove the requested image sent from queue to send to observers on the core without SD access
+     */
     void ProcessUpdates();
 
   private:
@@ -53,19 +62,11 @@ namespace zuluide::pipe {
     void notifyObservers();
     std::vector<std::function<void(const ImageResponse&)>> observers;
     std::unique_ptr<ImageResponse> imageResponse;
-    /***
-        Stores queues where updatefilenameResponsed system status pointers are copied.
-     **/
-    std::vector<queue_t*> observerQueues;
+
     /***
         Stores updates that come from another thread. These are processed through class to ProcessUpdates.
      **/
     queue_t updateQueue;
-
-    /***
-        Receives updates that come from another thread in the opposite direction of the updateQueue 
-     */
-    queue_t receiveQueue;
 
     /***
      * Image iterator
@@ -73,15 +74,11 @@ namespace zuluide::pipe {
     zuluide::images::ImageIterator imageIterator;
 
     /***
-        Simple class for storing updates. As we currently only have the load or eject image updates,
-        this class is overly simple.
+        Simple class for storing updates.
      **/
     class UpdateAction {
     public:
-      /***
-          If the value is null, this is an eject.
-       **/
-      std::unique_ptr<ImageResponse> responseFilename;
+      std::unique_ptr<ImageResponse> responseImage;
     };
 
   };
