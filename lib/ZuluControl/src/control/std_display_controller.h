@@ -22,7 +22,8 @@
 #pragma once
 
 #include <zuluide/control/display_state.h>
-#include <zuluide/pipe/filename_request_pipe.h>
+#include <zuluide/pipe/image_request_pipe.h>
+#include <zuluide/pipe/image_response_pipe.h>
 #include <memory>
 #include <functional>
 #include <vector>
@@ -42,7 +43,7 @@ namespace zuluide::control {
    **/
   class StdDisplayController : public Observable<DisplayState> {
   public:
-    StdDisplayController(zuluide::status::StatusController* statCtrlr, zuluide::pipe::FilenameRequestPipe* frPipe);
+    StdDisplayController(zuluide::status::StatusController* statCtrlr, zuluide::pipe::ImageRequestPipe* imRqPipe, zuluide::pipe::ImageResponsePipe* imRsPipe);
     void AddObserver(std::function<void(const DisplayState& current)> callback);
     Mode GetMode() const;
     zuluide::status::StatusController& GetStatController();

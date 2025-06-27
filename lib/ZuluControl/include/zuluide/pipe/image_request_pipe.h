@@ -24,8 +24,8 @@
 #include <zuluide/observable.h>
 #include <zuluide/observable_safe.h>
 #include <pico/util/queue.h>
-#include "zuluide/pipe/filename_request.h"
-#include "zuluide/pipe/filename_response_pipe.h"
+#include "zuluide/pipe/image_request.h"
+#include "zuluide/pipe/image_response_pipe.h"
 
 #include <functional>
 #include <memory>
@@ -33,25 +33,25 @@
 
 namespace zuluide::pipe {
 
-  class FilenameRequestPipe : public Observable<FilenameRequest>, public ObservableSafe<FilenameRequest>
+  class ImageRequestPipe : public Observable<ImageRequest>, public ObservableSafe<ImageRequest>
   {
   public:
-    FilenameRequestPipe();
+    ImageRequestPipe();
     
-    void AddObserver(std::function<void(const FilenameRequest& current)> callback);
+    void AddObserver(std::function<void(const ImageRequest& current)> callback);
     void AddObserver(queue_t* dest);
     void BeginUpdate();
     void EndUpdate();
-    void SendRequest(std::unique_ptr<FilenameRequest> request);
-    void RequestFilenamesSafe(FilenameRequest filename_request);
+    void SendRequest(std::unique_ptr<ImageRequest> request);
+    void RequestImageSafe(ImageRequest filename_request);
     void Reset();
     void ProcessUpdates();
   private:
     bool isUpdating;
-    std::unique_ptr<FilenameRequest> filenameRequest;
+    std::unique_ptr<ImageRequest> filenameRequest;
     void notifyObservers();
 
-    std::vector<std::function<void(const FilenameRequest&)>> observers;
+    std::vector<std::function<void(const ImageRequest&)>> observers;
     /***
         Stores queues where updated system status pointers are copied.
      **/
@@ -75,7 +75,7 @@ namespace zuluide::pipe {
       /***
           If the value is null, ignore.
        **/
-      std::unique_ptr<FilenameRequest> requestFilename;
+      std::unique_ptr<ImageRequest> requestFilename;
     };
   };
 

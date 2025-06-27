@@ -21,36 +21,35 @@
 
 #include "select_controller.h"
 #include "std_display_controller.h"
-#include "zuluide/pipe/filename_request_pipe.h"
-#include "zuluide/pipe/filename_request.h"
+#include "zuluide/pipe/image_request.h"
 #include "ZuluIDE_log.h"
 
 using namespace zuluide::control;
-
+using namespace zuluide::pipe;
 DisplayState SelectController::Reset() {
-  imgIterator.Reset();
   state = SelectState();  
   auto currentStatus = controller->GetCurrentStatus();
+  ImageRequest request;
   if (currentStatus.HasLoadedImage()) {
     // Lets try to move the iterator to the currently selected image.
-    if (!imgIterator.MoveToFile(currentStatus.GetLoadedImage().GetFilename().c_str())) {
-      logmsg("Failed to move to currently selected image.");
-      // We failed to find the file for some reason, lets reset at the begining.
-      imgIterator.Reset();
-      // Move to the first image.
-      GetNextImageEntry();
-    } else {
-      state.SetCurrentImage(std::make_unique<Image>(imgIterator.Get()));
-      state.SetIsShowingBack(false);
-      controller->UpdateState(state);
-    }
+    logmsg("SelectController Reset -- current image: ", currentStatus.GetLoadedImage().GetFilename().c_str());
+    request.SetCurrentFilename(std::make_unique<std::string>(currentStatus.GetLoadedImage().GetFilename()));
+    request.SetType(image_request_t::Current);
+    imageRequestPipe->RequestImageSafe(request);
+  }
+  else
+  {
+    request.SetType(image_request_t::First);
+    imageRequestPipe->RequestImageSafe(request);
   }
 
   return DisplayState(state);
 }
 
-SelectController::SelectController(StdDisplayController* cntrlr, zuluide::status::DeviceControlSafe* statCtrlr, zuluide::pipe::FilenameRequestPipe* frPipe) :
-  UIControllerBase(cntrlr), statusController(statCtrlr), filenameRequestPipe(frPipe), imgIterator() {
+SelectController::SelectController(StdDisplayController* cntrlr, zuluide::status::DeviceControlSafe* statCtrlr, 
+                                    zuluide::pipe::ImageRequestPipe* imReqPipe, zuluide::pipe::ImageResponsePipe* imResPipe) :
+  UIControllerBase(cntrlr), statusController(statCtrlr), imageRequestPipe(imReqPipe), imageResponsePipe(imResPipe) {
+  imageResponsePipe->AddObserver([&](const zuluide::pipe::ImageResponse& t){SetImageEntry(t);});
 }
 
 void SelectController::IncrementImageNameOffset() {
@@ -80,58 +79,149 @@ void SelectController::SelectImage() {
   } else if (state.HasCurrentImage()) {    
     statusController->LoadImageSafe(state.GetCurrentImage());
   }
-  
   controller->SetMode(Mode::Status);
-  imgIterator.Cleanup();
+  ImageRequest image_request = ImageRequest();
+  image_request.SetType(image_request_t::Cleanup);
+  imageRequestPipe->RequestImageSafe(image_request);
 }
 
 void SelectController::ChangeToMenu() {
   controller->SetMode(Mode::Menu);
-  imgIterator.Cleanup();
+  ImageRequest image_request = ImageRequest();
+  image_request.SetType(image_request_t::Cleanup);
+  imageRequestPipe->RequestImageSafe(image_request);
 }
 
 void SelectController::GetNextImageEntry() {
-  zuluide::pipe::FilenameRequest filename_request = zuluide::pipe::FilenameRequest();
-  filename_request.SetRequest(zuluide::pipe::filename_request_t::Next);
-  filenameRequestPipe->RequestFilenamesSafe(filename_request);
-  // if (imgIterator.IsLast() && !state.IsShowingBack()) {
-  //   // We are currently on the last item, show the back.
-  //   state.SetIsShowingBack(true);
-  //   state.SetCurrentImage(nullptr);
-  // } else if (imgIterator.IsLast() && state.IsShowingBack() && imgIterator.MoveFirst()) {
-  //   state.SetCurrentImage(std::make_unique<Image>(imgIterator.Get()));
-  //   state.SetIsShowingBack(false);
-  // } else if (imgIterator.IsFirst() && state.IsShowingBack()) {
-  //   state.SetCurrentImage(std::make_unique<Image>(imgIterator.Get()));
-  //   state.SetIsShowingBack(false);
-  // } else if (imgIterator.MoveNext()) {
-  //   state.SetCurrentImage(std::make_unique<Image>(imgIterator.Get()));
-  //   state.SetIsShowingBack(false);
-  // } else {
-  //   // Otherwise, we have no images on the card.
-  //   state.SetIsShowingBack(true);
-
-  // controller->UpdateState(state);
+  ImageRequest image_request = ImageRequest();
+  image_request.SetType(image_request_t::Next);
+  imageRequestPipe->RequestImageSafe(image_request);
 }
 
 void SelectController::GetPreviousImageEntry() {
-  if (imgIterator.IsFirst() && !state.IsShowingBack()) {
-    // We are currently on the last item, show the back.
-    state.SetIsShowingBack(true);
+  ImageRequest image_request = ImageRequest();
+  image_request.SetType(image_request_t::Prev);
+  imageRequestPipe->RequestImageSafe(image_request);
+}
+
+
+void SelectController::SetImageEntry(const zuluide::pipe::ImageResponse& response)
+{
+  std::unique_ptr<zuluide::images::Image> image = std::make_unique<zuluide::images::Image>(response.GetImage());
+
+  if (response.GetStatus() == response_status_t::None)
+  {
     state.SetCurrentImage(nullptr);
-  } else if (imgIterator.IsFirst() && state.IsShowingBack() && imgIterator.MoveLast()) {
-    state.SetCurrentImage(std::make_unique<Image>(imgIterator.Get()));
-    state.SetIsShowingBack(false);
-  } else if (imgIterator.IsLast() && state.IsShowingBack()) {
-    state.SetCurrentImage(std::make_unique<Image>(imgIterator.Get()));
-    state.SetIsShowingBack(false);
-  } else if (imgIterator.MovePrevious()) {
-    state.SetCurrentImage(std::make_unique<Image>(imgIterator.Get()));
-    state.SetIsShowingBack(false);
-  } else {
-    // Otherwise, we have no images on the card.
-    state.SetIsShowingBack(true);
+    return;
   }
 
+  switch(response.GetRequest().GetType())
+  {
+    case image_request_t::Next:
+      if(state.AtEnd() && !state.IsShowingBack())
+      {
+        state.SetIsShowingBack(true);
+      } 
+      else if (state.AtEnd() && state.IsShowingBack())
+      {
+        ImageRequest image_request = ImageRequest();
+        image_request.SetType(image_request_t::First);
+        imageRequestPipe->RequestImageSafe(image_request);
+        state.SetAtEnd(false);
+      }
+      else if (response.GetStatus() == response_status_t::More)
+      {
+        state.SetCurrentImage(std::move(image));
+        state.SetIsShowingBack(false);
+        state.SetAtEnd(false);
+      }
+      else if (response.GetStatus() == response_status_t::End)
+      {
+        state.SetCurrentImage(std::move(image));
+        state.SetIsShowingBack(false);
+        state.SetAtEnd(true);
+      }
+      else
+      {
+        // Otherwise, we have no images on the card.
+        state.SetIsShowingBack(true);
+      }
+      break;
+    case image_request_t::Prev:
+      if(state.AtEnd() && !state.IsShowingBack())
+      {
+        state.SetIsShowingBack(true);
+        state.SetAtEnd(true);
+      }
+      else if (state.AtEnd() && state.IsShowingBack())
+      {
+        ImageRequest image_request = ImageRequest();
+        image_request.SetType(image_request_t::Last);
+        imageRequestPipe->RequestImageSafe(image_request);
+        state.SetAtEnd(true);
+      }
+      else if (response.GetStatus() == response_status_t::More)
+      {
+        state.SetCurrentImage(std::move(image));
+        state.SetIsShowingBack(false);
+      }
+      else if (response.GetStatus() == response_status_t::End)
+      {
+        state.SetCurrentImage(std::move(image));
+        state.SetIsShowingBack(false);
+        state.SetAtEnd(true);
+      }
+      else
+      {
+        // Otherwise, we have no images on the card.
+        state.SetIsShowingBack(true);
+      }
+      break;
+    case image_request_t::First:
+      if (response.GetStatus() == response_status_t::End)
+      {
+        state.SetCurrentImage(std::move(image));
+        state.SetIsShowingBack(false);
+        state.SetAtEnd(true);
+      }
+      else if (response.GetStatus() == response_status_t::More)
+      {
+        state.SetCurrentImage(std::move(image));
+        state.SetIsShowingBack(false);
+        state.SetAtEnd(false);
+      }
+      break;
+    case image_request_t::Last:
+      if (response.GetStatus() == response_status_t::End)
+      {
+        state.SetCurrentImage(std::move(image));
+        state.SetIsShowingBack(false);
+        state.SetAtEnd(true);
+      }
+      else if (response.GetStatus() == response_status_t::More)
+      {
+        state.SetCurrentImage(std::move(image));
+        state.SetIsShowingBack(false);
+        state.SetAtEnd(false);
+      }
+      break;
+    case image_request_t::Current:
+      if (response.GetStatus() == response_status_t::End)
+      {
+        state.SetCurrentImage(std::move(image));
+        state.SetIsShowingBack(false);
+        state.SetAtEnd(true);
+      }
+      else if (response.GetStatus() == response_status_t::More)
+      {
+        state.SetCurrentImage(std::move(image));
+        state.SetIsShowingBack(false);
+        state.SetAtEnd(false);
+      }
+      break;
+    case image_request_t::Cleanup:
+    default:
+      logmsg("SelectController::SetImageEntry: No handler for request");
+  }
   controller->UpdateState(state);
 }

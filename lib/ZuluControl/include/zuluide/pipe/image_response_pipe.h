@@ -21,8 +21,8 @@
 
 #pragma once
 
-#include <zuluide/pipe/filename_response.h>
-#include <zuluide/pipe/filename_request.h>
+#include <zuluide/pipe/image_response.h>
+#include <zuluide/pipe/image_request.h>
 #include <zuluide/observable.h>
 #include <zuluide/observable_safe.h>
 #include <pico/util/queue.h>
@@ -34,27 +34,27 @@
 
 namespace zuluide::pipe {
 
-  class FilenameResponsePipe : public Observable<FilenameResponse>, public ObservableSafe<FilenameResponse>
+  class ImageResponsePipe : public Observable<ImageResponse>, public ObservableSafe<ImageResponse>
   {
   public:
-    FilenameResponsePipe();
-    void AddObserver(std::function<void(const FilenameResponse& current)> callback);
+    ImageResponsePipe();
+    void AddObserver(std::function<void(const ImageResponse& current)> callback);
     void AddObserver(queue_t* dest);
     void BeginUpdate();
     void EndUpdate();
     void Reset();
-    void HandleUpdate(const zuluide::pipe::FilenameRequest& current);
-    void SendResponse(std::unique_ptr<FilenameResponse> response);
-    void ResponseFilenamesSafe(FilenameResponse filename_request);
+    void HandleRequest(zuluide::pipe::ImageRequest& current);
+    void SendResponse(std::unique_ptr<ImageResponse> response);
+    void ResponseFilenamesSafe(ImageResponse filename_request);
     void ProcessUpdates();
 
   private:
     bool isUpdating;
     void notifyObservers();
-    std::vector<std::function<void(const FilenameResponse&)>> observers;
-    FilenameResponse filenameResponse;
+    std::vector<std::function<void(const ImageResponse&)>> observers;
+    std::unique_ptr<ImageResponse> imageResponse;
     /***
-        Stores queues where updated system status pointers are copied.
+        Stores queues where updatefilenameResponsed system status pointers are copied.
      **/
     std::vector<queue_t*> observerQueues;
     /***
@@ -81,7 +81,7 @@ namespace zuluide::pipe {
       /***
           If the value is null, this is an eject.
        **/
-      std::unique_ptr<FilenameResponse> responseFilename;
+      std::unique_ptr<ImageResponse> responseFilename;
     };
 
   };

@@ -25,6 +25,10 @@
 #include <zuluide/observable_safe.h>
 #include <pico/util/queue.h>
 
+#include "zuluide/pipe/image_request.h"
+
+#include "zuluide/images/image.h"
+
 #include <functional>
 #include <memory>
 #include <vector>
@@ -34,22 +38,31 @@ namespace zuluide::pipe {
 
   enum class response_status_t {None, End, More};
  
-  class FilenameResponse{
+  class ImageResponse{
     public:
-    FilenameResponse();
-    FilenameResponse(const FilenameResponse& src);
-    FilenameResponse(FilenameResponse&& src);
-    FilenameResponse& operator= (FilenameResponse&& src);
-    FilenameResponse& operator= (const FilenameResponse& src);
+    ImageResponse();
+    ImageResponse(const ImageResponse& src);
+    ImageResponse(ImageResponse&& src);
+    ImageResponse& operator= (ImageResponse&& src);
+    ImageResponse& operator= (const ImageResponse& src);
 
-    void SetFilename(const std::string&& value);
-
+    void SetImage(std::unique_ptr<zuluide::images::Image>&& value);
     void SetStatus(const response_status_t value);
+    void SetRequest(std::unique_ptr<ImageRequest>&& value);
+    void SetIsLast(const bool value);
+    void SetIsFirst(const bool value);
     
-    const std::string GetFilename();
-    const response_status_t GetStatus();
+    const zuluide::images::Image GetImage() const;
+    const response_status_t GetStatus() const;
+    const ImageRequest GetRequest() const;
+    const bool IsLast() const;
+    const bool IsFirst() const;
+
     private:
     response_status_t status;
-    std::string filename;
+    std::unique_ptr<zuluide::images::Image> image;
+    std::unique_ptr<ImageRequest> request;
+    bool isLast;
+    bool isFirst;
   };
 }

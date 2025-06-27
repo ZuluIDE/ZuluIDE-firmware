@@ -19,41 +19,55 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
 **/
 
-#include <zuluide/pipe/filename_request.h>
+#include <zuluide/pipe/image_request.h>
 #include <algorithm>
 
 
 using namespace zuluide::pipe;
 
-FilenameRequest::FilenameRequest()
+ImageRequest::ImageRequest()
 {
 }
 
-FilenameRequest::FilenameRequest(const FilenameRequest& src)
-  : request(src.request)
+ImageRequest::ImageRequest(const ImageRequest& src)
+  : type(src.type)
 {
+  currentFilename = std::make_unique<std::string>(*src.currentFilename);
 }
 
-FilenameRequest::FilenameRequest(FilenameRequest&& src)
+ImageRequest::ImageRequest(ImageRequest&& src)
+  : type(src.type)
 {
-  request = src.request;
+  currentFilename = std::move(src.currentFilename); 
 }
 
-FilenameRequest& FilenameRequest::operator= (FilenameRequest&& src) {
-  request = src.request;
+ImageRequest& ImageRequest::operator= (ImageRequest&& src) {
+  type = src.type;
+  currentFilename = std::move(src.currentFilename);
   return *this;
 }
 
-FilenameRequest& FilenameRequest::operator= (const FilenameRequest& src) {
-  request = src.request;
+ImageRequest& ImageRequest::operator= (const ImageRequest& src) {
+  type = src.type;
+  currentFilename = std::make_unique<std::string>(*currentFilename);
   return *this;
 }
 
-void FilenameRequest::SetRequest(const filename_request_t value) {
-  request = value;
+void ImageRequest::SetType(const image_request_t value) {
+  type = value;
 }
 
-const filename_request_t FilenameRequest::GetRequest() const
+const image_request_t ImageRequest::GetType() const
 {
-  return request;
+  return type;
+}
+
+void ImageRequest::SetCurrentFilename(std::unique_ptr<std::string> fn)
+{
+  currentFilename = std::move(fn);
+}
+
+const std::string ImageRequest::GetCurrentFilename() const
+{
+  return *currentFilename;
 }

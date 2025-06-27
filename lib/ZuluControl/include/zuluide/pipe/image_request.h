@@ -25,28 +25,32 @@
 #include <zuluide/observable_safe.h>
 #include <pico/util/queue.h>
 
+#include <string>
 #include <functional>
 #include <memory>
 #include <vector>
 
 namespace zuluide::pipe {
   
-  enum class filename_request_t {Start, Next};
+  enum class image_request_t {First, Next, Prev, Current, Last, Cleanup};
 
-  class FilenameRequest{
+  class ImageRequest{
     public:
-    FilenameRequest();
-    FilenameRequest(const FilenameRequest& src);
-    FilenameRequest(FilenameRequest&& src);
-    FilenameRequest& operator= (FilenameRequest&& src);
-    FilenameRequest& operator= (const FilenameRequest& src);
+    ImageRequest();
+    ImageRequest(const ImageRequest& src);
+    ImageRequest(ImageRequest&& src);
+    ImageRequest& operator= (ImageRequest&& src);
+    ImageRequest& operator= (const ImageRequest& src);
 
-    void RequestFilenamesSafe(filename_request_t action);
+    void RequestFilenamesSafe(image_request_t action);
 
-    void SetRequest(const filename_request_t value);
-    const filename_request_t GetRequest() const;
+    void SetType(const image_request_t value);
+    const image_request_t GetType() const;
+    void SetCurrentFilename(std::unique_ptr<std::string> fn);
+    const std::string GetCurrentFilename() const;
     
     private:
-    filename_request_t request;
+    image_request_t type;
+    std::unique_ptr<std::string> currentFilename;
   };
 }

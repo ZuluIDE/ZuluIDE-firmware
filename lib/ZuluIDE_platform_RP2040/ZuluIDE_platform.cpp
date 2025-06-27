@@ -47,7 +47,7 @@
 #include "display/display_ssd1306.h"
 #include "rotary_control.h"
 #include <zuluide/i2c/i2c_server.h>
-#include <zuluide/pipe/filename_response.h>
+#include <zuluide/pipe/image_response.h>
 #include <minIni.h>
 
 #ifdef ENABLE_AUDIO_OUTPUT
@@ -70,7 +70,7 @@ static zuluide::DisplaySSD1306 display;
 static uint8_t g_eject_buttons = 0;
 
 
-static zuluide::pipe::FilenameResponsePipe* filenameResponsePipe;
+static zuluide::pipe::ImageResponsePipe* filenameResponsePipe;
 
 static zuluide::i2c::I2CServer g_I2cServer;
 static mutex_t logMutex;
@@ -324,7 +324,7 @@ void platform_set_status_controller(zuluide::ObserverTransfer<zuluide::status::S
   uiStatusController = statusController;
 }
 
-void platform_set_filename_response_pipe(zuluide::pipe::FilenameResponsePipe *fnRequestPipe) {
+void platform_set_filename_response_pipe(zuluide::pipe::ImageResponsePipe *fnRequestPipe) {
     logmsg("Initialized platform with filename request pipe");
     filenameResponsePipe = fnRequestPipe;
 }

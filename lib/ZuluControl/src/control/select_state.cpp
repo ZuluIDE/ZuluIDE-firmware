@@ -23,9 +23,9 @@
 
 using namespace zuluide::control;
 
-SelectState::SelectState (int imgNameOffset) : imageNameOffset(imgNameOffset), isShowingBack(false) {}
+SelectState::SelectState (int imgNameOffset) : imageNameOffset(imgNameOffset), isShowingBack(false), atEnd(false) {}
 
-SelectState::SelectState (const SelectState& src) : imageNameOffset(src.imageNameOffset), isShowingBack(src.isShowingBack) {
+SelectState::SelectState (const SelectState& src) : imageNameOffset(src.imageNameOffset), isShowingBack(src.isShowingBack), atEnd(src.atEnd) {
   if (src.currentImage) {
     currentImage = std::make_unique<Image>(*src.currentImage);
   }
@@ -69,4 +69,12 @@ bool SelectState::IsShowingBack() const {
 
 void SelectState::SetIsShowingBack(bool value) {
   isShowingBack = value;
+}
+
+bool SelectState::AtEnd() const {
+  return atEnd;
+}
+
+void SelectState::SetAtEnd(bool value) {
+  atEnd = value;
 }

@@ -1,22 +1,22 @@
 /**
- * ZuluIDE™ - Copyright (c) 2024 Rabbit Hole Computing™
- *
- * ZuluIDE™ firmware is licensed under the GPL version 3 or any later version. 
- *
- * https://www.gnu.org/licenses/gpl-3.0.html
- * ----
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version. 
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details. 
- *
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+* ZuluIDE™ - Copyright (c) 2024 Rabbit Hole Computing™
+*
+* ZuluIDE™ firmware is licensed under the GPL version 3 or any later version. 
+*
+* https://www.gnu.org/licenses/gpl-3.0.html
+* ----
+* This program is free software: you can redistribute it and/or modify
+* it under the terms of the GNU General Public License as published by
+* the Free Software Foundation, either version 3 of the License, or
+* (at your option) any later version. 
+*
+* This program is distributed in the hope that it will be useful,
+* but WITHOUT ANY WARRANTY; without even the implied warranty of
+* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+* GNU General Public License for more details. 
+*
+* You should have received a copy of the GNU General Public License
+* along with this program.  If not, see <https://www.gnu.org/licenses/>.
 **/
 
 #include "std_display_controller.h"
@@ -37,34 +37,34 @@ void StdDisplayController::AddObserver(std::function<void(const DisplayState& cu
 
 UIControllerBase* StdDisplayController::getControllerByMode(const Mode mode) {
   switch (mode) {  
-  case Mode::Status: {
-    return &statusController;
-  }
-
-  case Mode::Menu: {
-    return &menuController;
-  }
-
-  case Mode::Eject: {
-    return &ejectController;
-  }
-
-  case Mode::Select: {
-    return &selectController;
-  }
-
-  case Mode::NewImage: {
-    return &newController;
-  }
-
-  case Mode::Info: {
-    return &infoController;
-  }
+    case Mode::Status: {
+      return &statusController;
+    }
     
-  case Mode::Splash:
-  default: {
-    return &splashController;
-  }
+    case Mode::Menu: {
+      return &menuController;
+    }
+    
+    case Mode::Eject: {
+      return &ejectController;
+    }
+    
+    case Mode::Select: {
+      return &selectController;
+    }
+    
+    case Mode::NewImage: {
+      return &newController;
+    }
+    
+    case Mode::Info: {
+      return &infoController;
+    }
+    
+    case Mode::Splash:
+    default: {
+      return &splashController;
+    }
   }
 }
 
@@ -163,16 +163,17 @@ SplashController& StdDisplayController::GetSplashController() {
   return splashController;
 }
 
-StdDisplayController::StdDisplayController(zuluide::status::StatusController* statCtrlr, zuluide::pipe::FilenameRequestPipe* frPipe) : statController(statCtrlr),
-											   current(NULL),
-											   menuController(this),
-											   ejectController(this, statController),
-											   selectController(this, statController, frPipe),
-											   newController(this, statController),
-											   infoController(this),
-											   splashController(this),
-											   statusController(this) {
-}
+StdDisplayController::StdDisplayController(zuluide::status::StatusController* statCtrlr, zuluide::pipe::ImageRequestPipe* imRqPipe,zuluide::pipe::ImageResponsePipe* imRsPipe) : 
+                      statController(statCtrlr),
+                      current(NULL),
+                      menuController(this),
+                      ejectController(this, statController),
+                      selectController(this, statController, imRqPipe, imRsPipe),
+                      newController(this, statController),
+                      infoController(this),
+                      splashController(this),
+                      statusController(this) {
+                      }
 
 zuluide::status::StatusController& StdDisplayController::GetStatController() {
   return *statController;

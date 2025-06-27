@@ -20,7 +20,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
 **/
 
-#include "zuluide/pipe/filename_request_pipe.h"
+#include "zuluide/pipe/image_request_pipe.h"
 
 
 #include "ZuluIDE_log.h"
@@ -31,25 +31,25 @@
 
 using namespace zuluide::pipe;
 
-FilenameRequestPipe::FilenameRequestPipe() :
+ImageRequestPipe::ImageRequestPipe() :
   isUpdating(false)
 {
 }
 
-void FilenameRequestPipe::AddObserver(std::function<void(const FilenameRequest&)> callback) {
+void ImageRequestPipe::AddObserver(std::function<void(const ImageRequest&)> callback) {
   observers.push_back(callback);
 }
 
-void FilenameRequestPipe::BeginUpdate() {
+void ImageRequestPipe::BeginUpdate() {
   isUpdating = true;
 }
 
-void FilenameRequestPipe::EndUpdate() {
+void ImageRequestPipe::EndUpdate() {
   isUpdating = false;
   notifyObservers();
 }
 
-void FilenameRequestPipe::notifyObservers() {
+void ImageRequestPipe::notifyObservers() {
   if (!isUpdating) {
     std::for_each(observers.begin(), observers.end(), [this](auto observer) {
       // Make a copy so observers cannot mutate system state.
@@ -66,25 +66,25 @@ void FilenameRequestPipe::notifyObservers() {
   }
 }
 
-// void FilenameRequestPipe::SetFirmwareVersion(std::string firmwareVersion) {
+// void ImageRequestPipe::SetFirmwareVersion(std::string firmwareVersion) {
 //   status.SetFirmwareVersion(std::move(firmwareVersion));
 //   notifyObservers();
 // }
 
-// const SystemStatus& FilenameRequestPipe::GetStatus() {
+// const SystemStatus& ImageRequestPipe::GetStatus() {
 //   return status;
 // }
 
-void FilenameRequestPipe::Reset() {
-   queue_init(&updateQueue, sizeof(FilenameRequest*), 5);
+void ImageRequestPipe::Reset() {
+   queue_init(&updateQueue, sizeof(ImageRequest*), 5);
 }
 
-// void FilenameRequestPipe::LoadImage(zuluide::images::Image i) {
+// void ImageRequestPipe::LoadImage(zuluide::images::Image i) {
 //   status.SetLoadedImage(std::make_unique<zuluide::images::Image>(i));
 //   notifyObservers();
 // }
 
-// void FilenameRequestPipe::LoadImageSafe(zuluide::images::Image i) {
+// void ImageRequestPipe::LoadImageSafe(zuluide::images::Image i) {
 //   UpdateAction* actionToExecute = new UpdateAction();
 //   actionToExecute->ToLoad = std::make_unique<zuluide::images::Image>(i);
 //   if(!queue_try_add(&updateQueue, &actionToExecute)) {
@@ -92,7 +92,7 @@ void FilenameRequestPipe::Reset() {
 //   }
 // }
 
-// void FilenameRequestPipe::EjectImageSafe() {
+// void ImageRequestPipe::EjectImageSafe() {
 //   UpdateAction* actionToExecute = new UpdateAction();
 //   actionToExecute->Eject = std::make_unique<bool>(true);
 //   if(!queue_try_add(&updateQueue, &actionToExecute)) {
@@ -100,23 +100,19 @@ void FilenameRequestPipe::Reset() {
 //   }
 // }
 
-void FilenameRequestPipe::RequestFilenamesSafe(FilenameRequest filename_request) {
+void ImageRequestPipe::RequestImageSafe(ImageRequest image_request) {
   UpdateAction* actionToExecute = new UpdateAction();
-  actionToExecute->requestFilename = std::make_unique<FilenameRequest>(filename_request);
+  actionToExecute->requestFilename = std::make_unique<ImageRequest>(image_request);
   if(!queue_try_add(&updateQueue, &actionToExecute)) {
     logmsg("Requesting filename action failed to enqueue.");
   }
 }
 
-void FilenameRequestPipe::ProcessUpdates() {
+void ImageRequestPipe::ProcessUpdates() {
   UpdateAction* actionToExecute;
   if (queue_try_remove(&updateQueue, &actionToExecute)) {
     // An action was on the queue, execute it.
     if (actionToExecute->requestFilename) {
-      if (actionToExecute->requestFilename->GetRequest() == filename_request_t::Next)
-        logmsg("We requested the Next filename");
-      else  
-        logmsg("We requested to reset and the first filename");
       filenameRequest = std::move(actionToExecute->requestFilename);
       notifyObservers();
     }
@@ -124,7 +120,7 @@ void FilenameRequestPipe::ProcessUpdates() {
   }
 }
 
-// void FilenameRequestPipe::HostProcessUpdates() {
+// void ImageRequestPipe::HostProcessUpdates() {
 //   UpdateAction* actionToExecute;
 //   if (queue_try_remove(&updateQueue, &actionToExecute)) {
 //     // An action was on the queue, execute it.
@@ -152,7 +148,7 @@ void FilenameRequestPipe::ProcessUpdates() {
 //   }
 // }
 
-// void FilenameRequestPipe::ClientProcessUpdates() {
+// void ImageRequestPipe::ClientProcessUpdates() {
 //   ReceiveAction* clientActionToExecute;
 //   if (queue_try_remove(&receiveQueue, &clientActionToExecute)) {
 //     // An action was on the queue, execute it.
@@ -177,11 +173,11 @@ void FilenameRequestPipe::ProcessUpdates() {
 //   }
 // }
 
-void FilenameRequestPipe::AddObserver(queue_t* dest) {
+void ImageRequestPipe::AddObserver(queue_t* dest) {
   observerQueues.push_back(dest);
 }
 
-// void FilenameRequestPipe::SetIsCardPresent(bool value) {
+// void ImageRequestPipe::SetIsCardPresent(bool value) {
 //   status.SetIsCardPresent(value);
 //   if (!value) {
 //     status.SetLoadedImage(nullptr);
