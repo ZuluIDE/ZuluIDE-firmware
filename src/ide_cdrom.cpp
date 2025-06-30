@@ -1203,7 +1203,7 @@ bool IDECDROMDevice::doReadCD(uint32_t lba, uint32_t length, uint8_t sector_type
         uint64_t offset = trackinfo.file_offset;
         if (lba >= trackinfo.data_start)
         {
-            offset += (lba - trackinfo.data_start) * trackinfo.sector_length;
+            offset += (uint64_t)(lba - trackinfo.data_start) * trackinfo.sector_length;
         }
         else if (lba >= trackinfo.data_start - trackinfo.unstored_pregap_length)
         {
