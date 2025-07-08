@@ -33,11 +33,12 @@
 #include <memory>
 #include <vector>
 #include <string>
+#include <algorithm>
 
 namespace zuluide::pipe {
 
   enum class response_status_t {None, End, More};
- 
+  template <typename SrcType>
   class ImageResponse{
     public:
     ImageResponse();
@@ -48,21 +49,125 @@ namespace zuluide::pipe {
 
     void SetImage(std::unique_ptr<zuluide::images::Image>&& value);
     void SetStatus(const response_status_t value);
-    void SetRequest(std::unique_ptr<ImageRequest>&& value);
+    void SetRequest(std::unique_ptr<ImageRequest<SrcType>>&& value);
     void SetIsLast(const bool value);
     void SetIsFirst(const bool value);
     
     const zuluide::images::Image GetImage() const;
     const response_status_t GetStatus() const;
-    const ImageRequest GetRequest() const;
+    const ImageRequest<SrcType> GetRequest() const;
     const bool IsLast() const;
     const bool IsFirst() const;
 
     private:
     response_status_t status;
     std::unique_ptr<zuluide::images::Image> image;
-    std::unique_ptr<ImageRequest> request;
-    bool isLast;
+    std::unique_ptr<ImageRequest<SrcType>> request;
     bool isFirst;
+    bool isLast;
+
   };
+
+template <typename SrcType>
+ImageResponse<SrcType>::ImageResponse () : status(response_status_t::None), image(nullptr), isFirst(false), isLast(false){
+}
+
+template <typename SrcType>
+ImageResponse<SrcType>::ImageResponse(const ImageResponse& src) : status(src.status), isFirst(src.isFirst), isLast(src.isLast) {
+  image = std::make_unique<zuluide::images::Image>(*src.image);
+  request = std::make_unique<ImageRequest<SrcType>>(ImageRequest<SrcType>(*src.request));
+}
+
+template <typename SrcType>
+ImageResponse<SrcType>::ImageResponse(ImageResponse<SrcType>&& src) : status(src.status), isFirst(src.isFirst), isLast(src.isLast) {
+  image = std::move(src.image);
+  request = std::move(src.request);
+}
+
+template <typename SrcType>
+ImageResponse<SrcType>& ImageResponse<SrcType>::operator= (ImageResponse<SrcType>&& src)  {
+  status = src.status;
+  isFirst = src.isFirst;
+  isLast = src.isLast;
+  image = std::move(src.image);
+  request = std::move(src.request);
+  return *this;
+}
+
+template <typename SrcType>
+ImageResponse<SrcType>& ImageResponse<SrcType>::operator= (const ImageResponse<SrcType>& src) {
+  status = src.status;
+  isFirst = src.isFirst;
+  isLast = src.isLast;
+  image = std::make_unique<zuluide::images::Image>(*src.image);
+  request = std::make_unique<ImageRequest<SrcType>>(ImageRequest<SrcType>(*src.request));
+  return *this;
+}
+
+template <typename SrcType>
+void ImageResponse<SrcType>::SetImage(std::unique_ptr<zuluide::images::Image>&& value) {
+  image = std::move(value);
+}
+
+template <typename SrcType>
+void ImageResponse<SrcType>::SetStatus(response_status_t value)
+{
+  status = value;
+}
+
+template <typename SrcType>
+void ImageResponse<SrcType>::SetRequest(std::unique_ptr<ImageRequest<SrcType>>&& value)
+{
+  request = std::move(value);
+}
+
+template <typename SrcType>
+void ImageResponse<SrcType>::SetIsLast(bool value)
+{
+  isLast = value;
+}
+
+template <typename SrcType>
+void ImageResponse<SrcType>::SetIsFirst(bool value)
+{
+  isFirst = value;
+}
+
+template <typename SrcType>
+const zuluide::images::Image ImageResponse<SrcType>::GetImage() const
+{
+  return *image;
+}
+
+
+template <typename SrcType>
+const response_status_t ImageResponse<SrcType>::GetStatus() const
+{
+  return status;
+}
+
+template <typename SrcType>
+const ImageRequest<SrcType> ImageResponse<SrcType>::GetRequest() const
+{
+  if (request)
+    return *request; 
+
+  ImageRequest<SrcType> empty_request;
+  empty_request.SetType(image_request_t::Empty);
+  return empty_request;
+}
+
+template <typename SrcType>
+const bool ImageResponse<SrcType>::IsLast() const
+{
+  return isLast;
+}
+
+template <typename SrcType>
+const bool ImageResponse<SrcType>::IsFirst() const
+{
+  return isFirst;
+}
+
+
 }

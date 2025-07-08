@@ -96,7 +96,7 @@ static const char* toString(Image::ImageType type) {
   }
 }
 
-std::string Image::ToJson() {
+const std::string Image::ToJson() const {
   std::string buffer;
   buffer.append("{");
   outputField(buffer, "filename", filenm);
@@ -108,7 +108,7 @@ std::string Image::ToJson() {
   return buffer;
 }
 
-std::string Image::ToJson(const char* fieldName) {
+const std::string Image::ToJson(const char* fieldName) const {
   std::string buffer = "\"";
   buffer.append(fieldName);
   buffer.append("\":");

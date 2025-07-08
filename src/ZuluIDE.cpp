@@ -61,11 +61,12 @@ static IDEDevice *g_ide_device;
 static bool loadedFirstImage = false;
 
 zuluide::status::StatusController g_StatusController;
-zuluide::pipe::ImageResponsePipe g_ControllerImageResponsePipe;
-zuluide::pipe::ImageRequestPipe g_ControllerImageRequestPipe;
+zuluide::pipe::ImageResponsePipe<zuluide::control::select_controller_source_t> g_ControllerImageResponsePipe;
+zuluide::pipe::ImageRequestPipe<zuluide::control::select_controller_source_t> g_ControllerImageRequestPipe;
 zuluide::control::StdDisplayController g_DisplayController(&g_StatusController, &g_ControllerImageRequestPipe, &g_ControllerImageResponsePipe);
 zuluide::control::ControlInterface g_ControlInterface;
 zuluide::status::SystemStatus g_previous_controller_status;
+
 void status_observer(const zuluide::status::SystemStatus& current);
 void loadFirstImage();
 void load_image(const zuluide::images::Image& toLoad, bool insert = true);
@@ -270,7 +271,12 @@ void setupStatusController()
 {
   g_ControllerImageRequestPipe.Reset();
   g_ControllerImageResponsePipe.Reset();
-  g_ControllerImageRequestPipe.AddObserver([](zuluide::pipe::ImageRequest t){g_ControllerImageResponsePipe.HandleRequest(t);});
+  g_ControllerImageRequestPipe.AddObserver(
+    [](zuluide::pipe::ImageRequest<zuluide::control::select_controller_source_t> t)
+    {
+      g_ControllerImageResponsePipe.HandleRequest(t);
+    }
+  );
   platform_set_controller_image_response_pipe(&g_ControllerImageResponsePipe);
   g_StatusController.Reset();
   g_StatusController.SetFirmwareVersion(std::string(g_log_firmwareversion));

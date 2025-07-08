@@ -43,7 +43,7 @@ namespace zuluide::control {
    **/
   class StdDisplayController : public Observable<DisplayState> {
   public:
-    StdDisplayController(zuluide::status::StatusController* statCtrlr, zuluide::pipe::ImageRequestPipe* imRqPipe, zuluide::pipe::ImageResponsePipe* imRsPipe);
+    StdDisplayController(zuluide::status::StatusController* statCtrlr, zuluide::pipe::ImageRequestPipe<select_controller_source_t>* imRqPipe, zuluide::pipe::ImageResponsePipe<select_controller_source_t>* imRsPipe);
     void AddObserver(std::function<void(const DisplayState& current)> callback);
     Mode GetMode() const;
     zuluide::status::StatusController& GetStatController();

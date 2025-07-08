@@ -20,20 +20,22 @@
 **/
 
 #include "select_controller.h"
+#include "zuluide/control/select_controller_src_type.h"
 #include "std_display_controller.h"
 #include "zuluide/pipe/image_request.h"
 #include "ZuluIDE_log.h"
 
 using namespace zuluide::control;
 using namespace zuluide::pipe;
+
 DisplayState SelectController::Reset() {
   state = SelectState();
   auto currentStatus = controller->GetCurrentStatus();
-  ImageRequest reset_request;
+  ImageRequest<select_controller_source_t> reset_request;
   reset_request.SetType(image_request_t::Reset);
   imageRequestPipe->RequestImageSafe(reset_request);
 
-  ImageRequest request;
+  ImageRequest<select_controller_source_t> request;
   if (currentStatus.HasLoadedImage()) {
     // Lets try to move the iterator to the currently selected image.
     request.SetCurrentFilename(std::make_unique<std::string>(currentStatus.GetLoadedImage().GetFilename()));
@@ -50,9 +52,9 @@ DisplayState SelectController::Reset() {
 }
 
 SelectController::SelectController(StdDisplayController* cntrlr, zuluide::status::DeviceControlSafe* statCtrlr,
-                                    zuluide::pipe::ImageRequestPipe* imReqPipe, zuluide::pipe::ImageResponsePipe* imResPipe) :
+                                    ImageRequestPipe<select_controller_source_t>* imReqPipe, ImageResponsePipe<select_controller_source_t> * imResPipe) :
   UIControllerBase(cntrlr), statusController(statCtrlr), imageRequestPipe(imReqPipe), imageResponsePipe(imResPipe) {
-  imageResponsePipe->AddObserver([&](const zuluide::pipe::ImageResponse& t){SetImageEntry(t);});
+  imageResponsePipe->AddObserver([&](const ImageResponse<select_controller_source_t>& t){SetImageEntry(t);});
 }
 
 void SelectController::IncrementImageNameOffset() {
@@ -83,32 +85,32 @@ void SelectController::SelectImage() {
     statusController->LoadImageSafe(state.GetCurrentImage());
   }
   controller->SetMode(Mode::Status);
-  ImageRequest image_request = ImageRequest();
+  ImageRequest image_request = ImageRequest<select_controller_source_t>();
   image_request.SetType(image_request_t::Cleanup);
   imageRequestPipe->RequestImageSafe(image_request);
 }
 
 void SelectController::ChangeToMenu() {
   controller->SetMode(Mode::Menu);
-  ImageRequest image_request = ImageRequest();
+  ImageRequest image_request = ImageRequest<select_controller_source_t>();
   image_request.SetType(image_request_t::Cleanup);
   imageRequestPipe->RequestImageSafe(image_request);
 }
 
 void SelectController::GetNextImageEntry() {
-  ImageRequest image_request = ImageRequest();
+  ImageRequest image_request = ImageRequest<select_controller_source_t>();
   image_request.SetType(image_request_t::Next);
   imageRequestPipe->RequestImageSafe(image_request);
 }
 
 void SelectController::GetPreviousImageEntry() {
-  ImageRequest image_request = ImageRequest();
+  ImageRequest image_request = ImageRequest<select_controller_source_t>();
   image_request.SetType(image_request_t::Prev);
   imageRequestPipe->RequestImageSafe(image_request);
 }
 
 
-void SelectController::SetImageEntry(const zuluide::pipe::ImageResponse& response)
+void SelectController::SetImageEntry(const ImageResponse<select_controller_source_t>& response)
 {
   static image_request_t last_request = image_request_t::Current;
   std::unique_ptr<zuluide::images::Image> image = std::make_unique<zuluide::images::Image>(response.GetImage());
@@ -131,7 +133,7 @@ void SelectController::SetImageEntry(const zuluide::pipe::ImageResponse& respons
       }
       else if (state.IsShowingBack())
       {
-        ImageRequest image_request = ImageRequest();
+        ImageRequest image_request = ImageRequest<select_controller_source_t>();
         image_request.SetType(image_request_t::First);
         imageRequestPipe->RequestImageSafe(image_request);
       }
@@ -150,7 +152,7 @@ void SelectController::SetImageEntry(const zuluide::pipe::ImageResponse& respons
       }
       else if (state.IsShowingBack())
       {
-        ImageRequest image_request = ImageRequest();
+        ImageRequest<select_controller_source_t> image_request = ImageRequest<select_controller_source_t>();
         image_request.SetType(image_request_t::Last);
         imageRequestPipe->RequestImageSafe(image_request);
       }

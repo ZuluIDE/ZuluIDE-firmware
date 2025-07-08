@@ -170,7 +170,7 @@ SplashController& StdDisplayController::GetSplashController() {
   return splashController;
 }
 
-StdDisplayController::StdDisplayController(zuluide::status::StatusController* statCtrlr, zuluide::pipe::ImageRequestPipe* imRqPipe,zuluide::pipe::ImageResponsePipe* imRsPipe) : 
+StdDisplayController::StdDisplayController(zuluide::status::StatusController* statCtrlr, zuluide::pipe::ImageRequestPipe<select_controller_source_t>* imRqPipe,zuluide::pipe::ImageResponsePipe<select_controller_source_t>* imRsPipe) : 
                       statController(statCtrlr),
                       current(NULL),
                       menuController(this, statController),

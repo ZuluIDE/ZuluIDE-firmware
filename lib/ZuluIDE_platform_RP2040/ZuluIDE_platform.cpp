@@ -47,7 +47,10 @@
 #include "display/display_ssd1306.h"
 #include "rotary_control.h"
 #include <zuluide/i2c/i2c_server.h>
+#include <zuluide/i2c/i2c_server_src_type.h>
 #include <zuluide/pipe/image_response.h>
+#include <zuluide/control/select_controller_src_type.h>
+
 #include <minIni.h>
 
 #ifdef ENABLE_AUDIO_OUTPUT
@@ -70,9 +73,12 @@ static zuluide::DisplaySSD1306 display;
 static uint8_t g_eject_buttons = 0;
 
 
-static zuluide::pipe::ImageResponsePipe* g_controllerImageResponsePipe;
 
-static zuluide::i2c::I2CServer g_I2cServer;
+static zuluide::pipe::ImageResponsePipe<zuluide::control::select_controller_source_t>* g_controllerImageResponsePipe;
+
+static zuluide::pipe::ImageResponsePipe<zuluide::i2c::i2c_server_source_t> g_I2CServerImageResponsePipe;
+static zuluide::pipe::ImageRequestPipe<zuluide::i2c::i2c_server_source_t> g_I2CServerImageRequestPipe;
+static zuluide::i2c::I2CServer g_I2cServer(&g_I2CServerImageRequestPipe, &g_I2CServerImageResponsePipe);
 static mutex_t logMutex;
 static zuluide::ObserverTransfer<zuluide::status::SystemStatus> *uiStatusController;
 void processStatusUpdate(const zuluide::status::SystemStatus &update);
@@ -311,6 +317,12 @@ uint8_t platform_check_for_controller()
   bool hasI2CServer = g_I2cServer.CheckForDevice();
   logmsg(hasHardwareUI ? "Hardware UI found." : "Hardware UI not found.");
   logmsg(hasI2CServer ? "I2C server found" : "I2C server not found");
+  if(hasI2CServer)
+  {
+    g_I2CServerImageRequestPipe.Reset();
+    g_I2CServerImageResponsePipe.Reset();
+    g_I2CServerImageRequestPipe.AddObserver([&](zuluide::pipe::ImageRequest<zuluide::i2c::i2c_server_source_t> t){g_I2CServerImageResponsePipe.HandleRequest(t);});
+  }
   controller_found = (hasHardwareUI ? CONTROLLER_TYPE_BOARD : 0) | (hasI2CServer ? CONTROLLER_TYPE_WIFI : 0);
   checked = true;
   return controller_found;
@@ -323,9 +335,9 @@ void platform_set_status_controller(zuluide::ObserverTransfer<zuluide::status::S
   uiStatusController = statusController;
 }
 
-void platform_set_controller_image_response_pipe(zuluide::pipe::ImageResponsePipe *fnRequestPipe) {
+void platform_set_controller_image_response_pipe(zuluide::pipe::ImageResponsePipe<zuluide::control::select_controller_source_t> *imageRequestPipe) {
     logmsg("Initialized platform with filename request pipe");
-    g_controllerImageResponsePipe = fnRequestPipe;
+    g_controllerImageResponsePipe = imageRequestPipe;
 }
 
 void platform_set_display_controller(zuluide::Observable<zuluide::control::DisplayState>& displayController) {
@@ -959,6 +971,7 @@ void platform_poll()
     adc_poll();
     usb_log_poll();
     usb_command_poll();
+    g_I2CServerImageRequestPipe.ProcessUpdates();
 
 #ifdef ENABLE_AUDIO_OUTPUT
     static bool update_volume = false;
