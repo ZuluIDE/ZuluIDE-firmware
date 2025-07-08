@@ -47,6 +47,7 @@
 #include "control/control_interface.h"
 
 bool g_sdcard_present;
+extern SdFs SD;
 static FsFile g_logfile;
 
 static uint32_t g_ide_buffer[IDE_BUFFER_SIZE / 4];
@@ -589,7 +590,7 @@ void zuluide_main_loop(void)
         first_loop = false;
     }
     platform_reset_watchdog();
-    platform_poll();
+    platform_poll(true);
     g_ide_device->eject_button_poll(true);
     blink_poll();
 

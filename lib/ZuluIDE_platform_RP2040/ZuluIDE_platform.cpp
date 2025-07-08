@@ -60,6 +60,8 @@
 #define CONTROLLER_TYPE_BOARD 1
 #define CONTROLLER_TYPE_WIFI  2
 
+SdFs SD;
+
 const char *g_platform_name = PLATFORM_NAME;
 static uint32_t g_flash_chip_size = 0;
 static bool g_uart_initialized = false;
@@ -468,8 +470,6 @@ int platform_get_device_id(void)
 /*****************************************/
 /* Crash handlers                        */
 /*****************************************/
-
-extern SdFs SD;
 extern uint32_t __StackTop;
 static void usb_log_poll();
 
@@ -901,7 +901,7 @@ void usb_command_poll()
 
 // Poll function that is called every few milliseconds.
 // Can be left empty or used for platform-specific processing.
-void platform_poll()
+void platform_poll(bool only_from_main)
 {
     static uint32_t prev_poll_time;
     static bool license_log_done = false;
@@ -971,7 +971,8 @@ void platform_poll()
     adc_poll();
     usb_log_poll();
     usb_command_poll();
-    g_I2CServerImageRequestPipe.ProcessUpdates();
+    if (only_from_main)
+        g_I2CServerImageRequestPipe.ProcessUpdates();
 
 #ifdef ENABLE_AUDIO_OUTPUT
     static bool update_volume = false;

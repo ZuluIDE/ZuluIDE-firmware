@@ -120,7 +120,7 @@ void ImageRequestPipe<SrcType>::notifyObservers() {
 
 template <typename SrcType>
 void ImageRequestPipe<SrcType>::Reset() {
-   queue_init(&updateQueue, sizeof(ImageRequest<SrcType>*), 20);
+   queue_init(&updateQueue, sizeof(ImageRequest<SrcType>*), 5);
 }
 
 template <typename SrcType>

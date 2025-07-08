@@ -183,9 +183,11 @@ void ImageResponsePipe<SrcType>::HandleRequest(ImageRequest<SrcType>& current)
       break;
     // The following don't get queued for processing
     case image_request_t::Cleanup:
+      logmsg("Image response pipe is cleaning up");
       imageIterator.Cleanup();
       return;
     case image_request_t::Reset:
+      logmsg("Image response pipe is resetting");
       imageIterator.Reset();
       return;
     case image_request_t::Empty:
@@ -236,7 +238,7 @@ void ImageResponsePipe<SrcType>::notifyObservers() {
 
 template<typename SrcType>
 void ImageResponsePipe<SrcType>::Reset() {
-   queue_init(&updateQueue, sizeof(UpdateAction*), 20);
+   queue_init(&updateQueue, sizeof(UpdateAction*), 5);
    imageIterator.Reset();
 }
 
