@@ -104,6 +104,11 @@ void ControlInterface::RotaryUpdate(int offset) {
     
     break;
   }
+
+  case Mode::Splash: {
+    // Non-interactive screen
+    break;
+  }
   }
 }
 

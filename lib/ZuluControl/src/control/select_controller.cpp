@@ -116,7 +116,6 @@ void SelectController::GetPreviousImageEntry() {
 
 void SelectController::SetImageEntry(const ImageResponse<select_controller_source_t>& response)
 {
-  static image_request_t last_request = image_request_t::Current;
   std::unique_ptr<zuluide::images::Image> image = std::make_unique<zuluide::images::Image>(response.GetImage());
 
   if (response.GetStatus() == response_status_t::None)

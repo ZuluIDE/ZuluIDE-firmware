@@ -629,10 +629,8 @@ void zuluide_main_loop(void)
     g_ide_device->eject_button_poll(true);
     blink_poll();
 
-
     g_StatusController.ProcessUpdates();
     g_ControllerImageRequestPipe.ProcessUpdates();
-
     
     // Checks after 3 seconds if we are still on the Splash screen ( for example if there is no SD card)
     if (!splash_over && (uint32_t)(millis() - splash_check_time) > 3000)

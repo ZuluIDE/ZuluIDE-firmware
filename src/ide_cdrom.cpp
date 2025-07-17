@@ -928,8 +928,8 @@ bool IDECDROMDevice::atapi_pause_resume_audio(const uint8_t *cmd)
 
 bool IDECDROMDevice::atapi_seek_10(const uint8_t *cmd)
 {
-    uint32_t lba = parse_be32(&cmd[2]);
 #ifdef ENABLE_AUDIO_OUTPUT
+    uint32_t lba = parse_be32(&cmd[2]);
     doPlayAudio(lba, 0);
 #endif
     return atapi_cmd_ok();

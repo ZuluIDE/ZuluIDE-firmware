@@ -175,6 +175,7 @@ SplashController& StdDisplayController::GetSplashController() {
 }
 
 StdDisplayController::StdDisplayController(zuluide::status::StatusController* statCtrlr, zuluide::pipe::ImageRequestPipe<select_controller_source_t>* imRqPipe,zuluide::pipe::ImageResponsePipe<select_controller_source_t>* imRsPipe) : 
+                      statusController(this),
                       statController(statCtrlr),
                       current(NULL),
                       menuController(this, statController),
@@ -182,8 +183,7 @@ StdDisplayController::StdDisplayController(zuluide::status::StatusController* st
                       ejectPreventedController(this, statController),
                       selectController(this, statController, imRqPipe, imRsPipe),
                       infoController(this),
-                      splashController(this),
-                      statusController(this) {
+                      splashController(this) {
 }
 
 zuluide::status::StatusController& StdDisplayController::GetStatController() {

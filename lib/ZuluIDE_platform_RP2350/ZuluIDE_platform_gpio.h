@@ -75,6 +75,7 @@
 #define SDIO_D3  39
 
 // Expansion I2C bus
+#define GPIO_I2C_DEVICE i2c0
 #define GPIO_I2C_SDA 44
 #define GPIO_I2C_SCL 45
 #define GPIO_EXT_INTERRUPT 47

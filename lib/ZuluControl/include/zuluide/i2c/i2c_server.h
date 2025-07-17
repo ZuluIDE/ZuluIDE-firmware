@@ -148,6 +148,9 @@ namespace zuluide::i2c {
      */
     void RequestReset(const i2c_server_source_t source);
 
+    void EnterLoggingSafe();
+    void ExitLoggingSafe();
+
   private:
     zuluide::pipe::ImageRequestPipe<i2c_server_source_t>* imageRequestPipe;
     zuluide::pipe::ImageResponsePipe<i2c_server_source_t>* imageResponsePipe;  

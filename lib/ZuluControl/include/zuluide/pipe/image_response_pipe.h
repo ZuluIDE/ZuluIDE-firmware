@@ -24,9 +24,10 @@
 #include <zuluide/pipe/image_response.h>
 #include <zuluide/pipe/image_request.h>
 #include <zuluide/observable.h>
-#include <pico/util/queue.h>
+#include <zuluide/queue/safe_queue.h>
 #include <zuluide/images/image_iterator.h>
 #include "zuluide/pipe/image_response_pipe.h"
+#include <ide_protocol.h>
 #include "ZuluIDE_log.h"
 
 #include <algorithm>
@@ -70,7 +71,7 @@ class ImageResponsePipe : public Observable<ImageResponse<SrcType>>
     /***
         Stores updates that come from another thread. These are processed through class to ProcessUpdates.
       **/
-    queue_t updateQueue;
+    zuluide::queue::SafeQueue updateQueue;
 
     /***
      * Image iterator
@@ -183,15 +184,15 @@ void ImageResponsePipe<SrcType>::HandleRequest(ImageRequest<SrcType>& current)
       break;
     // The following don't get queued for processing
     case image_request_t::Cleanup:
-      logmsg("Image response pipe is cleaning up");
+      dbgmsg("Image response pipe is cleaning up");
       imageIterator.Cleanup();
       return;
     case image_request_t::Reset:
-      logmsg("Image response pipe is resetting");
+      dbgmsg("Image response pipe is resetting");
       imageIterator.Reset();
       return;
     case image_request_t::Empty:
-      logmsg("Requesting image was emtpy and doesn't have a source");
+      dbgmsg("Requesting image was emtpy and doesn't have a source");
       return;
   }
   
@@ -202,7 +203,7 @@ void ImageResponsePipe<SrcType>::HandleRequest(ImageRequest<SrcType>& current)
   response->SetRequest(std::move(std::make_unique<ImageRequest<SrcType>>(current)));
   UpdateAction* actionToExecute = new UpdateAction();
   actionToExecute->responseImage = std::move(response);
-  if(!queue_try_add(&updateQueue, &actionToExecute)) {
+  if(!updateQueue.TryAdd(&actionToExecute)) {
     logmsg("Responding image action failed to enqueue.");
   }
 }
@@ -232,13 +233,16 @@ void ImageResponsePipe<SrcType>::notifyObservers() {
       // and we do not mutate system state in observers. This could be easily
       // verified given this isn't a public API.
       observer(ImageResponse<SrcType>(*imageResponse));
+#ifndef CONTROL_CROSS_CORE_QUEUE
+          ide_protocol_poll();
+#endif
     });
   }
 }
 
 template<typename SrcType>
 void ImageResponsePipe<SrcType>::Reset() {
-   queue_init(&updateQueue, sizeof(UpdateAction*), 5);
+   updateQueue.Reset(sizeof(UpdateAction*), 5);
    imageIterator.Reset();
 }
 
@@ -246,7 +250,7 @@ template<typename SrcType>
 void ImageResponsePipe<SrcType>::ResponseImageSafe(ImageResponse<SrcType> image_response) {
   UpdateAction* actionToExecute = new UpdateAction();
   actionToExecute->responseImage = std::make_unique<ImageResponse<SrcType>>(image_response);
-  if(!queue_try_add(&updateQueue, &actionToExecute)) {
+  if(!updateQueue.TryAdd(&actionToExecute)) {
     logmsg("Responding image action failed to enqueue.");
   }
 }
@@ -254,7 +258,7 @@ void ImageResponsePipe<SrcType>::ResponseImageSafe(ImageResponse<SrcType> image_
 template<typename SrcType>
 void ImageResponsePipe<SrcType>::ProcessUpdates() {
   UpdateAction* actionToExecute;
-  if (queue_try_remove(&updateQueue, &actionToExecute)) {
+  if (updateQueue.TryRemove(&actionToExecute)) {
     // An action was on the queue, execute it.
     if (actionToExecute) {
       imageResponse = std::move(actionToExecute->responseImage);

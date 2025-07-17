@@ -1,5 +1,5 @@
 /**
- * ZuluIDE™ - Copyright (c) 2024 Rabbit Hole Computing™
+ * ZuluIDE™ - Copyright (c) 2025 Rabbit Hole Computing™
  *
  * ZuluIDE™ firmware is licensed under the GPL version 3 or any later version. 
  *
@@ -23,18 +23,53 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
 **/
 
-#pragma once
-
-#include <functional>
 #include <zuluide/queue/safe_queue.h>
+using namespace zuluide::queue;
+#ifdef CONTROL_CROSS_CORE_QUEUE
 
-
-namespace zuluide {
-  /***
-      Allows one to subscribe to updates via a thread-safe queue that can be read from any thread.
-   **/
-  template <class T> class ObservableSafe {
-  public:
-    virtual void AddObserver(zuluide::queue::SafeQueue* dest) = 0;
-  };
+bool SafeQueue::TryRemove(void *data)
+{
+    return queue_try_remove(&m_queue, data);
 }
+bool SafeQueue::TryAdd(void *data)
+{
+    return queue_try_add(&m_queue, data);
+}
+void SafeQueue::Reset(uint32_t element_size, uint32_t element_count)
+{
+    queue_init(&m_queue, element_size, element_count);
+}
+
+uint32_t SafeQueue::GetLevel()
+{
+    return queue_get_level(&m_queue);
+}
+
+#else
+
+bool SafeQueue::TryRemove(void *data)
+{
+    if (!m_queue.empty())
+    {
+        *(void**)data = m_queue.front();
+        m_queue.pop();
+        return true;
+    }
+    return false;
+}
+bool SafeQueue::TryAdd(void *data)
+{
+    m_queue.push(*(void**)data);
+    return true;
+}
+void SafeQueue::Reset(uint32_t element_size, uint32_t element_count)
+{
+    // Empty out queue
+    while(!m_queue.empty()) m_queue.pop();
+}
+
+uint32_t SafeQueue::GetLevel()
+{
+    return m_queue.size();
+}
+#endif

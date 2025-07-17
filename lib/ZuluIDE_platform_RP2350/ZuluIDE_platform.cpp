@@ -44,23 +44,27 @@
 #include <SerialUSB.h>
 #include <class/cdc/cdc_device.h>
 #include <Wire.h>
-// #include <Adafruit_SSD1306.h>
+#include <Adafruit_SSD1306.h>
 #include "ZuluIDE_platform_gpio.h"
 #include "rp2350_sniffer.h"
 #include <zuluide_rp2350b_core1.h>
 #include <sdio_rp2350.h>
-// #include "display/display_ssd1306.h"
-// #include "rotary_control.h"
-// #include <zuluide/i2c/i2c_server.h>
+#include "display/display_ssd1306.h"
+#include "rotary_control.h"
+#include <zuluide/i2c/i2c_server.h>
+#include <zuluide/i2c/i2c_server_src_type.h>
+#include <zuluide/pipe/image_response.h>
+#include <zuluide/control/select_controller_src_type.h>
 #include <minIni.h>
 
 #ifdef ENABLE_AUDIO_OUTPUT
 #  include "audio.h"
-#  include "ZuluIDE_audio.h"
 #endif // ENABLE_AUDIO_OUTPUT
 
 #define CONTROLLER_TYPE_BOARD 1
 #define CONTROLLER_TYPE_WIFI  2
+
+SdFs SD;
 
 const char *g_platform_name = PLATFORM_NAME;
 static uint32_t g_flash_chip_size = 0;
@@ -69,9 +73,20 @@ static bool g_led_disabled = false;
 static bool g_led_blinking = false;
 static bool g_dip_drive_id, g_dip_cable_sel, g_cable_sel_state;
 static uint64_t g_flash_unique_id;
+static zuluide::control::RotaryControl g_rotary_input;
+static TwoWire g_wire(GPIO_I2C_DEVICE, GPIO_I2C_SDA, GPIO_I2C_SCL);
+static zuluide::DisplaySSD1306 display;
 static mutex_t logMutex;
 static uint8_t g_eject_buttons = 0;
 static bool g_sniffer_enabled;
+
+static zuluide::pipe::ImageResponsePipe<zuluide::control::select_controller_source_t>* g_controllerImageResponsePipe;
+
+static zuluide::pipe::ImageResponsePipe<zuluide::i2c::i2c_server_source_t> g_I2CServerImageResponsePipe;
+static zuluide::pipe::ImageRequestPipe<zuluide::i2c::i2c_server_source_t> g_I2CServerImageRequestPipe;
+static zuluide::i2c::I2CServer g_I2cServer(&g_I2CServerImageRequestPipe, &g_I2CServerImageResponsePipe);
+static zuluide::ObserverTransfer<zuluide::status::SystemStatus> *uiStatusController;
+void processStatusUpdate(const zuluide::status::SystemStatus &update);
 
 //void mbed_error_hook(const mbed_error_ctx * error_context);
 
@@ -96,43 +111,6 @@ static void gpio_conf(uint gpio, gpio_function_t fn, bool pullup, bool pulldown,
         gpio_set_slew_rate(gpio, GPIO_SLEW_RATE_SLOW);
     }
 }
-
-#ifdef ENABLE_AUDIO_OUTPUT
-// Increases clk_sys and clk_peri to 135.428571MHz at runtime to support
-// division to audio output rates. Invoke before anything is using clk_peri
-// except for the logging UART, which is handled below.
-static void reclock_for_audio() {
-    // ensure UART is fully drained before we mess up its clock
-    uart_tx_wait_blocking(uart0);
-    // switch clk_sys and clk_peri to pll_usb
-    // see code in 2.15.6.1 of the datasheet for useful comments
-    clock_configure(clk_sys,
-            CLOCKS_CLK_SYS_CTRL_SRC_VALUE_CLKSRC_CLK_SYS_AUX,
-            CLOCKS_CLK_SYS_CTRL_AUXSRC_VALUE_CLKSRC_PLL_USB,
-            48 * MHZ,
-            48 * MHZ);
-    clock_configure(clk_peri,
-            0,
-            CLOCKS_CLK_PERI_CTRL_AUXSRC_VALUE_CLKSRC_PLL_USB,
-            48 * MHZ,
-            48 * MHZ);
-    // reset PLL for 152.4MHz
-    pll_init(pll_sys, 1, 1524000000, 5, 2);
-    // switch clocks back to pll_sys
-    clock_configure(clk_sys,
-            CLOCKS_CLK_SYS_CTRL_SRC_VALUE_CLKSRC_CLK_SYS_AUX,
-            CLOCKS_CLK_SYS_CTRL_AUXSRC_VALUE_CLKSRC_PLL_SYS,
-            152400000,
-            152400000);
-    clock_configure(clk_peri,
-            0,
-            CLOCKS_CLK_PERI_CTRL_AUXSRC_VALUE_CLKSRC_PLL_SYS,
-            152400000,
-            152400000);
-    // reset UART for the new clock speed
-    uart_init(uart0, 1000000);
-}
-#endif
 
 void platform_minimal_init()
 {
@@ -263,40 +241,92 @@ void platform_init()
 // late_init() only runs in main application
 void platform_late_init()
 {
-#ifdef ENABLE_AUDIO_OUTPUT
-    logmsg("I2S audio to expansion header enabled");
-    reclock_for_audio();
-    logmsg("-- System clock is set to ", (int) clock_get_hz(clk_sys),  "Hz");
-    // one-time control setup for DMA channels and second core
-    audio_init();
-#endif
+    
 }
 
 uint8_t platform_check_for_controller()
 {
-    return 0;
+    static bool checked = false;
+    static uint8_t controller_found = 0;
+    if (checked) return controller_found;
+    g_wire.setClock(100000);
+    // Setting the drive strength seems to help the I2C bus with the Pico W controller and the controller OLED display
+    // to communicate and handshake properly
+    gpio_set_drive_strength(GPIO_I2C_SCL, GPIO_DRIVE_STRENGTH_12MA);
+    gpio_set_drive_strength(GPIO_I2C_SDA, GPIO_DRIVE_STRENGTH_12MA);
+    
+    g_rotary_input.SetI2c(&g_wire);
+    bool hasHardwareUI = g_rotary_input.CheckForDevice();
+    g_I2cServer.SetI2c(&g_wire);
+    bool hasI2CServer = g_I2cServer.CheckForDevice();
+    logmsg(hasHardwareUI ? "Hardware UI found." : "Hardware UI not found.");
+    logmsg(hasI2CServer ? "I2C server found" : "I2C server not found");
+    if(hasI2CServer)
+    {
+        g_I2CServerImageRequestPipe.Reset();
+        g_I2CServerImageResponsePipe.Reset();
+        g_I2CServerImageRequestPipe.AddObserver([&](zuluide::pipe::ImageRequest<zuluide::i2c::i2c_server_source_t> t){g_I2CServerImageResponsePipe.HandleRequest(t);});
+    }
+    controller_found = (hasHardwareUI ? CONTROLLER_TYPE_BOARD : 0) | (hasI2CServer ? CONTROLLER_TYPE_WIFI : 0);
+    checked = true;
+    return controller_found;
 }
 
 void platform_set_status_controller(zuluide::ObserverTransfer<zuluide::status::SystemStatus> *statusController) {
-  
+    logmsg("Initialized platform controller with the status controller.");
+    display.init(&g_wire);
+    statusController->AddObserver(processStatusUpdate);
+    uiStatusController = statusController;
+}
+
+void platform_set_controller_image_response_pipe(zuluide::pipe::ImageResponsePipe<zuluide::control::select_controller_source_t> *imageRequestPipe) {
+    logmsg("Initialized platform with filename request pipe");
+    g_controllerImageResponsePipe = imageRequestPipe;
 }
 
 void platform_set_display_controller(zuluide::Observable<zuluide::control::DisplayState>& displayController) {
+    logmsg("Initialized platform controller with the display controller.");
+    displayController.AddObserver([&] (auto current) -> void {display.HandleUpdate(current);}); 
 }
 
 void platform_set_input_interface(zuluide::control::InputReceiver* inputReceiver) {
+    logmsg("Initialized platform controller with input receiver.");
+    g_rotary_input.SetReceiver(inputReceiver);
+    g_rotary_input.StartSendingEvents();
 }
 
 void platform_set_device_control(zuluide::status::DeviceControlSafe* deviceControl) {
+    logmsg("Initialized platform with device control.");
+    char iniBuffer[100];
+    memset(&iniBuffer, 0, 100);
+    if (ini_gets("UI", "wifissid", "", iniBuffer, sizeof(iniBuffer), CONFIGFILE) > 0) {
+        auto ssid = std::string(iniBuffer);
+        g_I2cServer.SetSSID(ssid);
+        logmsg("Set SSID from INI file to ", ssid.c_str());
+        
+        memset(&iniBuffer, 0, 100);
+        if (ini_gets("UI", "wifipassword", "", iniBuffer, sizeof(iniBuffer), CONFIGFILE) > 0) {
+            auto wifiPass = std::string(iniBuffer);
+            g_I2cServer.SetPassword(wifiPass);
+            logmsg("Set PASSWORD from INI file.");
+        }
+        
+        if ((platform_check_for_controller() & CONTROLLER_TYPE_WIFI) && !g_I2cServer.WifiCredentialsSet()) {
+            // The I2C server responded but we cannot configure wifi. This may cause issues.
+            logmsg("An I2C client was detected but the WIFI credentials are not configured. This will cause problems if the I2C client needs WIFI configuration data.");
+        }
+        
+        g_I2cServer.SetDeviceControl(deviceControl);
+    }
 }
-
 void platform_poll_input() {
+    g_rotary_input.Poll();
 }
 
 void platform_write_led(bool state)
 {
     if (g_led_disabled || g_led_blinking) return;
-
+    
     gpio_put(STATUS_LED, state);
 }
 
@@ -382,7 +412,7 @@ int platform_get_device_id(void)
 /* Crash handlers                        */
 /*****************************************/
 
-extern SdFs SD;
+
 extern uint32_t __StackTop;
 static void usb_log_poll();
 
@@ -824,7 +854,7 @@ void core1_log_poll()
 
 // Poll function that is called every few milliseconds.
 // Can be left empty or used for platform-specific processing.
-void platform_poll()
+void platform_poll(bool only_from_main)
 {
     static uint32_t prev_poll_time;
 
@@ -846,6 +876,24 @@ void platform_poll()
     core1_log_poll();
     usb_log_poll();
     usb_command_poll();
+    
+    if (only_from_main)
+    {
+        platform_poll_input();
+
+        if (uiStatusController)
+        {
+            // Process status update, if any exist.
+            if (!uiStatusController->ProcessUpdate()) {
+                // If no updates happend, refresh the display (enables animation)
+                display.Refresh();
+            }
+
+            g_controllerImageResponsePipe->ProcessUpdates();
+            g_I2cServer.Poll();
+        }
+        g_I2CServerImageRequestPipe.ProcessUpdates();
+    }
 
 #ifdef ENABLE_AUDIO_OUTPUT
     static bool update_volume = false;
@@ -1025,6 +1073,11 @@ mutex_t* platform_get_log_mutex() {
 }
 
 void processStatusUpdate(const zuluide::status::SystemStatus &currentStatus) {
+    // Notify the hardware UI of updates.
+    display.HandleUpdate(currentStatus);
+
+    // Notify the I2C server of updates.
+     g_I2cServer.HandleUpdate(currentStatus);
 }
 
 /********************************/
@@ -1033,9 +1086,6 @@ void processStatusUpdate(const zuluide::status::SystemStatus &currentStatus) {
 
 bool platform_enable_sniffer(const char *filename, bool passive)
 {
-  # ifdef ENABLE_AUDIO_OUTPUT
-    audio_disable();
-  # endif
     if (passive)
     {
         // Stop IDE phy and configure pins for passive input

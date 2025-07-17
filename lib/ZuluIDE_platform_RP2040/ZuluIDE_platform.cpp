@@ -74,7 +74,7 @@ static bool g_led_blinking = false;
 static bool g_dip_drive_id, g_dip_cable_sel;
 static uint64_t g_flash_unique_id;
 static zuluide::control::RotaryControl g_rotary_input;
-static TwoWire g_wire(i2c1, GPIO_I2C_SDA, GPIO_I2C_SCL);
+static TwoWire g_wire(GPIO_I2C_DEVICE, GPIO_I2C_SDA, GPIO_I2C_SCL);
 static zuluide::DisplaySSD1306 display;
 static uint8_t g_eject_buttons = 0;
 
