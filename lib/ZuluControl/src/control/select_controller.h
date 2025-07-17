@@ -24,27 +24,33 @@
 #include "../status/status_controller.h"
 #include <zuluide/status/device_control_safe.h>
 #include <zuluide/control/display_state.h>
+#include <zuluide/pipe/image_request_pipe.h>
+#include <zuluide/pipe/image_response_pipe.h>
+#include <zuluide/control/select_controller_src_type.h>
 #include "ui_controller_base.h"
 
 namespace zuluide::control {
-  class StdDisplayController;
-  /**
-     Controls state when the UI is selecting a new image.
-   */
-  class SelectController : public UIControllerBase {
-  public:
-    SelectController(StdDisplayController* cntrlr, zuluide::status::DeviceControlSafe* statCtrlr);
-    void IncrementImageNameOffset();
-    void DecreaseImageNameOffset();
-    void ResetImageNameOffset();
-    void SelectImage();
-    void ChangeToMenu();
-    void GetNextImageEntry();
-    void GetPreviousImageEntry();
-    virtual DisplayState Reset();
-  private:
-    zuluide::status::DeviceControlSafe* statusController;
-    SelectState state;
-    zuluide::images::ImageIterator imgIterator;
-  };
+
+class StdDisplayController;
+/**
+   Controls state when the UI is selecting a new image.
+  */
+class SelectController : public UIControllerBase {
+public:
+  SelectController(StdDisplayController* cntrlr, zuluide::status::DeviceControlSafe* statCtrlr, zuluide::pipe::ImageRequestPipe<select_controller_source_t>* imReqPipe, zuluide::pipe::ImageResponsePipe<select_controller_source_t>* imResPipe);
+  void IncrementImageNameOffset();
+  void DecreaseImageNameOffset();
+  void ResetImageNameOffset();
+  void SelectImage();
+  void ChangeToMenu();
+  void GetNextImageEntry();
+  void SetImageEntry(const zuluide::pipe::ImageResponse<select_controller_source_t>& response);
+  void GetPreviousImageEntry();
+  virtual DisplayState Reset();
+private:
+  zuluide::status::DeviceControlSafe* statusController;
+  SelectState state;
+  zuluide::pipe::ImageRequestPipe<select_controller_source_t> *imageRequestPipe;
+  zuluide::pipe::ImageResponsePipe<select_controller_source_t> *imageResponsePipe;
+};
 }

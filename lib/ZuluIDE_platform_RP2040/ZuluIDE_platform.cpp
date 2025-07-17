@@ -47,6 +47,10 @@
 #include "display/display_ssd1306.h"
 #include "rotary_control.h"
 #include <zuluide/i2c/i2c_server.h>
+#include <zuluide/i2c/i2c_server_src_type.h>
+#include <zuluide/pipe/image_response.h>
+#include <zuluide/control/select_controller_src_type.h>
+
 #include <minIni.h>
 
 #ifdef ENABLE_AUDIO_OUTPUT
@@ -55,6 +59,8 @@
 
 #define CONTROLLER_TYPE_BOARD 1
 #define CONTROLLER_TYPE_WIFI  2
+
+SdFs SD;
 
 const char *g_platform_name = PLATFORM_NAME;
 static uint32_t g_flash_chip_size = 0;
@@ -67,10 +73,16 @@ static zuluide::control::RotaryControl g_rotary_input;
 static TwoWire g_wire(i2c1, GPIO_I2C_SDA, GPIO_I2C_SCL);
 static zuluide::DisplaySSD1306 display;
 static uint8_t g_eject_buttons = 0;
-static zuluide::i2c::I2CServer g_I2cServer;
+
+
+
+static zuluide::pipe::ImageResponsePipe<zuluide::control::select_controller_source_t>* g_controllerImageResponsePipe;
+
+static zuluide::pipe::ImageResponsePipe<zuluide::i2c::i2c_server_source_t> g_I2CServerImageResponsePipe;
+static zuluide::pipe::ImageRequestPipe<zuluide::i2c::i2c_server_source_t> g_I2CServerImageRequestPipe;
+static zuluide::i2c::I2CServer g_I2cServer(&g_I2CServerImageRequestPipe, &g_I2CServerImageResponsePipe);
 static mutex_t logMutex;
 static zuluide::ObserverTransfer<zuluide::status::SystemStatus> *uiStatusController;
-
 void processStatusUpdate(const zuluide::status::SystemStatus &update);
 
 //void mbed_error_hook(const mbed_error_ctx * error_context);
@@ -307,6 +319,12 @@ uint8_t platform_check_for_controller()
   bool hasI2CServer = g_I2cServer.CheckForDevice();
   logmsg(hasHardwareUI ? "Hardware UI found." : "Hardware UI not found.");
   logmsg(hasI2CServer ? "I2C server found" : "I2C server not found");
+  if(hasI2CServer)
+  {
+    g_I2CServerImageRequestPipe.Reset();
+    g_I2CServerImageResponsePipe.Reset();
+    g_I2CServerImageRequestPipe.AddObserver([&](zuluide::pipe::ImageRequest<zuluide::i2c::i2c_server_source_t> t){g_I2CServerImageResponsePipe.HandleRequest(t);});
+  }
   controller_found = (hasHardwareUI ? CONTROLLER_TYPE_BOARD : 0) | (hasI2CServer ? CONTROLLER_TYPE_WIFI : 0);
   checked = true;
   return controller_found;
@@ -317,6 +335,11 @@ void platform_set_status_controller(zuluide::ObserverTransfer<zuluide::status::S
   display.init(&g_wire);
   statusController->AddObserver(processStatusUpdate);
   uiStatusController = statusController;
+}
+
+void platform_set_controller_image_response_pipe(zuluide::pipe::ImageResponsePipe<zuluide::control::select_controller_source_t> *imageRequestPipe) {
+    logmsg("Initialized platform with filename request pipe");
+    g_controllerImageResponsePipe = imageRequestPipe;
 }
 
 void platform_set_display_controller(zuluide::Observable<zuluide::control::DisplayState>& displayController) {
@@ -447,8 +470,6 @@ int platform_get_device_id(void)
 /*****************************************/
 /* Crash handlers                        */
 /*****************************************/
-
-extern SdFs SD;
 extern uint32_t __StackTop;
 static void usb_log_poll();
 
@@ -880,7 +901,7 @@ void usb_command_poll()
 
 // Poll function that is called every few milliseconds.
 // Can be left empty or used for platform-specific processing.
-void platform_poll()
+void platform_poll(bool only_from_main)
 {
     static uint32_t prev_poll_time;
     static bool license_log_done = false;
@@ -950,6 +971,8 @@ void platform_poll()
     adc_poll();
     usb_log_poll();
     usb_command_poll();
+    if (only_from_main)
+        g_I2CServerImageRequestPipe.ProcessUpdates();
 
 #ifdef ENABLE_AUDIO_OUTPUT
     static bool update_volume = false;
@@ -1100,7 +1123,7 @@ void zuluide_main_loop1(void)
             // If no updates happend, refresh the display (enables animation)
             display.Refresh();
         }
-
+        g_controllerImageResponsePipe->ProcessUpdates();
         g_I2cServer.Poll();
     }
 }

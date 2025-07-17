@@ -48,8 +48,8 @@ namespace zuluide::images {
     bool operator==(const Image& other) const;
     const uint64_t GetFileSizeBytes() const;
 
-    std::string ToJson();
-    std::string ToJson(const char* fieldName);
+    const std::string ToJson() const;
+    const std::string ToJson(const char* fieldName) const;
     static drive_type_t ToDriveType(const ImageType toConvert);
     static const char* GetImagePrefix(const ImageType toConvert);
     static ImageType InferImageTypeFromImagePrefix(const char* prefix);

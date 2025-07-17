@@ -41,10 +41,13 @@
 #include <zuluide/status/device_status.h>
 #include <zuluide/status/system_status.h>
 #include <zuluide/images/image_iterator.h>
+#include <zuluide/pipe/image_request_pipe.h>
+#include <zuluide/pipe/image_response_pipe.h>
 #include "control/std_display_controller.h"
 #include "control/control_interface.h"
 
 bool g_sdcard_present;
+extern SdFs SD;
 static FsFile g_logfile;
 
 static uint32_t g_ide_buffer[IDE_BUFFER_SIZE / 4];
@@ -59,9 +62,12 @@ static IDEDevice *g_ide_device;
 static bool loadedFirstImage = false;
 
 zuluide::status::StatusController g_StatusController;
-zuluide::control::StdDisplayController g_DisplayController(&g_StatusController);
+zuluide::pipe::ImageResponsePipe<zuluide::control::select_controller_source_t> g_ControllerImageResponsePipe;
+zuluide::pipe::ImageRequestPipe<zuluide::control::select_controller_source_t> g_ControllerImageRequestPipe;
+zuluide::control::StdDisplayController g_DisplayController(&g_StatusController, &g_ControllerImageRequestPipe, &g_ControllerImageResponsePipe);
 zuluide::control::ControlInterface g_ControlInterface;
 zuluide::status::SystemStatus g_previous_controller_status;
+
 void status_observer(const zuluide::status::SystemStatus& current);
 void loadFirstImage();
 void load_image(const zuluide::images::Image& toLoad, bool insert = true);
@@ -264,6 +270,15 @@ drive_type_t searchForDriveType() {
 */
 void setupStatusController()
 {
+  g_ControllerImageRequestPipe.Reset();
+  g_ControllerImageResponsePipe.Reset();
+  g_ControllerImageRequestPipe.AddObserver(
+    [](zuluide::pipe::ImageRequest<zuluide::control::select_controller_source_t> t)
+    {
+      g_ControllerImageResponsePipe.HandleRequest(t);
+    }
+  );
+  platform_set_controller_image_response_pipe(&g_ControllerImageResponsePipe);
   g_StatusController.Reset();
   g_StatusController.SetFirmwareVersion(std::string(g_log_firmwareversion));
   bool isPrimary = platform_get_device_id() == 0;
@@ -360,7 +375,7 @@ void setupStatusController()
 
     // Propogate updates to the control interface from the UI core.
     uiSafeStatusUpdater.AddObserver([](zuluide::status::SystemStatus t) { g_DisplayController.ProcessSystemStatusUpdate(t); });
-    uiSafeStatusUpdater.AddObserver([g_ControlInterface](zuluide::status::SystemStatus t) { g_ControlInterface.HandleSystemStatusUpdate(t); });
+    uiSafeStatusUpdater.AddObserver([](zuluide::status::SystemStatus t) { g_ControlInterface.HandleSystemStatusUpdate(t); });
 
     g_DisplayController.SetMode(zuluide::control::Mode::Splash);
 
@@ -575,17 +590,19 @@ void zuluide_main_loop(void)
         first_loop = false;
     }
     platform_reset_watchdog();
-    platform_poll();
+    platform_poll(true);
     g_ide_device->eject_button_poll(true);
     blink_poll();
 
 
     g_StatusController.ProcessUpdates();
+    g_ControllerImageRequestPipe.ProcessUpdates();
+
     
     // Checks after 3 seconds if we are still on the Splash screen ( for example if there is no SD card)
     if (!splash_over && (uint32_t)(millis() - splash_check_time) > 3000)
     {
-      if (g_DisplayController.GetMode() == zuluide::control::Mode::Splash);
+      if (g_DisplayController.GetMode() == zuluide::control::Mode::Splash)
       {
         // Need to force a status controller update to move beyond the Splash screen
         g_StatusController.SetFirmwareVersion(std::string(g_log_firmwareversion));

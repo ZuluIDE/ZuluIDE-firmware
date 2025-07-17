@@ -34,7 +34,8 @@
 #include <zuluide/control/display_state.h>
 #include <zuluide/status/system_status.h>
 #include <zuluide/status/device_control_safe.h>
-
+#include <zuluide/pipe/image_response_pipe.h>
+#include <zuluide/control/select_controller_src_type.h>
 #include <pico/util/queue.h>
 
 /* These are used in debug output and default SCSI strings */
@@ -98,7 +99,7 @@ void platform_reset_watchdog();
 // Poll function that is called every few milliseconds.
 // The SD card is free to access during this time, and pauses up to
 // few milliseconds shouldn't disturb SCSI communication.
-void platform_poll();
+void platform_poll(bool only_from_main = false);
 
 // Set callback that will be called during data transfer to/from SD card.
 // This can be used to implement simultaneous transfer to SCSI bus.
@@ -124,6 +125,11 @@ void platform_set_display_controller(zuluide::Observable<zuluide::control::Displ
    Sets the controller that is used by the UI to change the system state.
  */
 void platform_set_device_control(zuluide::status::DeviceControlSafe* deviceControl);
+
+/**
+   Sets the filename request pipe that is used by controllers to request filenames from a different core safely.
+ */
+void platform_set_controller_image_response_pipe(zuluide::pipe::ImageResponsePipe<zuluide::control::select_controller_source_t> *imageResponsePipe);
 
 /**
    This mutex is used to prevent saving the log file to the SD card while reading the file system.

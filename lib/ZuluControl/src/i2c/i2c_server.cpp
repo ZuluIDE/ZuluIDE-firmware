@@ -19,19 +19,29 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
 **/
 
-#include <zuluide/i2c/i2c_server.h>
+#include <zuluide/pipe/image_response.h>
 #include <sstream>
 #include <cctype>
 #include "ZuluIDE_log.h"
 #include "ZuluIDE_platform.h"
+#include "zuluide/i2c/i2c_server.h"
+#include "zuluide/i2c/i2c_server_src_type.h"
+
 
 #ifndef BUFFER_LENGTH
 #define BUFFER_LENGTH 8
 #endif
 
+using namespace zuluide::pipe;
 using namespace zuluide::i2c;
 
-I2CServer::I2CServer() : deviceControl(nullptr), isSubscribed(false), devControlSet(false), sendFiles(false), sendNextImage(false), isIterating(false), isPresent(false), remoteMajorVersion(0){
+I2CServer::I2CServer(ImageRequestPipe<i2c_server_source_t>* image_request_pipe, ImageResponsePipe<i2c_server_source_t>* image_response_pipe) : 
+  imageRequestPipe(image_request_pipe), imageResponsePipe(image_response_pipe),
+  filenameTransferState(FilenameTransferState::Idle), deviceControl(nullptr),
+  isSubscribed(false), devControlSet(false), sendFilenames(false), sendFiles(false),
+  sendNextImage(false), updateFilenameCache(false), isIterating(false), isPresent(false), remoteMajorVersion(0)
+{
+  imageResponsePipe->AddObserver([&](const ImageResponse<i2c_server_source_t>& t){HandleImageResponse(t);});
 }
 
 void I2CServer::SetI2c(TwoWire* wireValue) {
@@ -43,6 +53,7 @@ void I2CServer::SetDeviceControl(DeviceControlSafe* devControl)
     deviceControl = devControl;
     devControlSet = true;
 }
+
 bool writeLengthPrefacedString(TwoWire *wire, uint8_t reg, uint16_t length, const char* buffer) {
   wire->beginTransmission(CLIENT_ADDR);
   wire->write(reg);
@@ -73,12 +84,145 @@ bool I2CServer::CheckForDevice() {
   isPresent = writeLengthPrefacedString(wire, I2C_SERVER_RESET, 0, buf);
   return isPresent;
 }
-
 void I2CServer::HandleUpdate(const SystemStatus& current) {
-  status = current.ToJson();
-  if (isSubscribed) {
-    writeLengthPrefacedString(wire, I2C_SERVER_SYSTEM_STATUS_JSON, status.length(), status.c_str());
+  static bool lastCardPresentStatus = false;
+  bool card_present = current.IsCardPresent();
+  if (lastCardPresentStatus != card_present) {
+    updateFilenameCache = card_present;
+    lastCardPresentStatus = card_present;
+    if (!card_present)
+    {
+      RequestCleanup(i2c_server_source_t::None);
+    }
   }
+
+  status = current.ToJson();
+  if (isSubscribed)
+    writeLengthPrefacedString(wire, I2C_SERVER_SYSTEM_STATUS_JSON, status.length(), status.c_str());
+}
+
+void I2CServer::HandleImageResponse(const ImageResponse<i2c_server_source_t>& response)
+{
+
+  const std::unique_ptr<ImageResponse<i2c_server_source_t>> image_response  = std::make_unique<ImageResponse<i2c_server_source_t>>(response);
+  switch (image_response->GetRequest().GetSource())
+  {
+    case i2c_server_source_t::FetchFilenames:
+      HandleFetchFilenames(std::move(image_response));
+      break;
+    case i2c_server_source_t::FetchImages:
+      HandleFetchImages(std::move(image_response));
+      break;
+    case i2c_server_source_t::FetchImage:
+      HandleFetchImage(std::move(image_response));
+      break;
+    case i2c_server_source_t::SetToCurrent:
+      HandleSetToCurrent(std::move(image_response));
+      break;
+  }
+}
+
+void I2CServer::HandleFetchFilenames(const std::unique_ptr<ImageResponse<i2c_server_source_t>>&& response)
+{
+  response_status_t status = response->GetStatus();
+  static bool hit_end = false;
+  if (hit_end == true || status == response_status_t::None)
+  {
+      mutex_enter_blocking(platform_get_log_mutex());
+      dbgmsg("End of fetch filenames");
+      mutex_exit(platform_get_log_mutex());
+      hit_end = false;
+      filenameTransferState = FilenameTransferState::Idle;
+      auto emptyMsgBuf = "";
+      writeLengthPrefacedString(wire, I2C_SERVER_IMAGE_FILENAME, 0, emptyMsgBuf);
+      RequestCleanup(i2c_server_source_t::FetchFilenames);
+
+  }
+  else 
+  {
+    filenameTransferState = FilenameTransferState::Received;
+    auto msgBuf = response->GetImage().GetFilename();
+    writeLengthPrefacedString(wire, I2C_SERVER_IMAGE_FILENAME, msgBuf.size(), msgBuf.c_str());
+    if (status == response_status_t::End)
+    {
+      hit_end = true;
+    }
+  }
+}
+
+void I2CServer::HandleFetchImages(const std::unique_ptr<ImageResponse<i2c_server_source_t>>&& response)
+{
+  static bool hit_end = false;
+  response_status_t status = response->GetStatus();
+  if (status == response_status_t::None || hit_end)
+  {  
+    if (hit_end)
+    {
+      mutex_enter_blocking(platform_get_log_mutex());
+      dbgmsg("End of fetch Images");
+      mutex_exit(platform_get_log_mutex());
+
+    }
+    hit_end = false;
+    auto emptyMsgBuf = "";
+    writeLengthPrefacedString(wire, I2C_SERVER_IMAGE_JSON, 0, emptyMsgBuf);
+    RequestCleanup(i2c_server_source_t::FetchImages);
+    sendFiles = false;
+  }
+  else
+  {
+    auto msgBuf = response->GetImage().ToJson();
+    writeLengthPrefacedString(wire, I2C_SERVER_IMAGE_JSON, msgBuf.size(), msgBuf.c_str());
+
+    hit_end = status == response_status_t::End;
+
+    ImageRequest<i2c_server_source_t> next(image_request_t::Next, i2c_server_source_t::FetchImages);
+    imageRequestPipe->RequestImageSafe(next);
+  }
+}
+
+void I2CServer::HandleFetchImage(const std::unique_ptr<ImageResponse<i2c_server_source_t>>&& response)
+{
+    static bool hit_end = false;
+    response_status_t status = response->GetStatus();
+  if (status == response_status_t::None || hit_end)
+  {
+    if (hit_end)
+    {
+      mutex_enter_blocking(platform_get_log_mutex());
+      dbgmsg("End of Fetch image");
+      mutex_exit(platform_get_log_mutex());
+    }
+    hit_end = false;
+    auto msgBuf = "";
+    writeLengthPrefacedString(wire, I2C_SERVER_IMAGE_JSON, 0, msgBuf);
+    isIterating = false;
+    RequestCleanup(i2c_server_source_t::FetchImage);
+  }
+  else
+  {
+    auto msgBuf = response->GetImage().ToJson();
+    writeLengthPrefacedString(wire, I2C_SERVER_IMAGE_JSON, msgBuf.size(), msgBuf.c_str());
+  }
+}
+
+void I2CServer::HandleSetToCurrent(const std::unique_ptr<ImageResponse<i2c_server_source_t>>&& response)
+{
+  if (response->GetStatus() != response_status_t::None)
+    deviceControl->LoadImageSafe(response->GetImage());
+  RequestCleanup(i2c_server_source_t::SetToCurrent);
+}
+
+void I2CServer::RequestCleanup(const i2c_server_source_t source)
+{
+      ImageRequest<i2c_server_source_t> cleanup(image_request_t::Cleanup, source);
+      imageRequestPipe->RequestImageSafe(cleanup);
+}
+
+void I2CServer::RequestReset(const i2c_server_source_t source)
+{
+      ImageRequest<i2c_server_source_t> reset(image_request_t::Reset, source);
+      imageRequestPipe->RequestImageSafe(reset);
 }
 
 static uint16_t ReadInLength(TwoWire *wire) {
@@ -94,55 +238,68 @@ void I2CServer::Poll() {
     return;
   }
 
-  if (sendFiles) {
-    mutex_enter_blocking(platform_get_log_mutex());
-    iterator.Reset();
-    while (iterator.MoveNext()) {
-      sendFiles = false;
-      auto msgBuf = iterator.Get().ToJson();
-      logmsg("Sending image: ", msgBuf.c_str());
-      writeLengthPrefacedString(wire, I2C_SERVER_IMAGE_JSON, msgBuf.size(), msgBuf.c_str());
-    }
-
-    auto emptyMsgBuf = "";
-    logmsg("Sending end of images as empty string");
-    writeLengthPrefacedString(wire, I2C_SERVER_IMAGE_JSON, 0, emptyMsgBuf);
-
-    iterator.Cleanup();
-    mutex_exit(platform_get_log_mutex());
+  if (updateFilenameCache && isSubscribed) {
+    updateFilenameCache = false;
+    filenameTransferState = FilenameTransferState::Start;
+    auto buf = "";
+    writeLengthPrefacedString(wire, I2C_SERVER_UPDATE_FILENAME_CACHE, 0, buf);
   }
 
-  if (sendNextImage) {
-    mutex_enter_blocking(platform_get_log_mutex());    
-    if (!isIterating) {
-      isIterating = true;
-      iterator.Reset();
+  if (isSubscribed)
+  {
+    if (filenameTransferState == FilenameTransferState::Start)
+    {
+      mutex_enter_blocking(platform_get_log_mutex());
+      dbgmsg("I2C Server: Beginning of fetch filenames");
+      RequestReset(i2c_server_source_t::FetchFilenames);
+      filenameTransferState = FilenameTransferState::Sending;
+      ImageRequest<i2c_server_source_t> request(image_request_t::Next, i2c_server_source_t::FetchFilenames);
+      imageRequestPipe->RequestImageSafe(request);
+      mutex_exit(platform_get_log_mutex());
     }
-    
-    if (iterator.MoveNext()) {
-      auto msgBuf = iterator.Get().ToJson();
-      logmsg("Sending image: ", msgBuf.c_str());
-      writeLengthPrefacedString(wire, I2C_SERVER_IMAGE_JSON, msgBuf.size(), msgBuf.c_str());
-    } else {
-      auto msgBuf = "";
-      logmsg("Sending end of images as empty string");
-      writeLengthPrefacedString(wire, I2C_SERVER_IMAGE_JSON, 0, msgBuf);
-      isIterating = false;
-      iterator.Cleanup();
+    else if (filenameTransferState == FilenameTransferState::Received)
+    {
+      mutex_enter_blocking(platform_get_log_mutex());
+      filenameTransferState = FilenameTransferState::Sending;
+      ImageRequest<i2c_server_source_t> request(image_request_t::Next, i2c_server_source_t::FetchFilenames);
+      imageRequestPipe->RequestImageSafe(request);
+      mutex_exit(platform_get_log_mutex());
     }
-    
-    sendNextImage = false;
-    mutex_exit(platform_get_log_mutex());
+
+    if (sendFiles) {
+      mutex_enter_blocking(platform_get_log_mutex());
+      dbgmsg("I2C Server: Beginning of Fetch Images");
+      RequestReset(i2c_server_source_t::FetchImages);
+      ImageRequest<i2c_server_source_t> request;
+      request.SetType(image_request_t::Next);
+      request.SetSource(i2c_server_source_t::FetchImages);
+      imageRequestPipe->RequestImageSafe(request);
+      mutex_exit(platform_get_log_mutex());
+    }
+
+    if (sendNextImage) {
+      mutex_enter_blocking(platform_get_log_mutex());    
+      if (!isIterating) {
+        dbgmsg("I2C Server: Beginning of Fetch Image");
+        isIterating = true;
+        RequestReset(i2c_server_source_t::FetchImage);
+      }
+      ImageRequest<i2c_server_source_t> request;
+      request.SetType(image_request_t::Next);
+      request.SetSource(i2c_server_source_t::FetchImage);
+      imageRequestPipe->RequestImageSafe(request);    
+      sendNextImage = false;
+      mutex_exit(platform_get_log_mutex());
+    }
   }
 
   wire->requestFrom(CLIENT_ADDR, 1);
   uint8_t requestType = wire->read();
 
   switch (requestType) {
-
-
   case I2C_CLIENT_API_VERSION:
   {
+    mutex_enter_blocking(platform_get_log_mutex()); 
     wire->requestFrom(CLIENT_ADDR, 2);
     uint16_t length = ReadInLength(wire);
     if (length > 0)
@@ -199,10 +356,12 @@ void I2CServer::Poll() {
       writeLengthPrefacedString(wire, I2C_SERVER_API_VERSION, strlen(I2C_API_VERSION), I2C_API_VERSION);
       delete[] buffer;
     }
+    mutex_exit(platform_get_log_mutex());
     break;
   }
 
   case I2C_CLIENT_SUBSCRIBE_STATUS_JSON: {
+    mutex_enter_blocking(platform_get_log_mutex()); 
     wire->requestFrom(CLIENT_ADDR, 2);
     if (ReadInLength(wire) != 0) {
       logmsg("Length was not 0 for subscribe request.");
@@ -213,7 +372,7 @@ void I2CServer::Poll() {
     
     // Send over the current status.
     writeLengthPrefacedString(wire, I2C_SERVER_SYSTEM_STATUS_JSON, status.length(), status.c_str());
-
+    mutex_exit(platform_get_log_mutex());
     break;
   }
 
@@ -236,21 +395,20 @@ void I2CServer::Poll() {
           toRecv--;
         }
       }
+
       if (buffer[0] != '\0')
       {
 
-        logmsg("Client requested the current image be set to:", buffer);
         mutex_enter_blocking(platform_get_log_mutex());
-        iterator.Reset();
-        bool found_file = iterator.MoveToFile(buffer);
-        zuluide::images::Image toLoad(std::string(), 0);
-        toLoad = iterator.Get();
-        iterator.Cleanup();
+
+        RequestReset(i2c_server_source_t::SetToCurrent);
+        ImageRequest<i2c_server_source_t> current(image_request_t::Current, i2c_server_source_t::SetToCurrent);
+        current.SetCurrentFilename(std::make_unique<std::string>(buffer));
+        logmsg("I2C Client requested the current image be set to: ", current.GetCurrentFilename().c_str());
+        imageRequestPipe->RequestImageSafe(current);
         mutex_exit(platform_get_log_mutex());
-        if (found_file) {
-          deviceControl->LoadImageSafe(toLoad);
-        }
       }
+
 
       delete[] buffer;
     }
@@ -259,33 +417,53 @@ void I2CServer::Poll() {
   }
 
   case I2C_CLIENT_EJECT_IMAGE: {
+
     wire->requestFrom(CLIENT_ADDR, 2);
     if (ReadInLength(wire) != 0) {
+      mutex_enter_blocking(platform_get_log_mutex());
       logmsg("Length was not 0 for eject image request.");
+      mutex_exit(platform_get_log_mutex());
     }
 
     deviceControl->EjectImageSafe();
     break;
   }
 
+  case I2C_CLIENT_FETCH_FILENAMES: {
+    wire->requestFrom(CLIENT_ADDR, 2);
+    mutex_enter_blocking(platform_get_log_mutex());
+    if (ReadInLength(wire) != 0) {
+      logmsg("Length was not 0 for fetch filenames request.");
+    }
+    
+    logmsg("I2C Client is fetching filenames");
+    mutex_exit(platform_get_log_mutex());
+    sendFilenames = true;
+    break;
+  }
+  
   case I2C_CLIENT_FETCH_IMAGES_JSON: {
     wire->requestFrom(CLIENT_ADDR, 2);
+    mutex_enter_blocking(platform_get_log_mutex());
     if (ReadInLength(wire) != 0) {
       logmsg("Length was not 0 for fetch images request.");
     }
     
-    logmsg("Client is fetching images. core");
+    dbgmsg("I2C Client is fetching images");
+    mutex_exit(platform_get_log_mutex());
     sendFiles = true;
     break;
   }
 
   case I2C_CLIENT_FETCH_ITR_IMAGE: {
     wire->requestFrom(CLIENT_ADDR, 2);
+    mutex_enter_blocking(platform_get_log_mutex());
     if (ReadInLength(wire) != 0) {
       logmsg("Length was not 0 for fetch iterate image request.");
     }
     
-    logmsg("Client is fetching iterate image.");
+    dbgmsg("I2C Client is fetching iterate image");
+    mutex_exit(platform_get_log_mutex());
     sendNextImage = true;
     
     break;
@@ -293,28 +471,30 @@ void I2CServer::Poll() {
 
   case I2C_CLIENT_FETCH_SSID: {
     wire->requestFrom(CLIENT_ADDR, 2);
+    mutex_enter_blocking(platform_get_log_mutex());
     if (ReadInLength(wire) != 0) {
       logmsg("Length was not 0 for fetch ssid request.");
     }
 
     if (ssid.length() == 0) {
-      logmsg("Client requested the WiFi SSID, but the SSID is not configured.");
+      logmsg("I2C Client requested the WiFi SSID, but the SSID is not configured.");
     }
-        
+    mutex_exit(platform_get_log_mutex());
     writeLengthPrefacedString(wire, I2C_SERVER_SSID, ssid.length(), ssid.c_str());
     break;
   }
 
   case I2C_CLIENT_FETCH_SSID_PASS: {
     wire->requestFrom(CLIENT_ADDR, 2);
+    mutex_enter_blocking(platform_get_log_mutex());
     if (ReadInLength(wire) != 0) {
       logmsg("Length was not 0 for fetch ssid pass request.");
     }
 
     if (password.length() == 0) {
-      logmsg("Client requested SSID password, but the SSID password is not configured.");
+      logmsg("I2C Client requested SSID password, but the SSID password is not configured.");
     }
-    
+    mutex_exit(platform_get_log_mutex());
     writeLengthPrefacedString(wire, I2C_SERVER_SSID_PASS, password.length(), password.c_str());
     break;
   }
@@ -342,8 +522,9 @@ void I2CServer::Poll() {
           toRecv--;
         }
       }
-
-      logmsg("Client IP address is: ", buffer);
+      mutex_enter_blocking(platform_get_log_mutex());
+      logmsg("I2C Client IP address is: ", buffer);
+      mutex_exit(platform_get_log_mutex());
     }
     
     break;
@@ -351,19 +532,22 @@ void I2CServer::Poll() {
     
   case I2C_CLIENT_NET_DOWN: {
     wire->requestFrom(CLIENT_ADDR, 2);
+    mutex_enter_blocking(platform_get_log_mutex());
     if (ReadInLength(wire) != 0) {
       logmsg("Length was not 0 for NET_DOWN request/notification.");
     }
 
-    logmsg("Client network is down.");
-    
+    logmsg("I2C Client network is down.");
+    mutex_exit(platform_get_log_mutex());
     break;
   }
 
-  default: {    
+  default: {
     break;
   }
   }
+
+  imageResponsePipe->ProcessUpdates();
 }
 
 void I2CServer::SetSSID(std::string& value) {
@@ -376,4 +560,13 @@ void I2CServer::SetPassword(std::string &value) {
 
 bool I2CServer::WifiCredentialsSet() {
   return !ssid.empty() && !password.empty();
+}
+
+
+void I2CServer::UpdateFilenames() {
+  mutex_enter_blocking(platform_get_log_mutex());
+  logmsg("Sending request to client to update the filenames");
+  mutex_exit(platform_get_log_mutex());
+  auto emptyMsgBuf = "";
+  writeLengthPrefacedString(wire, I2C_SERVER_UPDATE_FILENAME_CACHE, 0, emptyMsgBuf);
 }

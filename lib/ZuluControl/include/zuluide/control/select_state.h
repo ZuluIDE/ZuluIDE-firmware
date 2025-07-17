@@ -24,6 +24,7 @@
 #include <memory>
 
 #include "base_state.h"
+#include "zuluide/images/image.h"
 
 namespace zuluide::control {
 
@@ -39,10 +40,16 @@ namespace zuluide::control {
     bool HasCurrentImage() const;
     bool IsShowingBack() const;
     void SetIsShowingBack(bool value);
+    bool AtEnd() const;
+    void SetAtEnd(bool value);
+    bool AtStart() const;
+    void SetAtStart(bool value);
   private:
     int imageNameOffset;
     std::unique_ptr<zuluide::images::Image> currentImage;
     bool isShowingBack;
+    bool atEnd;
+    bool atStart;
   };
 
 }

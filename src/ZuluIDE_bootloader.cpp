@@ -27,9 +27,7 @@
 #include <SdFat.h>
 #include <string.h>
 
-// This is defined here but used also by ZuluIDE.cpp.
-// Doing it this way avoids having to link in whole ZuluIDE.cpp into bootloader
-SdFs SD;
+extern SdFs SD;
 
 #ifdef PLATFORM_BOOTLOADER_SIZE
 

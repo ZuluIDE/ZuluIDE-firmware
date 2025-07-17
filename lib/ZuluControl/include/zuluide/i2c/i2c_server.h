@@ -24,12 +24,21 @@
 #include <Wire.h>
 #include <zuluide/status/system_status.h>
 #include <zuluide/status/device_control_safe.h>
-#include <zuluide/images/image_iterator.h>
+#include <zuluide/pipe/image_request_pipe.h>
+#include <zuluide/pipe/image_response_pipe.h>
+#include "i2c_server_src_type.h"
 #include <string>
 
-#define I2C_API_VERSION "2.0.0"
+#define I2C_API_VERSION "3.0.0"
+
+// Delay between reading the filenames off the SD card in milliseconds
+#ifndef I2C_FILENAME_TRANSFER_DELAY
+#define I2C_FILENAME_TRANSFER_DELAY 200
+#endif
 
 #define I2C_SERVER_API_VERSION  0x1
+#define I2C_SERVER_UPDATE_FILENAME_CACHE 0x8
+#define I2C_SERVER_IMAGE_FILENAME 0x9
 #define I2C_SERVER_SYSTEM_STATUS_JSON  0xA
 #define I2C_SERVER_IMAGE_JSON  0xB
 #define I2C_SERVER_POLL_CLIENT 0xC
@@ -40,6 +49,7 @@
 #define I2C_CLIENT_NOOP 0x0
 
 #define I2C_CLIENT_API_VERSION 0x01
+#define I2C_CLIENT_FETCH_FILENAMES 0x09
 #define I2C_CLIENT_SUBSCRIBE_STATUS_JSON  0xA
 #define I2C_CLIENT_LOAD_IMAGE  0xB
 #define I2C_CLIENT_EJECT_IMAGE  0xC
@@ -53,10 +63,12 @@
 #define CLIENT_ADDR 0x45
 
 using namespace zuluide::status;
+using namespace zuluide::pipe;
 
 namespace zuluide::i2c {
+  
   /**
-     Manages communication with an I2C client sending it status and alloweding it
+     Manages communication with an I2C client sending it status and alloweing it
      to request operations.
 
      Data is sent to the I2C client from this server by writing length prefaced
@@ -71,7 +83,8 @@ namespace zuluide::i2c {
     /**
        Default constructor.
      */
-    I2CServer();
+    I2CServer(zuluide::pipe::ImageRequestPipe<i2c_server_source_t>* image_request_pipe, zuluide::pipe::ImageResponsePipe<i2c_server_source_t>* image_response_pipe);
+  
     void SetI2c(TwoWire* wire);
 
     void SetDeviceControl(DeviceControlSafe* deviceControl);
@@ -83,7 +96,7 @@ namespace zuluide::i2c {
     void HandleUpdate(const SystemStatus& current);
     /**
        Polls the I2C client to see if they have data (commands) they want to
-       send to the server and also processes the reqeusts.
+       send to the server and also processes the requests.
      */
     void Poll();
     /**
@@ -104,16 +117,47 @@ namespace zuluide::i2c {
      */
     bool WifiCredentialsSet();
 
+    /**
+        Requests I2C client to consume filenames from this I2C server
+     */
+    void UpdateFilenames();
+
+    /**
+     * Observer that handles responses. Called from notifyObservers which should be run on the core without SD access
+     */
+    void HandleImageResponse(const zuluide::pipe::ImageResponse<i2c_server_source_t>& response);
+
+    /**
+     * Handles the different i2c_server_source_t types from HandleImageResponse
+     */
+    void HandleFetchFilenames(const std::unique_ptr<ImageResponse<i2c_server_source_t>>&& response);
+    void HandleFetchImages(const std::unique_ptr<ImageResponse<i2c_server_source_t>>&& response);
+    void HandleFetchImage(const std::unique_ptr<ImageResponse<i2c_server_source_t>>&& response);
+    void HandleSetToCurrent(const std::unique_ptr<ImageResponse<i2c_server_source_t>>&& response);
+    /**
+     * Sends a clean up iterator request
+     */
+    void RequestCleanup(const i2c_server_source_t source);
+
+    /**
+     * Sends a reset iterator request
+     */
+    void RequestReset(const i2c_server_source_t source);
+
   private:
+    zuluide::pipe::ImageRequestPipe<i2c_server_source_t>* imageRequestPipe;
+    zuluide::pipe::ImageResponsePipe<i2c_server_source_t>* imageResponsePipe;  
+    enum class FilenameTransferState {Idle, Start, Sending, Received} filenameTransferState;
     TwoWire* wire;
     DeviceControlSafe* deviceControl;
     bool isSubscribed;
     bool devControlSet;
+    bool sendFilenames;
     bool sendFiles;
     bool sendNextImage;
+    bool updateFilenameCache;
     bool isIterating;
     bool isPresent;
-    zuluide::images::ImageIterator iterator;
     std::string status;
     std::string ssid;
     std::string password;
