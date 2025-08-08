@@ -227,7 +227,7 @@ bool IDEATAPIDevice::cmd_identify_packet_device(ide_registers_t *regs)
     idf[IDE_IDENTIFY_OFFSET_COMMAND_SET_SUPPORT_2] = 0x4000;
     idf[IDE_IDENTIFY_OFFSET_COMMAND_SET_SUPPORT_3] = 0x4000;
     idf[IDE_IDENTIFY_OFFSET_COMMAND_SET_ENABLED_1] = 0x0014;
-    idf[IDE_IDENTIFY_OFFSET_BYTE_COUNT_ZERO] = 128; // Number of bytes transferred when bytes_req = 0
+    idf[IDE_IDENTIFY_OFFSET_BYTE_COUNT_ZERO] = m_phy_caps.max_blocksize; // Number of bytes transferred when bytes_req = 0
 
     // Diagnostics results
     if (m_devconfig.dev_index == 0)
@@ -312,7 +312,7 @@ bool IDEATAPIDevice::cmd_packet(ide_registers_t *regs)
     {
         // "the host should not set the byte count limit to zero. If the host sets the byte count limit to
         // zero, the contents of IDENTIFY PACKET DEVICE word 125 determines the expected behavior"
-        m_atapi_state.bytes_req = 128;
+        m_atapi_state.bytes_req = m_phy_caps.max_blocksize;
     }
 
 #ifdef IDE_PHY_NO_DIRECT_ATAPI_SUPPORT
