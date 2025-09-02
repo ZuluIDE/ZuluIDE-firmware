@@ -191,11 +191,8 @@ static void copy_id_string(uint16_t *dst, size_t maxwords, const char *src)
     }
 }
 
-// Responds with 512 bytes of identification data
-bool IDEATAPIDevice::cmd_identify_packet_device(ide_registers_t *regs)
+void IDEATAPIDevice::atapi_identify_packet_device_response(uint16_t *idf)
 {
-    uint16_t idf[256] = {0};
-
     copy_id_string(&idf[IDE_IDENTIFY_OFFSET_SERIAL_NUMBER], 10, m_devconfig.ata_serial);
     copy_id_string(&idf[IDE_IDENTIFY_OFFSET_FIRMWARE_REV], 4, m_devconfig.ata_revision);
     copy_id_string(&idf[IDE_IDENTIFY_OFFSET_MODEL_NUMBER], 20, m_devconfig.ata_model);
@@ -263,6 +260,13 @@ bool IDEATAPIDevice::cmd_identify_packet_device(ide_registers_t *regs)
         idf[IDE_IDENTIFY_OFFSET_MODEINFO_ULTRADMA] = 0x0001;
         if (m_atapi_state.udma_mode == 0) idf[IDE_IDENTIFY_OFFSET_MODEINFO_ULTRADMA] |= (1 << 8);
     }
+}
+
+// Responds with 512 bytes of identification data
+bool IDEATAPIDevice::cmd_identify_packet_device(ide_registers_t *regs)
+{
+    uint16_t idf[256] = {0};
+    atapi_identify_packet_device_response(idf);
 
     // Calculate checksum
     // See 8.15.61 Word 255: Integrity word
@@ -288,6 +292,11 @@ bool IDEATAPIDevice::cmd_identify_packet_device(ide_registers_t *regs)
         }
     }
 
+    // This is a hack to get the blue and white G3 CD-ROM OS 9.2.1 boot CD emulation working
+    // 64 NOPs was hit and miss 128 seems to work solidly
+    for(uint8_t i = 0; i < 128; i++)
+        asm("nop;");
+
     regs->error = 0;
     ide_phy_set_regs(regs);
     ide_phy_assert_irq(IDE_STATUS_DEVRDY);
@@ -304,8 +313,15 @@ bool IDEATAPIDevice::cmd_packet(ide_registers_t *regs)
 
     if (m_atapi_state.dma_requested && m_atapi_state.udma_mode < 0)
     {
-        dbgmsg("---- Host requested DMA transfer while DMA mode is not selected, enabling UDMA0!");
-        m_atapi_state.udma_mode = 0;
+        if (m_phy_caps.max_udma_mode >= 0)
+        {
+            dbgmsg("---- Host requested DMA transfer while DMA mode is not selected, enabling UDMA0!");
+            m_atapi_state.udma_mode = 0;
+        }
+        else
+        {
+            logmsg("---- Host requested DMA  transfer but PHY does not support, continuing with PIO!");
+        }
     }
 
     if (m_atapi_state.bytes_req == 0)

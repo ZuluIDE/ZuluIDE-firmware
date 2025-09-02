@@ -215,29 +215,14 @@ void IDEZipDrive::set_image(IDEImage *image)
     IDEATAPIDevice::set_image(image);
 }
 
-// "ATAPI devices shall swap bytes for ASCII fields to maintain compatibility with ATA."
-static void copy_id_string(uint16_t *dst, size_t maxwords, const char *src)
-{
-    for (size_t i = 0; i < maxwords; i++)
-    {
-        uint8_t b0 = (*src != 0) ? (*src++) : ' ';
-        uint8_t b1 = (*src != 0) ? (*src++) : ' ';
-
-        dst[i] = ((uint16_t)b0 << 8) | b1;
-    }
-}
-
 // Responds with 512 bytes of identification data
 bool IDEZipDrive::cmd_identify_packet_device(ide_registers_t *regs)
 {
     uint16_t idf[256] = {0};
 
+    IDEATAPIDevice::atapi_identify_packet_device_response(idf);
+
     idf[IDE_IDENTIFY_OFFSET_GENERAL_CONFIGURATION] = 0x80A0;
-
-
-    copy_id_string(&idf[IDE_IDENTIFY_OFFSET_SERIAL_NUMBER], 10, m_devconfig.ata_serial);
-    copy_id_string(&idf[IDE_IDENTIFY_OFFSET_FIRMWARE_REV], 4, m_devconfig.ata_revision);
-    copy_id_string(&idf[IDE_IDENTIFY_OFFSET_MODEL_NUMBER], 20, m_devconfig.ata_model);
 
     if (m_image == nullptr ||  m_image->get_drive_type() == drive_type_t::DRIVE_TYPE_ZIP100)
     {
@@ -268,7 +253,6 @@ bool IDEZipDrive::cmd_identify_packet_device(ide_registers_t *regs)
         idf[IDE_IDENTIFY_OFFSET_PIO_CYCLETIME_IORDY] =  0x00B4;
         idf[IDE_IDENTIFY_OFFSET_STANDARD_VERSION_MAJOR] = 0x0030; // Version ATAPI-5 and 4
         idf[IDE_IDENTIFY_OFFSET_STANDARD_VERSION_MINOR] = 0x0015; // Minor version
-        idf[IDE_IDENTIFY_OFFSET_MODEINFO_ULTRADMA] =  0x0001; // UDMA 0 mode max // 0x0007; // Zip250
         idf[IDE_IDENTIFY_OFFSET_REMOVABLE_MEDIA_SUPPORT] = 0x0001; // PACKET, Removable device command sets supported
     }
     else
@@ -298,6 +282,16 @@ bool IDEZipDrive::cmd_identify_packet_device(ide_registers_t *regs)
     idf[144] = 0x312F;
     idf[145] = 0x2F34;
     idf[146] = 0x3030;
+
+    // Calculate checksum
+    // See 8.15.61 Word 255: Integrity word
+    uint8_t checksum = 0xA5;
+    for (int i = 0; i < 255; i++)
+    {
+        checksum += (idf[i] & 0xFF) + (idf[i] >> 8);
+    }
+    checksum = -checksum;
+    idf[IDE_IDENTIFY_OFFSET_INTEGRITY_WORD] = ((uint16_t)checksum << 8) | 0xA5;
 
     regs->error = 0;
     ide_phy_set_regs(regs);

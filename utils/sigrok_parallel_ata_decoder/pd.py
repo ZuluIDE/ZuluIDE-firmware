@@ -165,6 +165,16 @@ ATAPI_COMMANDS = {
     0xBF: "SEND DISC STRUCTURE",
 }
 
+# Inverted, bit, name
+CTRL_MUX_BITS = [
+    (True, (1 << 9), "EN_DMARQ"),
+    (False, (1 << 10), "OUT_DMARQ"),
+    (True, (1 << 11), "EN_INTRQ"),
+    (False, (1 << 12), "OUT_INTRQ"),
+    (True, (1 << 13), "OUT_DASP"),
+    (True, (1 << 14), "OUT_PDIAG"),
+]
+
 class Pins:
     '''Indexes must match optional_channels tuple'''
     IOW = 0
@@ -176,7 +186,9 @@ class Pins:
     CS1 = 6
     D0 = 7
     D8 = 7 + 8
+    D15 = 7 + 15
     D16 = 7 + 16
+    DATA_SEL = 23
 
 class Annotations:
     '''Indexes must match annotation classes'''
@@ -189,6 +201,7 @@ class Annotations:
     datatransfer = 6
     status = 7
     atapi = 8
+    event = 9
 
 class Decoder(srd.Decoder):
     api_version = 3
@@ -208,7 +221,9 @@ class Decoder(srd.Decoder):
         {'id': 'da2', 'name': 'DA2', 'desc': 'Device address 2'},
         {'id': 'cs0', 'name': 'CS0', 'desc': 'Chip select 0 (active low)'},
         {'id': 'cs1', 'name': 'CS1', 'desc': 'Chip select 1 (active low)'},
-        ] + [{'id': 'd%d' % i, 'name': 'D%d' % i, 'desc': 'Data line %d' % i} for i in range(16)]
+        ] + [{'id': 'd%d' % i, 'name': 'D%d' % i, 'desc': 'Data line %d' % i} for i in range(16)] + [
+        {'id': 'data_sel', 'name': 'DATA_SEL', 'desc': 'DATA_SEL in ZuluIDE hardware'},
+        ]
     )
     options = ()
     annotations = (
@@ -220,14 +235,16 @@ class Decoder(srd.Decoder):
         ('cmd', 'Commands'),
         ('datatransfer', 'Data transfers'),
         ('status', 'Device status'),
-        ('atapi', 'ATAPI commands')
+        ('atapi', 'ATAPI commands'),
+        ('event', 'Other events'),
     )
     annotation_rows = (
         ('device_row', 'Selected device', (Annotations.device,)),
         ('reg_row', 'Register access', (Annotations.regwr, Annotations.regrd, Annotations.datawr, Annotations.datard)),
         ('commands', 'Commands', (Annotations.cmd, Annotations.atapi)),
         ('transfers', 'Data transfer', (Annotations.datatransfer,)),
-        ('statuses', 'Device status', (Annotations.status,))
+        ('statuses', 'Device status', (Annotations.status,)),
+        ('events', 'Events', (Annotations.event,)),
     )
 
     def __init__(self):
@@ -405,8 +422,15 @@ class Decoder(srd.Decoder):
             self.put(start, end, self.out_ann, [Annotations.regrd, texts])
             self.process_states(start, end, False, addr, data)
 
+    def ctrlmux_text(self, data):
+        r = []
+        for inv, bit, name in CTRL_MUX_BITS:
+            if bool(data & bit) != inv:
+                r.append(name)
+        return ', '.join(r)
+
     def decode(self):
-        wait_conditions = [{Pins.IOW: 'e'}, {Pins.IOR: 'e'}]
+        wait_conditions = [{Pins.IOW: 'e'}, {Pins.IOR: 'e'}, {Pins.D15: 'e'}]
         while True:
             try:
                 pins = self.wait(wait_conditions)
@@ -416,8 +440,38 @@ class Decoder(srd.Decoder):
 
             iow = pins[Pins.IOW]
             ior = pins[Pins.IOR]
+            data = bitpack(pins[Pins.D0:Pins.D16])
 
-            if not iow:
+            if not ior and not iow and 1 not in pins[0:Pins.D16]:
+                start = self.samplenum
+
+                while not pins[Pins.IOW] and not pins[Pins.IOR]:
+                    pins = self.wait(wait_conditions)
+
+                texts = [
+                    'Sniffer capture overflow, lost samples',
+                    'Capture overflow',
+                    'Overflow'
+                ]
+                self.put(start, self.samplenum, self.out_ann,
+                         [Annotations.event, texts,])
+
+            elif pins[Pins.DATA_SEL] and ior and iow and data != 0xFFFF:
+                start = self.samplenum
+
+                while not pins[Pins.IOW] and not pins[Pins.IOR]:
+                    pins = self.wait(wait_conditions)
+
+                if self.samplenum - start < 5:
+                    texts = [
+                        'Control mux write 0x%02x' % (data >> 8) + " " + self.ctrlmux_text(data),
+                        'Ctrl Mux 0x%02x' % (data >> 8),
+                        '%02x' % (data >> 8)
+                    ]
+                    self.put(start, start + 10, self.out_ann,
+                         [Annotations.event, texts,])
+
+            elif not iow:
                 start = self.samplenum
 
                 while not pins[Pins.IOW]:
