@@ -45,8 +45,8 @@
 
 /* These are used in debug output and default SCSI strings */
 extern const char *g_platform_name;
-#define PLATFORM_NAME "ZuluIDE RP2350"
-#define PLATFORM_REVISION "1.0"
+#define PLATFORM_NAME "ZuluIDE V2"
+#define PLATFORM_REVISION "2.0"
 #define SD_USE_SDIO 1
 
 #ifndef PLATFORM_VDD_WARNING_LIMIT_mV
