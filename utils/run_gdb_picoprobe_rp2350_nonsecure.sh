@@ -4,7 +4,7 @@
 # the firmware running on ZuluIDE-RP2350.
 
 DIR="$( dirname -- "${BASH_SOURCE[0]}"; )";
-ELF="$DIR/../.pio/build/ZuluIDE_RP2350/firmware.elf"
+ELF="$DIR/../.pio/build/ZuluIDE_V2/firmware.elf"
 
 [ -e $ELF ] || pio run
 

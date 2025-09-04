@@ -55,13 +55,12 @@ SECTIONS
         *scanf*(*)
         *dtoa*(*)
         *strtod*(*)
-        *libZuluControl.a*(*)
-        *libDisplaySSD1306.a*(*)
-        *libIOExpanderPCA9554.a*(*)
-        *libZuluI2S.a*(*)
-        "*libAdafruit BusIO.a"*(*)
-        "*libAdafruit GFX Library.a"*(*)
-        "*libAdafruit GFX SSD1306.a"*(*)
+        *libZuluControl.a*:*(*)
+        *libDisplaySSD1306.a*:*(*)
+        *libIOExpanderPCA9554.a*:*(*)
+        *:ZuluControl_platform*(*)
+        *Adafruit*:*(*)
+        *libWire*:*(*)
     }
 
     .text : {
