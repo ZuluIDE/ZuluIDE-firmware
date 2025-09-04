@@ -89,10 +89,8 @@ class ImageResponsePipe : public Observable<ImageResponse<SrcType>>
 };
 
 template <typename SrcType>
-ImageResponsePipe<SrcType>::ImageResponsePipe() :
-  isUpdating(false)
+ImageResponsePipe<SrcType>::ImageResponsePipe() : isUpdating(false) 
 {
-  imageIterator.Reset();
 }
 
 template<typename SrcType>

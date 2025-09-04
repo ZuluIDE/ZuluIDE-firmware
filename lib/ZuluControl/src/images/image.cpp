@@ -48,7 +48,7 @@ Image::ImageType Image::GetImageType() {
 }
 
 bool Image::operator==(const Image& other) const {
-  return false;
+  return this->filenm == other.filenm;
 }
 
 const uint64_t Image::GetFileSizeBytes() const {
