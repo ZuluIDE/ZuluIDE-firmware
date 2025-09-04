@@ -58,7 +58,7 @@ namespace zuluide::images {
     bool MoveToFile(const char *filename);
     bool IsEmpty();
     int GetFileCount();
-    void Reset();
+    void Reset(bool warning = false);
     bool IsFirst();
     bool IsLast();
     void Cleanup();
