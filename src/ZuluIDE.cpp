@@ -50,6 +50,7 @@
 #include "control/std_display_controller.h"
 #include "control/control_interface.h"
 
+#include <zip_parser.h>
 bool g_sdcard_present;
 extern SdFs SD;
 static FsFile g_logfile;
@@ -194,6 +195,154 @@ void print_sd_info()
     }
 }
 
+/*****************************/
+/* Firmware update from .zip */
+/*****************************/
+
+// Check for firmware files meant for a different platform
+static void check_for_unused_update_files()
+{
+  FsFile root = SD.open("/");
+  FsFile file;
+  char filename[MAX_FILE_PATH + 1];
+  bool bin_files_found = false;
+  while (file.openNext(&root, O_RDONLY))
+  {
+    if (!file.isDir())
+    {
+      size_t filename_len = file.getName(filename, sizeof(filename));
+      if (strncasecmp(filename, "ZuluIDE", sizeof("ZuluIDE") - 1) == 0 &&
+          strncasecmp(filename + filename_len - 4, ".bin", 4) == 0)
+      {
+        if (strncasecmp(filename, FIRMWARE_NAME_PREFIX, sizeof(FIRMWARE_NAME_PREFIX) - 1) == 0)
+        {
+          if (file.isReadOnly())
+          {
+              logmsg("The firmware file ", filename, " is read-only, the ZuluIDE will continue to update every power cycle with this SD card inserted");
+          }
+          else
+          {
+              logmsg("Found firmware file ", filename, " on the SD card, to update this ZuluIDE with the file please power cycle the board");
+          }
+        }
+        else
+        {
+          bin_files_found = true;
+          logmsg("Firmware update file \"", filename, "\" does not contain the board model string \"", FIRMWARE_NAME_PREFIX, "\"");
+        }
+      }
+    }
+  }
+  if (bin_files_found)
+  {
+    logmsg("Please use the ", FIRMWARE_PREFIX ,"*.zip firmware bundle, or the proper .bin or .uf2 file to update the firmware.");
+    logmsg("See ZuluIDE manual for more information");
+  }
+}
+
+// When given a .zip file for firmware update, extract the file
+// that matches this platform.
+static void firmware_update()
+{
+  const char firmware_prefix[] = FIRMWARE_PREFIX;
+  FsFile root = SD.open("/");
+  FsFile file;
+  char name[MAX_FILE_PATH + 1];
+  while (1)
+  {
+    if (!file.openNext(&root, O_RDONLY))
+    {
+      file.close();
+      root.close();
+      return;
+    }
+    if (file.isDir())
+      continue;
+
+    file.getName(name, sizeof(name));
+    if (strlen(name) + 1 < sizeof(firmware_prefix))
+      continue;
+    if ( strncasecmp(firmware_prefix, name, sizeof(firmware_prefix) -1) == 0)
+    {
+      break;
+    }
+  }
+
+  logmsg("Found firmware package ", name);
+
+  const uint32_t target_filename_length = sizeof(FIRMWARE_NAME_PREFIX "_2025-02-21_e4be9ed.bin") - 1;
+  zipparser::Parser parser = zipparser::Parser(FIRMWARE_NAME_PREFIX, sizeof(FIRMWARE_NAME_PREFIX) - 1, target_filename_length);
+  uint8_t buf[512];
+  int32_t parsed_length;
+  int bytes_read = 0;
+  while ((bytes_read = file.read(buf, sizeof(buf))) > 0)
+  {
+    parsed_length = parser.Parse(buf, bytes_read);
+    if (parsed_length == sizeof(buf))
+       continue;
+    if (parsed_length >= 0)
+    {
+      if (!parser.FoundMatch())
+      {
+        parser.Reset();
+        file.seekSet(file.position() - (sizeof(buf) - parsed_length) + parser.GetCompressedSize());
+      }
+      else
+      {
+        // seek to start of compressed data in matching file
+        file.seekSet(file.position() - (sizeof(buf) - parsed_length));
+        break;
+      }
+    }
+    if (parsed_length < 0)
+    {
+      logmsg("Filename character length of ", (int)target_filename_length , " with a prefix of ", FIRMWARE_NAME_PREFIX, " not found in ", name);
+      file.close();
+      root.close();
+      return;
+    }
+  }
+
+
+  if (parser.FoundMatch())
+  {
+    logmsg("Unzipping matching firmware with prefix: ", FIRMWARE_NAME_PREFIX);
+    FsFile target_firmware;
+    target_firmware.open(&root, FIRMWARE_NAME_PREFIX ".bin", O_BINARY | O_WRONLY | O_CREAT | O_TRUNC);
+    uint32_t position = 0;
+    while ((bytes_read = file.read(buf, sizeof(buf))) > 0)
+    {
+      if (bytes_read > parser.GetCompressedSize() - position)
+        bytes_read =  parser.GetCompressedSize() - position;
+      target_firmware.write(buf, bytes_read);
+      position += bytes_read;
+      if (position >= parser.GetCompressedSize())
+      {
+        break;
+      }
+    }
+    // zip file has a central directory at the end of the file,
+    // so the compressed data should never hit the end of the file
+    // so bytes read should always be greater than 0 for a valid datastream
+    if (bytes_read > 0)
+    {
+      target_firmware.close();
+      file.close();
+      root.remove(name);
+      root.close();
+      logmsg("Update extracted from package, rebooting MCU");
+      platform_reset_mcu();
+    }
+    else
+    {
+      target_firmware.close();
+      logmsg("Error reading firmware package file");
+      root.remove(FIRMWARE_NAME_PREFIX ".bin");
+    }
+  }
+  file.close();
+  root.close();
+}
 
 /**************/
 /* Log saving */
@@ -574,6 +723,9 @@ static void zuluide_setup_sd_card()
         {
             init_logfile();
         }
+
+        check_for_unused_update_files();
+        firmware_update();
     }
 }
 

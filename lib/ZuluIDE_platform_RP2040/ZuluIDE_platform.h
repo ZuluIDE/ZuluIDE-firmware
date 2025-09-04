@@ -100,6 +100,9 @@ int platform_get_device_id(void);
 // Setup soft watchdog if supported
 void platform_reset_watchdog();
 
+// Reset MCU
+void platform_reset_mcu();
+
 // Poll function that is called every few milliseconds.
 // The SD card is free to access during this time, and pauses up to
 // few milliseconds shouldn't disturb SCSI communication.

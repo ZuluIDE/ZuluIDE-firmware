@@ -775,6 +775,12 @@ void platform_reset_watchdog()
     // get passed to USB.
     usb_log_poll();
 }
+
+void platform_reset_mcu()
+{
+    watchdog_reboot(0, 0, 2000);
+}
+
 // Install FPGA license key to RP2040 flash
 // buf is pointer to hex string with 26 bytes (encoding 13 bytes)
 bool install_license(char *buf)

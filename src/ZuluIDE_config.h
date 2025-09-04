@@ -42,6 +42,12 @@
 #define LICENSEFILE "zuluide.lic"
 #define LASTFILE    "zululast.txt"
 
+// File names used for firmware update from SD card
+#define DEF_STRINGFY(DEF) STRINGFY(DEF)
+#define STRINGFY(STR) #STR
+#define FIRMWARE_NAME_PREFIX DEF_STRINGFY(BUILD_ENV)
+#define FIRMWARE_PREFIX "ZuluIDE-FW"
+
 // Maximum path length for files on SD card
 #define MAX_FILE_PATH 255
 

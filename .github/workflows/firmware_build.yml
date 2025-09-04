@@ -1,6 +1,6 @@
 name: Build ZuluIDE firmware
 
-on: 
+on:
   push:
   workflow_dispatch:
 
@@ -16,6 +16,11 @@ jobs:
           path: ZuluIDE
           fetch-depth: "0"
       
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install zip
+
       - name: Install platformio
         run: |
           sudo pip install platformio
@@ -29,6 +34,11 @@ jobs:
         run: |
           cd ZuluIDE
           utils/rename_binaries.sh
+
+      - name: Create bin package zip file
+        run: |
+          cd ZuluIDE
+          utils/create_bin_package_zip.sh
 
       - name: Upload binaries into build artifacts
         uses: actions/upload-artifact@v4

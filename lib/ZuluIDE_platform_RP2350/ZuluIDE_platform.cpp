@@ -775,6 +775,11 @@ void platform_reset_watchdog()
     usb_log_poll();
 }
 
+void platform_reset_mcu()
+{
+    watchdog_reboot(0, 0, 2000);
+}
+
 void usb_command_handler(char *cmd)
 {
 }
