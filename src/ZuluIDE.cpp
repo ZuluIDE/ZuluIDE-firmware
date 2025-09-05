@@ -176,6 +176,17 @@ static bool mountSDCard()
     return true;
 }
 
+// Checks if SD card is still present
+bool poll_sd_card()
+{
+#ifdef SD_USE_SDIO
+  return SD.card()->status() != 0 && SD.card()->errorCode() == 0;
+#else
+  uint32_t ocr;
+  return SD.card()->readOCR(&ocr);
+#endif
+}
+
 void print_sd_info()
 {
     uint64_t size = (uint64_t)SD.vol()->clusterCount() * SD.vol()->bytesPerCluster();
@@ -817,10 +828,9 @@ void zuluide_main_loop(void)
         if ((uint32_t)(millis() - sd_card_check_time) > 5000)
         {
             sd_card_check_time = millis();
-            uint32_t ocr;
-            if (!SD.card()->readOCR(&ocr))
+            if (!poll_sd_card())
             {
-                if (!SD.card()->readOCR(&ocr))
+                if (!poll_sd_card())
                 {
                     g_sdcard_present = false;
                     g_StatusController.SetIsCardPresent(false);
