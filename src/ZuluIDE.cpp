@@ -15,6 +15,10 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  *
+ * Under Section 7 of GPL version 3, you are granted additional
+ * permissions described in the ZuluIDE Hardware Support Library Exception
+ * (GPL-3.0_HSL_Exception.md), as published by Rabbit Hole Computing™.
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
 **/
@@ -46,6 +50,7 @@
 #include "control/std_display_controller.h"
 #include "control/control_interface.h"
 
+#include <zip_parser.h>
 bool g_sdcard_present;
 extern SdFs SD;
 static FsFile g_logfile;
@@ -74,9 +79,12 @@ void load_image(const zuluide::images::Image& toLoad, bool insert = true);
 
 static zuluide::ObserverTransfer<zuluide::status::SystemStatus> uiSafeStatusUpdater;
 
-#ifndef SD_SPEED_CLASS_WARN_BELOW
-#define SD_SPEED_CLASS_WARN_BELOW 10
-#endif
+enum sniffer_mode_t {
+  SNIFFER_OFF = 0,
+  SNIFFER_ACTIVE = 1,
+  SNIFFER_PASSIVE = 2
+};
+static sniffer_mode_t g_sniffer_mode;
 
 /************************************/
 /* Status reporting by blinking led */
@@ -168,6 +176,17 @@ static bool mountSDCard()
     return true;
 }
 
+// Checks if SD card is still present
+bool poll_sd_card()
+{
+#ifdef SD_USE_SDIO
+  return SD.card()->status() != 0 && SD.card()->errorCode() == 0;
+#else
+  uint32_t ocr;
+  return SD.card()->readOCR(&ocr);
+#endif
+}
+
 void print_sd_info()
 {
     uint64_t size = (uint64_t)SD.vol()->clusterCount() * SD.vol()->bytesPerCluster();
@@ -185,14 +204,156 @@ void print_sd_info()
         logmsg("SD Date: ", (int)sd_cid.mdtMonth(), "/", sd_cid.mdtYear());
         logmsg("SD Serial: ", sd_cid.psn());
     }
-
-    sds_t sds = {0};
-    if (SD.card()->readSDS(&sds) && sds.speedClass() < SD_SPEED_CLASS_WARN_BELOW)
-    {
-		  logmsg("-- WARNING: Your SD Card Speed Class is ", (int)sds.speedClass(), ". Class ", (int) SD_SPEED_CLASS_WARN_BELOW," or better is recommended for best performance.");
-    }
 }
 
+/*****************************/
+/* Firmware update from .zip */
+/*****************************/
+
+// Check for firmware files meant for a different platform
+static void check_for_unused_update_files()
+{
+  FsFile root = SD.open("/");
+  FsFile file;
+  char filename[MAX_FILE_PATH + 1];
+  bool bin_files_found = false;
+  while (file.openNext(&root, O_RDONLY))
+  {
+    if (!file.isDir())
+    {
+      size_t filename_len = file.getName(filename, sizeof(filename));
+      if (strncasecmp(filename, "ZuluIDE", sizeof("ZuluIDE") - 1) == 0 &&
+          strncasecmp(filename + filename_len - 4, ".bin", 4) == 0)
+      {
+        if (strncasecmp(filename, FIRMWARE_NAME_PREFIX, sizeof(FIRMWARE_NAME_PREFIX) - 1) == 0)
+        {
+          if (file.isReadOnly())
+          {
+              logmsg("The firmware file ", filename, " is read-only, the ZuluIDE will continue to update every power cycle with this SD card inserted");
+          }
+          else
+          {
+              logmsg("Found firmware file ", filename, " on the SD card, to update this ZuluIDE with the file please power cycle the board");
+          }
+        }
+        else
+        {
+          bin_files_found = true;
+          logmsg("Firmware update file \"", filename, "\" does not contain the board model string \"", FIRMWARE_NAME_PREFIX, "\"");
+        }
+      }
+    }
+  }
+  if (bin_files_found)
+  {
+    logmsg("Please use the ", FIRMWARE_PREFIX ,"*.zip firmware bundle, or the proper .bin or .uf2 file to update the firmware.");
+    logmsg("See ZuluIDE manual for more information");
+  }
+}
+
+// When given a .zip file for firmware update, extract the file
+// that matches this platform.
+static void firmware_update()
+{
+  const char firmware_prefix[] = FIRMWARE_PREFIX;
+  FsFile root = SD.open("/");
+  FsFile file;
+  char name[MAX_FILE_PATH + 1];
+  while (1)
+  {
+    if (!file.openNext(&root, O_RDONLY))
+    {
+      file.close();
+      root.close();
+      return;
+    }
+    if (file.isDir())
+      continue;
+
+    file.getName(name, sizeof(name));
+    if (strlen(name) + 1 < sizeof(firmware_prefix))
+      continue;
+    if ( strncasecmp(firmware_prefix, name, sizeof(firmware_prefix) -1) == 0)
+    {
+      break;
+    }
+  }
+
+  logmsg("Found firmware package ", name);
+
+  const uint32_t target_filename_length = sizeof(FIRMWARE_NAME_PREFIX "_2025-02-21_e4be9ed.bin") - 1;
+  zipparser::Parser parser = zipparser::Parser(FIRMWARE_NAME_PREFIX, sizeof(FIRMWARE_NAME_PREFIX) - 1, target_filename_length);
+  uint8_t buf[512];
+  int32_t parsed_length;
+  int bytes_read = 0;
+  while ((bytes_read = file.read(buf, sizeof(buf))) > 0)
+  {
+    parsed_length = parser.Parse(buf, bytes_read);
+    if (parsed_length == sizeof(buf))
+       continue;
+    if (parsed_length >= 0)
+    {
+      if (!parser.FoundMatch())
+      {
+        parser.Reset();
+        file.seekSet(file.position() - (sizeof(buf) - parsed_length) + parser.GetCompressedSize());
+      }
+      else
+      {
+        // seek to start of compressed data in matching file
+        file.seekSet(file.position() - (sizeof(buf) - parsed_length));
+        break;
+      }
+    }
+    if (parsed_length < 0)
+    {
+      logmsg("Filename character length of ", (int)target_filename_length , " with a prefix of ", FIRMWARE_NAME_PREFIX, " not found in ", name);
+      file.close();
+      root.close();
+      return;
+    }
+  }
+
+
+  if (parser.FoundMatch())
+  {
+    logmsg("Unzipping matching firmware with prefix: ", FIRMWARE_NAME_PREFIX);
+    FsFile target_firmware;
+    target_firmware.open(&root, FIRMWARE_NAME_PREFIX ".bin", O_BINARY | O_WRONLY | O_CREAT | O_TRUNC);
+    uint32_t position = 0;
+    while ((bytes_read = file.read(buf, sizeof(buf))) > 0)
+    {
+      if (bytes_read > parser.GetCompressedSize() - position)
+        bytes_read =  parser.GetCompressedSize() - position;
+      target_firmware.write(buf, bytes_read);
+      position += bytes_read;
+      if (position >= parser.GetCompressedSize())
+      {
+        break;
+      }
+    }
+    // zip file has a central directory at the end of the file,
+    // so the compressed data should never hit the end of the file
+    // so bytes read should always be greater than 0 for a valid datastream
+    if (bytes_read > 0)
+    {
+      target_firmware.close();
+      file.close();
+      root.remove(name);
+      root.close();
+      logmsg("Update extracted from package, rebooting MCU");
+      platform_reset_mcu();
+    }
+    else
+    {
+      target_firmware.close();
+      logmsg("Error reading firmware package file");
+      root.remove(FIRMWARE_NAME_PREFIX ".bin");
+    }
+  }
+  file.close();
+  root.close();
+}
 
 /**************/
 /* Log saving */
@@ -399,11 +560,13 @@ void setupStatusController()
 }
 
 void loadFirstImage() {
+  bool quiet = ini_getbool("IDE", "quiet_image_parsing", 0, CONFIGFILE);
+  if (!quiet) logmsg("Parsing images on the SD card");
   zuluide::images::ImageIterator imgIterator;
   volatile bool success = false;
   if (ini_getbool("IDE", "init_with_last_used_image", 1, CONFIGFILE))
   {
-    imgIterator.Reset();
+    imgIterator.Reset(!quiet);
     FsFile last_saved = SD.open(LASTFILE, O_RDONLY);
     if (last_saved.isOpen())
     {
@@ -411,7 +574,7 @@ void loadFirstImage() {
       last_saved.close();
       if (imgIterator.MoveToFile(image_name.c_str()))
       {
-        logmsg("Loading last used image: \"", image_name.c_str(), "\"");
+        if (!quiet) logmsg("-- Loading last used image: \"", image_name.c_str(), "\"");
         g_StatusController.LoadImage(imgIterator.Get());
         g_previous_controller_status = g_StatusController.GetStatus();
         loadedFirstImage = true;
@@ -420,14 +583,14 @@ void loadFirstImage() {
       }
       if (!success)
       {
-        logmsg("Last used image \"", image_name.c_str(), "\" not found");
+        if (!quiet) logmsg("-- Last used image \"", image_name.c_str(), "\" not found");
       }
     }
   }
 
   if (!success)
   {
-    imgIterator.Reset();
+    imgIterator.Reset(true);
     if (!imgIterator.IsEmpty() && imgIterator.MoveNext()) {
       logmsg("Loading first image ", imgIterator.Get().GetFilename().c_str());
       g_StatusController.LoadImage(imgIterator.Get());
@@ -435,7 +598,7 @@ void loadFirstImage() {
       loadedFirstImage = true;
       load_image(imgIterator.Get(), false);
     } else {
-      logmsg("No image files found");
+      logmsg("No valid image files found");
       blinkStatus(BLINK_ERROR_NO_IMAGES);
     }
   }
@@ -511,6 +674,46 @@ void load_image(const zuluide::images::Image& toLoad, bool insert)
   blinkStatus(BLINK_STATUS_OK);
 }
 
+
+static void zuluide_reload_config()
+{
+  if (ini_haskey("IDE", "debug", CONFIGFILE))
+  {
+    g_log_debug = ini_getbool("IDE", "debug", g_log_debug, CONFIGFILE);
+    logmsg("-- Debug log setting overridden in " CONFIGFILE ", debug = ", (int)g_log_debug);
+  }
+
+  g_sniffer_mode = (sniffer_mode_t)ini_getl("IDE", "sniffer", 0, CONFIGFILE);
+
+  if (g_sniffer_mode != SNIFFER_OFF)
+  {
+#ifdef PLATFORM_HAS_SNIFFER
+    SD.remove("sniff.dat");
+    if (platform_enable_sniffer("sniff.dat", g_sniffer_mode == SNIFFER_PASSIVE))
+    {
+      logmsg("-- Storing IDE bus traffic to sniff.dat");
+      if (g_sniffer_mode == SNIFFER_PASSIVE) logmsg("-- Normal IDE bus operation is disabled by passive sniffer mode");
+    }
+    else
+    {
+      logmsg("-- Failed to initialize IDE bus sniffer");
+      g_sniffer_mode = SNIFFER_OFF;
+    }
+#else
+    logmsg("-- This platform does not support IDE bus sniffer");
+    g_sniffer_mode = SNIFFER_OFF;
+#endif
+  }
+
+  if (ini_getbool("IDE", "DisableStatusLED", false, CONFIGFILE))
+  {
+      platform_disable_led();
+  }
+
+  uint8_t eject_button = ini_getl("IDE", "eject_button", 1, CONFIGFILE);
+  platform_init_eject_button(eject_button);
+}
+
 static void zuluide_setup_sd_card()
 {
     g_sdcard_present = mountSDCard();
@@ -532,23 +735,20 @@ static void zuluide_setup_sd_card()
         if (g_sdcard_present)
         {
             init_logfile();
-
-            if (ini_getbool("IDE", "DisableStatusLED", false, CONFIGFILE))
-            {
-                platform_disable_led();
-            }
-            uint8_t eject_button = ini_getl("IDE", "eject_button", 1, CONFIGFILE);
-            platform_init_eject_button(eject_button);
         }
+
+        check_for_unused_update_files();
+        firmware_update();
     }
 }
+
 
 void zuluide_init(void)
 {
   platform_init();
   platform_late_init();
   zuluide_setup_sd_card();
-  g_log_debug = ini_getbool("IDE", "debug", g_log_debug, CONFIGFILE);
+  zuluide_reload_config();
 
 #ifdef PLATFORM_MASS_STORAGE
   static bool check_mass_storage = true;
@@ -594,10 +794,8 @@ void zuluide_main_loop(void)
     g_ide_device->eject_button_poll(true);
     blink_poll();
 
-
     g_StatusController.ProcessUpdates();
     g_ControllerImageRequestPipe.ProcessUpdates();
-
     
     // Checks after 3 seconds if we are still on the Splash screen ( for example if there is no SD card)
     if (!splash_over && (uint32_t)(millis() - splash_check_time) > 3000)
@@ -612,7 +810,17 @@ void zuluide_main_loop(void)
 
     save_logfile();
 
-    ide_protocol_poll();
+    if (g_sniffer_mode != SNIFFER_PASSIVE)
+    {
+      ide_protocol_poll();
+    }
+
+#ifdef PLATFORM_HAS_SNIFFER
+    if (g_sniffer_mode != SNIFFER_OFF)
+    {
+      platform_sniffer_poll();
+    }
+#endif
 
     if (g_sdcard_present)
     {
@@ -620,10 +828,9 @@ void zuluide_main_loop(void)
         if ((uint32_t)(millis() - sd_card_check_time) > 5000)
         {
             sd_card_check_time = millis();
-            uint32_t ocr;
-            if (!SD.card()->readOCR(&ocr))
+            if (!poll_sd_card())
             {
-                if (!SD.card()->readOCR(&ocr))
+                if (!poll_sd_card())
                 {
                     g_sdcard_present = false;
                     g_StatusController.SetIsCardPresent(false);
@@ -647,6 +854,7 @@ void zuluide_main_loop(void)
             print_sd_info();
 
             init_logfile();
+            zuluide_reload_config();
 
             g_StatusController.SetIsCardPresent(true);
             loadFirstImage();

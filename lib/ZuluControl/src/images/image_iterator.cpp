@@ -15,6 +15,10 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  *
+ * Under Section 7 of GPL version 3, you are granted additional
+ * permissions described in the ZuluIDE Hardware Support Library Exception
+ * (GPL-3.0_HSL_Exception.md), as published by Rabbit Hole Computing™.
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
 **/
@@ -26,8 +30,8 @@
 
 using namespace zuluide::images;
 
-static bool is_valid_filename(const char *name);
-static bool fileIsValidImage(FsFile& file, const char* fileName);
+static bool is_valid_filename(const char *name, bool warning = false);
+static bool fileIsValidImage(FsFile& file, const char* fileName, bool warning = false);
 
 ImageIterator::ImageIterator() :
   fileCount (0), isEmpty(true), parseMultiPartBinCueSize(true)
@@ -235,55 +239,54 @@ void ImageIterator::Cleanup() {
   }
 }
 
-void ImageIterator::Reset() {
+void ImageIterator::Reset(bool warning) {
   Cleanup();
   fileCount = 0;
 
   if (!root.open("/")) {
-    logmsg("Failed to open root directory.");
+    return;
   }
 
-  if (root.isOpen()) {
-    FsFile curFile;
-    bool oneIsValid = false;
-    firstIdx = 0;
-    lastIdx = 0;
-    char curFilePath[MAX_FILE_PATH+1];
-    char firstFilename[MAX_FILE_PATH+1] = {0};
-    char lastFilename[MAX_FILE_PATH+1] = {0};
-    memcpy(candidate, 0, sizeof(candidate));
-    candidateImageType = Image::ImageType::unknown;
+  FsFile curFile;
+  bool oneIsValid = false;
+  firstIdx = 0;
+  lastIdx = 0;
+  char curFilePath[MAX_FILE_PATH+1];
+  char firstFilename[MAX_FILE_PATH+1] = {0};
+  char lastFilename[MAX_FILE_PATH+1] = {0};
+  memcpy(candidate, 0, sizeof(candidate));
+  candidateImageType = Image::ImageType::unknown;
 
-    // Walk the directory to count the number of files.
-    while (curFile.openNext(&root, O_RDONLY)) {
-      fileCount++;
+  // Walk the directory to count the number of files.
+  while (curFile.openNext(&root, O_RDONLY)) {
+    fileCount++;
 
-      // Get the file name and check that it is valid..
-      memset(curFilePath, 0, sizeof(curFilePath));
-      curFile.getName(curFilePath, sizeof(curFilePath));
-      if (fileIsValidImage(curFile, curFilePath)) {
-        oneIsValid = true;
-        if (!firstFilename[0] || strcasecmp(firstFilename, curFilePath) > 0)
-        {
-          memcpy(firstFilename, curFilePath, sizeof(firstFilename));
-          firstIdx = curFile.dirIndex();
-        }
-
-        if (!lastFilename[0] || strcasecmp(lastFilename, curFilePath) < 0)
-        {
-          memcpy(lastFilename, curFilePath, sizeof(lastFilename));
-          lastIdx = curFile.dirIndex();
-        }
+    // Get the file name and check that it is valid..
+    memset(curFilePath, 0, sizeof(curFilePath));
+    curFile.getName(curFilePath, sizeof(curFilePath));
+    if (fileIsValidImage(curFile, curFilePath, warning)) {
+      oneIsValid = true;
+      if (!firstFilename[0] || strcasecmp(firstFilename, curFilePath) > 0)
+      {
+        memcpy(firstFilename, curFilePath, sizeof(firstFilename));
+        firstIdx = curFile.dirIndex();
       }
 
-      curFile.close();
+      if (!lastFilename[0] || strcasecmp(lastFilename, curFilePath) < 0)
+      {
+        memcpy(lastFilename, curFilePath, sizeof(lastFilename));
+        lastIdx = curFile.dirIndex();
+      }
     }
 
-    isEmpty = !oneIsValid;
-    curIdx = firstIdx;
-    currentIsFirst = false;
-    currentIsLast = false;
+    curFile.close();
   }
+
+  isEmpty = !oneIsValid;
+  curIdx = firstIdx;
+  currentIsFirst = false;
+  currentIsLast = false;
+
 }
 
 bool ImageIterator::IsFirst() {
@@ -311,28 +314,35 @@ static bool folderContainsCueSheet(FsFile &dir)
   return false;
 }
 
-static bool fileIsValidImage(FsFile& file, const char* fileName) {
+static bool fileIsValidImage(FsFile& file, const char* fileName, bool warning) {
   // Directories are allowed if they contain a .cue sheet
   if (file.isDirectory() && !folderContainsCueSheet(file)) {
+    if (warning) logmsg("-- Ignoring directory \"",fileName,"\", no .cue file found within");
     return false;
   }
 
   // If the file name is bad, skip it.
-  return is_valid_filename(fileName);
+  return is_valid_filename(fileName, warning);
 }
 
 /***
     Predicate for checking filenames.
  */
-static bool is_valid_filename(const char *name)
+static bool is_valid_filename(const char *name, bool warning)
 {
   if (strncasecmp(name, "ice5lp1k_top_bitmap.bin", sizeof("ice5lp1k_top_bitmap.bin")) == 0){
     // Ignore FPGA bitstream
     return false;
   }
 
+  if (strncasecmp(name, "sniff.dat", sizeof("sniff.dat")) == 0) {
+    if (warning) logmsg("-- Ignore bus sniffer output file \"sniff.dat\"");
+    return false;
+  }
+
   if (!isalnum(name[0])) {
     // Skip names beginning with special character
+    if (warning) logmsg("-- Ignoring \"", name, "\", first character is not alphanumeric");
     return false;
   }
 
@@ -358,13 +368,14 @@ static bool is_valid_filename(const char *name)
       for (int i = 0; ignore_exts[i]; i++) {
         if (strcasecmp(extension, ignore_exts[i]) == 0) {
           // ignore these without log message
+          if (warning) logmsg("-- Ignoring \"", name, "\", file extension ",ignore_exts[i]," is in the reject list");
           return false;
         }
       }
 
       for (int i = 0; archive_exts[i]; i++) {
         if (strcasecmp(extension, archive_exts[i]) == 0) {
-          logmsg("-- Ignoring compressed file ", name);
+          if (warning) logmsg("-- Ignoring \"", name, "\", compressed files with extension ", archive_exts[i]," are rejected");
           return false;
         }
       }

@@ -15,6 +15,10 @@
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details. 
+ *
+ * Under Section 7 of GPL version 3, you are granted additional
+ * permissions described in the ZuluIDE Hardware Support Library Exception
+ * (GPL-3.0_HSL_Exception.md), as published by Rabbit Hole Computing™.
  * 
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
@@ -24,6 +28,7 @@
 
 #include <SdFat.h>
 #include "ZuluIDE_platform.h"
+#include "ZuluIDE.h"
 #include "ZuluIDE_log.h"
 #include "ZuluIDE_msc.h"
 
@@ -55,8 +60,8 @@ void zuluide_msc_loop() {
     if ((uint32_t)(millis() - sd_card_check_time) > 5000) {
       sd_card_check_time = millis();
       uint32_t ocr;
-      if (!SD.card()->readOCR(&ocr)) {
-        if (!SD.card()->readOCR(&ocr)) {
+      if (!poll_sd_card()) {
+        if (!poll_sd_card()) {
           logmsg("SD card presence check failed! Card unexpectedly removed?");
           break;
         }

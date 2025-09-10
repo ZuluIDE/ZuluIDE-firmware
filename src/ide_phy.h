@@ -15,6 +15,10 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details. 
  *
+ * Under Section 7 of GPL version 3, you are granted additional
+ * permissions described in the ZuluIDE Hardware Support Library Exception
+ * (GPL-3.0_HSL_Exception.md), as published by Rabbit Hole Computing™.
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
 **/
@@ -60,6 +64,9 @@ struct ide_phy_config_t {
 
 // Reset the IDE phy
 void ide_phy_reset(const ide_phy_config_t* config);
+
+// Print debug information to log, called when something goes wrong
+void ide_phy_print_debug();
 
 // Poll for new events.
 // Returns IDE_EVENT_NONE if no new events.

@@ -15,6 +15,10 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  *
+ * Under Section 7 of GPL version 3, you are granted additional
+ * permissions described in the ZuluIDE Hardware Support Library Exception
+ * (GPL-3.0_HSL_Exception.md), as published by Rabbit Hole Computing™.
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
 **/
@@ -112,7 +116,6 @@ void SelectController::GetPreviousImageEntry() {
 
 void SelectController::SetImageEntry(const ImageResponse<select_controller_source_t>& response)
 {
-  static image_request_t last_request = image_request_t::Current;
   std::unique_ptr<zuluide::images::Image> image = std::make_unique<zuluide::images::Image>(response.GetImage());
 
   if (response.GetStatus() == response_status_t::None)

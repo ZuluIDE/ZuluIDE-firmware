@@ -15,6 +15,10 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details. 
  *
+ * Under Section 7 of GPL version 3, you are granted additional
+ * permissions described in the ZuluIDE Hardware Support Library Exception
+ * (GPL-3.0_HSL_Exception.md), as published by Rabbit Hole Computing™.
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
 **/
@@ -95,6 +99,17 @@ void ide_phy_reset(const ide_phy_config_t* config)
 void ide_phy_reset_from_watchdog()
 {
     g_ide_phy.watchdog_error = true;
+}
+
+void ide_phy_print_debug()
+{
+    if (!g_log_debug) return;
+
+    uint8_t status;
+    fpga_rdcmd(FPGA_CMD_READ_STATUS, &status, 1);
+    dbgmsg("Transfer running: ", (int)g_ide_phy.transfer_running,
+           " FPGA status ", status);
+    fpga_dump_ide_regs();
 }
 
 // Poll for new events.

@@ -125,6 +125,7 @@ This firmware is original work developed by Rabbit Hole Computing™.
 It is closely related to [ZuluSCSI](https://github.com/ZuluSCSI/ZuluSCSI-firmware), but starts from fresh beginnings.
 
 The firmware code is licensed under the GPL version 3 or any later version.
+Additional permissions are granted by [ZuluIDE Hardware Support Library Exception](GPL-3.0_HSL_Exception.md).
 
 The RP2040 platform utilizes a separate ICE5LP2K FPGA for IDE bus communication.
 Bitstream for the FPGA is provided in binary format and is licensed for free use and distribution on hardware produced by Rabbit Hole Computing™.

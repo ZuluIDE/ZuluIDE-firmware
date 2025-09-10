@@ -15,6 +15,10 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details. 
  *
+ * Under Section 7 of GPL version 3, you are granted additional
+ * permissions described in the ZuluIDE Hardware Support Library Exception
+ * (GPL-3.0_HSL_Exception.md), as published by Rabbit Hole Computing™.
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
 **/
@@ -60,12 +64,22 @@
 #define SDIO_D3  23
 
 // Expansion I2C bus
+#define GPIO_I2C_DEVICE i2c1
 #define GPIO_I2C_SDA 26
 #define GPIO_I2C_SCL 27
 #define GPIO_EXT_INTERRUPT 15
 
 #ifdef ENABLE_AUDIO_OUTPUT
-    // IO expander I2C pins being used as SPI for audio
+    // i2s PIO settings
+    #define I2S_PIO_HW pio0_hw
+    #define I2S_PIO_SM 1
+    // 44.1KHz to the nearest integer with a sys clk of 135.43MHz and 2 x 16-bit samples with the pio clock running 2x I2S clock
+    // 135.43Mhz / 16 / 2 / 2 / 44.1KHz = 47.98 ~= 48
+    #define I2S_PIO_DIVIDER 48
+    // audio subsystem DMA channels
+    #define SOUND_DMA_CHA 6
+    #define SOUND_DMA_CHB 7
+    // IO expander I2S pins being used as SPI for audio
     #define GPIO_I2S_BCLK  12
     #define GPIO_I2S_LRCLK 13
     #define GPIO_I2S_DOUT  14

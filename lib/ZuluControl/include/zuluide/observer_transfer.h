@@ -1,31 +1,35 @@
 /**
-* ZuluIDE™ - Copyright (c) 2024 Rabbit Hole Computing™
-*
-* ZuluIDE™ firmware is licensed under the GPL version 3 or any later version. 
-*
-* https://www.gnu.org/licenses/gpl-3.0.html
-* ----
-* This program is free software: you can redistribute it and/or modify
-* it under the terms of the GNU General Public License as published by
-* the Free Software Foundation, either version 3 of the License, or
-* (at your option) any later version. 
-*
-* This program is distributed in the hope that it will be useful,
-* but WITHOUT ANY WARRANTY; without even the implied warranty of
-* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-* GNU General Public License for more details. 
-*
-* You should have received a copy of the GNU General Public License
-* along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ * ZuluIDE™ - Copyright (c) 2025 Rabbit Hole Computing™
+ *
+ * ZuluIDE™ firmware is licensed under the GPL version 3 or any later version. 
+ *
+ * https://www.gnu.org/licenses/gpl-3.0.html
+ * ----
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version. 
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details. 
+ *
+ * Under Section 7 of GPL version 3, you are granted additional
+ * permissions described in the ZuluIDE Hardware Support Library Exception
+ * (GPL-3.0_HSL_Exception.md), as published by Rabbit Hole Computing™.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
 **/
 
 #pragma once
-
 #include <functional>
 #include <algorithm>
-#include <pico/util/queue.h>
 #include <zuluide/observable_ui_safe.h>
 #include <zuluide/observable_safe.h>
+#include <zuluide/queue/safe_queue.h>
+#include <ide_protocol.h>
 
 namespace zuluide {
   
@@ -38,7 +42,7 @@ namespace zuluide {
   {
     public:
     ObserverTransfer() : discardOldMessages(false) {
-      queue_init(&updateQueue, sizeof(T*), 5);
+      updateQueue.Reset(sizeof(T*), 5);
     };
     
     virtual void AddObserver(std::function<void(const T& current)> callback) {
@@ -61,14 +65,17 @@ namespace zuluide {
       T* item;
       
       // Throw away outdated messages to get to the latest.
-      while (discardOldMessages && queue_get_level(&updateQueue) > 1 && queue_try_remove(&updateQueue, &item)) {
+      while (discardOldMessages && updateQueue.GetLevel() > 1 && updateQueue.TryRemove(&item)) {
         delete(item);
       }
       
-      if (queue_try_remove(&updateQueue, &item)) {
+      if (updateQueue.TryRemove(&item)) {
         
         std::for_each(observers.begin(), observers.end(), [this, item](auto observer) {
           observer(*item);
+#ifndef CONTROL_CROSS_CORE_QUEUE
+          ide_protocol_poll();
+#endif
         });
         
         delete(item);
@@ -78,7 +85,7 @@ namespace zuluide {
       }
     };
     private:
-    queue_t updateQueue;
+    zuluide::queue::SafeQueue updateQueue;
     std::vector<std::function<void(const T& current)>> observers;
     bool discardOldMessages;
   };

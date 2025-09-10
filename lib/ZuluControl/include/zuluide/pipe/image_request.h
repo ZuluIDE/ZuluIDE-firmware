@@ -23,7 +23,6 @@
 
 #include <zuluide/observable.h>
 #include <zuluide/observable_safe.h>
-#include <pico/util/queue.h>
 #include "image_request_src_tag.h"
 
 #include <string>
@@ -67,13 +66,13 @@ ImageRequest<SrcType>::ImageRequest()
 }
 
 template <typename SrcType>
-ImageRequest<SrcType>::ImageRequest(image_request_t request, SrcType source) : type(request), source(source)
+ImageRequest<SrcType>::ImageRequest(image_request_t request, SrcType source) : source(source), type(request)
 {
 }
 
 template <typename SrcType>
 ImageRequest<SrcType>::ImageRequest(const ImageRequest<SrcType>& src)
-  : type(src.type), source(src.source)
+  : source(src.source), type(src.type)
 {
   if (src.currentFilename)
     currentFilename = std::make_unique<std::string>(*src.currentFilename);
@@ -81,7 +80,7 @@ ImageRequest<SrcType>::ImageRequest(const ImageRequest<SrcType>& src)
 
 template <typename SrcType>
 ImageRequest<SrcType>::ImageRequest(ImageRequest<SrcType>&& src)
-  : type(src.type), source(src.source)
+  : source(src.source), type(src.type)
 {
   currentFilename = std::move(src.currentFilename); 
 }

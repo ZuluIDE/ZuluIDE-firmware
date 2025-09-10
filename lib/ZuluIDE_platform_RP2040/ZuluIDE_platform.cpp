@@ -15,6 +15,10 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details. 
  *
+ * Under Section 7 of GPL version 3, you are granted additional
+ * permissions described in the ZuluIDE Hardware Support Library Exception
+ * (GPL-3.0_HSL_Exception.md), as published by Rabbit Hole Computing™.
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
 **/
@@ -70,7 +74,7 @@ static bool g_led_blinking = false;
 static bool g_dip_drive_id, g_dip_cable_sel;
 static uint64_t g_flash_unique_id;
 static zuluide::control::RotaryControl g_rotary_input;
-static TwoWire g_wire(i2c1, GPIO_I2C_SDA, GPIO_I2C_SCL);
+static TwoWire g_wire(GPIO_I2C_DEVICE, GPIO_I2C_SDA, GPIO_I2C_SCL);
 static zuluide::DisplaySSD1306 display;
 static uint8_t g_eject_buttons = 0;
 
@@ -293,8 +297,6 @@ void platform_late_init()
     logmsg("I2S audio to expansion header enabled");
     reclock_for_audio();
     logmsg("-- System clock is set to ", (int) clock_get_hz(clk_sys),  "Hz");
-#endif
-#ifdef ENABLE_AUDIO_OUTPUT
     // one-time control setup for DMA channels and second core
     audio_init();
 #endif
@@ -773,6 +775,12 @@ void platform_reset_watchdog()
     // get passed to USB.
     usb_log_poll();
 }
+
+void platform_reset_mcu()
+{
+    watchdog_reboot(0, 0, 2000);
+}
+
 // Install FPGA license key to RP2040 flash
 // buf is pointer to hex string with 26 bytes (encoding 13 bytes)
 bool install_license(char *buf)

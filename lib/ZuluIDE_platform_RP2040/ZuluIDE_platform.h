@@ -15,6 +15,10 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details. 
  *
+ * Under Section 7 of GPL version 3, you are granted additional
+ * permissions described in the ZuluIDE Hardware Support Library Exception
+ * (GPL-3.0_HSL_Exception.md), as published by Rabbit Hole Computing™.
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
 **/
@@ -95,6 +99,9 @@ int platform_get_device_id(void);
 
 // Setup soft watchdog if supported
 void platform_reset_watchdog();
+
+// Reset MCU
+void platform_reset_mcu();
 
 // Poll function that is called every few milliseconds.
 // The SD card is free to access during this time, and pauses up to

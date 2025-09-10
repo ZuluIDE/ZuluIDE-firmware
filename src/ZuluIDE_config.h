@@ -15,6 +15,10 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details. 
  *
+ * Under Section 7 of GPL version 3, you are granted additional
+ * permissions described in the ZuluIDE Hardware Support Library Exception
+ * (GPL-3.0_HSL_Exception.md), as published by Rabbit Hole Computing™.
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
 **/
@@ -27,8 +31,8 @@
 #include <ZuluIDE_platform.h>
 
 // Use variables for version number
-#define FW_VER_NUM      "2025.08.13"
-#define FW_VER_SUFFIX   "release"
+#define FW_VER_NUM      "2025.09.05"
+#define FW_VER_SUFFIX   "beta3"
 #define ZULU_FW_VERSION FW_VER_NUM "-" FW_VER_SUFFIX
 
 // Configuration and log file paths
@@ -37,6 +41,12 @@
 #define CRASHFILE   "zuluerr.txt"
 #define LICENSEFILE "zuluide.lic"
 #define LASTFILE    "zululast.txt"
+
+// File names used for firmware update from SD card
+#define DEF_STRINGFY(DEF) STRINGFY(DEF)
+#define STRINGFY(STR) #STR
+#define FIRMWARE_NAME_PREFIX DEF_STRINGFY(BUILD_ENV)
+#define FIRMWARE_PREFIX "ZuluIDE-FW"
 
 // Maximum path length for files on SD card
 #define MAX_FILE_PATH 255

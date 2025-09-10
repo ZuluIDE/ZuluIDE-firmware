@@ -22,10 +22,11 @@
 #pragma once
 
 #include <zuluide/observable.h>
-#include <pico/util/queue.h>
+#include <zuluide/queue/safe_queue.h>
 #include "zuluide/pipe/image_request.h"
 #include "zuluide/pipe/image_response_pipe.h"
 #include "ZuluIDE_log.h"
+#include <ide_protocol.h>
 
 #include <algorithm>
 #include <utility>
@@ -69,7 +70,7 @@ private:
   /***
       Stores updates that come from another thread. These are processed through class to ProcessUpdates.
     **/
-  queue_t updateQueue;
+  zuluide::queue::SafeQueue updateQueue;
 
   /***
       Simple class for storing updates.
@@ -114,13 +115,16 @@ void ImageRequestPipe<SrcType>::notifyObservers() {
       // and we do not mutate system state in observers. This could be easily
       // verified given this isn't a public API.
       observer(ImageRequest<SrcType>(*imageRequest));
+#ifndef CONTROL_CROSS_CORE_QUEUE
+          ide_protocol_poll();
+#endif
     });
   }
 }
 
 template <typename SrcType>
 void ImageRequestPipe<SrcType>::Reset() {
-   queue_init(&updateQueue, sizeof(ImageRequest<SrcType>*), 5);
+   updateQueue.Reset(sizeof(ImageRequest<SrcType>*), 5);
 }
 
 template <typename SrcType>
@@ -128,7 +132,7 @@ void ImageRequestPipe<SrcType>::RequestImageSafe(ImageRequest<SrcType> image_req
   UpdateAction* actionToExecute = new UpdateAction();
   actionToExecute->requestImage = std::make_unique<ImageRequest<SrcType>>(image_request);
 
-  if(!queue_try_add(&updateQueue, &actionToExecute)) {
+  if(!updateQueue.TryAdd(&actionToExecute)) {
     logmsg("Requesting image action failed to enqueue.");
   }
 }
@@ -136,7 +140,7 @@ void ImageRequestPipe<SrcType>::RequestImageSafe(ImageRequest<SrcType> image_req
 template <typename SrcType>
 void ImageRequestPipe<SrcType>::ProcessUpdates() {
   UpdateAction* actionToExecute;
-  if (queue_try_remove(&updateQueue, &actionToExecute)) {
+  if (updateQueue.TryRemove(&actionToExecute)) {
     // An action was on the queue, execute it.
     if (actionToExecute->requestImage) {
       imageRequest = std::move(actionToExecute->requestImage);

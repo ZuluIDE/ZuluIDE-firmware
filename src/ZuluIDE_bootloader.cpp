@@ -15,6 +15,10 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details. 
  *
+ * Under Section 7 of GPL version 3, you are granted additional
+ * permissions described in the ZuluIDE Hardware Support Library Exception
+ * (GPL-3.0_HSL_Exception.md), as published by Rabbit Hole Computing™.
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
 **/
@@ -44,8 +48,8 @@ bool find_firmware_image(FsFile &file, char name[MAX_FILE_PATH + 1])
 
         int namelen = file.getName(name, MAX_FILE_PATH);
 
-        if (namelen >= 11 &&
-            strncasecmp(name, "zuluide", 7) == 0 &&
+        if (namelen >= sizeof(FIRMWARE_NAME_PREFIX) + 3 &&
+            strncasecmp(name, FIRMWARE_NAME_PREFIX, sizeof(FIRMWARE_NAME_PREFIX) - 1) == 0 &&
             strncasecmp(name + namelen - 3, "bin", 3) == 0)
         {
             root.close();

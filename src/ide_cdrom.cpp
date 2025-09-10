@@ -15,6 +15,10 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  *
+ * Under Section 7 of GPL version 3, you are granted additional
+ * permissions described in the ZuluIDE Hardware Support Library Exception
+ * (GPL-3.0_HSL_Exception.md), as published by Rabbit Hole Computing™.
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
 **/
@@ -834,10 +838,12 @@ bool IDECDROMDevice::atapi_get_event_status_notification(const uint8_t *cmd)
 
 bool IDECDROMDevice::atapi_start_stop_unit(const uint8_t *cmd)
 {
+#ifdef ENABLE_AUDIO_OUTPUT
     if ((cmd[ATAPI_START_STOP_EJT_OFFSET] & ATAPI_START_STOP_START) == 0)
     {
         doStopAudio();
     }
+#endif
     return IDEATAPIDevice::atapi_start_stop_unit(cmd);
 }
 
@@ -922,8 +928,8 @@ bool IDECDROMDevice::atapi_pause_resume_audio(const uint8_t *cmd)
 
 bool IDECDROMDevice::atapi_seek_10(const uint8_t *cmd)
 {
-    uint32_t lba = parse_be32(&cmd[2]);
 #ifdef ENABLE_AUDIO_OUTPUT
+    uint32_t lba = parse_be32(&cmd[2]);
     doPlayAudio(lba, 0);
 #endif
     return atapi_cmd_ok();
@@ -1393,6 +1399,7 @@ ssize_t IDECDROMDevice::read_callback(const uint8_t *data, size_t blocksize, siz
     if (ide_phy_is_command_interrupted())
     {
         dbgmsg("---- IDECDROMDevice::read_callback interrupted by host, sectors_done ", m_cd_read_format.sectors_done);
+        ide_phy_print_debug();
         return num_blocks;
     }
 

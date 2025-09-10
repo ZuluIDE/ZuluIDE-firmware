@@ -15,6 +15,10 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details. 
  *
+ * Under Section 7 of GPL version 3, you are granted additional
+ * permissions described in the ZuluIDE Hardware Support Library Exception
+ * (GPL-3.0_HSL_Exception.md), as published by Rabbit Hole Computing™.
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
 **/
@@ -22,7 +26,8 @@
 #pragma once
 
 #include <functional>
-#include <pico/util/queue.h>
+#include <zuluide/queue/safe_queue.h>
+
 
 namespace zuluide {
   /***
@@ -30,6 +35,6 @@ namespace zuluide {
    **/
   template <class T> class ObservableSafe {
   public:
-    virtual void AddObserver(queue_t* dest) = 0;
+    virtual void AddObserver(zuluide::queue::SafeQueue* dest) = 0;
   };
 }

@@ -15,6 +15,10 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details. 
  *
+ * Under Section 7 of GPL version 3, you are granted additional
+ * permissions described in the ZuluIDE Hardware Support Library Exception
+ * (GPL-3.0_HSL_Exception.md), as published by Rabbit Hole Computing™.
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
 **/
@@ -28,7 +32,7 @@
 #include <zuluide/observable.h>
 #include <zuluide/observable_safe.h>
 #include <zuluide/status/device_control_safe.h>
-#include <pico/util/queue.h>
+#include <zuluide/queue/safe_queue.h>
 
 #include <functional>
 #include <memory>
@@ -41,7 +45,7 @@ namespace zuluide::status {
   public:
     StatusController();
     void AddObserver(std::function<void(const SystemStatus& current)> callback);
-    void AddObserver(queue_t* dest);
+    void AddObserver(zuluide::queue::SafeQueue* dest);
     void LoadImage(zuluide::images::Image i);
     void EjectImage();
     void BeginUpdate();
@@ -67,16 +71,16 @@ namespace zuluide::status {
     /***
         Stores queues where updated system status pointers are copied.
      **/
-    std::vector<queue_t*> observerQueues;
+    std::vector<zuluide::queue::SafeQueue*> observerQueues;
     /***
         Stores updates that come from another thread. These are processed through class to ProcessUpdates.
      **/
-    queue_t updateQueue;
+    zuluide::queue::SafeQueue updateQueue;
 
     /***
         Receives updates that come from another thread in the opposite direction of the updateQueue 
      */
-    queue_t receiveQueue;
+    zuluide::queue::SafeQueue receiveQueue;
 
     /***
         Simple class for storing updates. As we currently only have the load or eject image updates,

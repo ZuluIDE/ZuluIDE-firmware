@@ -1,6 +1,5 @@
 /**
- * ZuluIDE™ - Copyright (c) 2023-2024 Rabbit Hole Computing™
- * Copyright (c) 2024 Tech by Androda, LLC
+ * ZuluIDE™ - Copyright (c) 2023 Rabbit Hole Computing™
  *
  * ZuluIDE™ firmware is licensed under the GPL version 3 or any later version. 
  *
@@ -15,6 +14,10 @@
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details. 
+ *
+ * Under Section 7 of GPL version 3, you are granted additional
+ * permissions described in the ZuluIDE Hardware Support Library Exception
+ * (GPL-3.0_HSL_Exception.md), as published by Rabbit Hole Computing™.
  *
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
@@ -36,7 +39,6 @@ static uint32_t g_sdio_ocr; // Operating condition register from card
 static uint32_t g_sdio_rca; // Relative card address
 static cid_t g_sdio_cid;
 static csd_t g_sdio_csd;
-static sds_t __attribute__((aligned(4))) g_sdio_sds;
 static int g_sdio_error_line;
 static sdio_status_t g_sdio_error;
 static uint32_t g_sdio_dma_buf[128];
@@ -169,17 +171,6 @@ bool SdioCard::begin(SdioConfig sdioConfig)
         return false;
     }
 
-    // Read SD Status field
-    memset(&g_sdio_sds, 0, sizeof(sds_t));
-    uint8_t* stat_pointer = (uint8_t*) &g_sdio_sds;
-    if (!checkReturnOk(rp2040_sdio_command_R1(CMD55, g_sdio_rca, &reply)) ||
-        !checkReturnOk(rp2040_sdio_command_R1(ACMD13, 0, &reply)) ||
-        !checkReturnOk(receive_status_register(stat_pointer)))
-    {
-        dbgmsg("SDIO failed to get SD Status");
-        return false;
-    }
-
     // Increase to 25 MHz clock rate
     rp2040_sdio_init(1);
 
@@ -225,7 +216,7 @@ bool SdioCard::readCSD(csd_t* csd)
 
 bool SdioCard::readSDS(sds_t* sds)
 {
-    *sds = g_sdio_sds;
+    *sds = (sds_t){}; // Not implemented
     return true;
 }
 

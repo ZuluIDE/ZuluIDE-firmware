@@ -15,6 +15,10 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  *
+ * Under Section 7 of GPL version 3, you are granted additional
+ * permissions described in the ZuluIDE Hardware Support Library Exception
+ * (GPL-3.0_HSL_Exception.md), as published by Rabbit Hole Computing™.
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
 **/
@@ -497,7 +501,7 @@ void IDEDevice::initialize(int devidx)
 
     m_phy_caps = *ide_phy_get_capabilities();
     m_devconfig.max_pio_mode = ini_getl("IDE", "max_pio", 3, CONFIGFILE);
-    m_devconfig.max_udma_mode = ini_getl("IDE", "max_udma", 0, CONFIGFILE);
+    m_devconfig.max_udma_mode = ini_getl("IDE", "max_udma", 2, CONFIGFILE);
     m_devconfig.max_blocksize = ini_getl("IDE", "max_blocksize", m_phy_caps.max_blocksize, CONFIGFILE);
     logmsg("Device ", devidx, " configuration:");
     logmsg("-- Max PIO mode: ", m_devconfig.max_pio_mode, " (phy max ", m_phy_caps.max_pio_mode, ")");

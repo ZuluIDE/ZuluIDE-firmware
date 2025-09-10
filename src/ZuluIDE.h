@@ -8,3 +8,6 @@
 
 extern SdFs SD;
 extern bool g_sdcard_present;
+
+// Checks if SD card is still present
+bool poll_sd_card();

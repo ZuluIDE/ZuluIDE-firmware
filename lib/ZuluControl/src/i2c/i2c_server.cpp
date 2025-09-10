@@ -15,6 +15,10 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details. 
  *
+ * Under Section 7 of GPL version 3, you are granted additional
+ * permissions described in the ZuluIDE Hardware Support Library Exception
+ * (GPL-3.0_HSL_Exception.md), as published by Rabbit Hole Computing™.
+ *
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
 **/
@@ -24,6 +28,7 @@
 #include <cctype>
 #include "ZuluIDE_log.h"
 #include "ZuluIDE_platform.h"
+#include <ide_protocol.h>
 #include "zuluide/i2c/i2c_server.h"
 #include "zuluide/i2c/i2c_server_src_type.h"
 
@@ -66,10 +71,12 @@ bool writeLengthPrefacedString(TwoWire *wire, uint8_t reg, uint16_t length, cons
   if (wire->endTransmission() != 0) {
     return false;
   }
-
   // Break the string into BUFFER_LENGTH sized transmissions.
   // Larger values for BUFFER_LENGTH have not worked.
   for (int pos = 0; pos < length; pos += BUFFER_LENGTH) {
+#ifndef CONTROL_CROSS_CORE_QUEUE
+    ide_protocol_poll();
+#endif
     wire->beginTransmission(CLIENT_ADDR);
     int toSend = (pos + BUFFER_LENGTH) < length ? BUFFER_LENGTH : length - pos;
     wire->write(buffer + pos, toSend);
@@ -128,9 +135,9 @@ void I2CServer::HandleFetchFilenames(const std::unique_ptr<ImageResponse<i2c_ser
   static bool hit_end = false;
   if (hit_end == true || status == response_status_t::None)
   {
-      mutex_enter_blocking(platform_get_log_mutex());
+      EnterLoggingSafe();
       dbgmsg("End of fetch filenames");
-      mutex_exit(platform_get_log_mutex());
+      ExitLoggingSafe();
       hit_end = false;
       filenameTransferState = FilenameTransferState::Idle;
       auto emptyMsgBuf = "";
@@ -158,9 +165,9 @@ void I2CServer::HandleFetchImages(const std::unique_ptr<ImageResponse<i2c_server
   {  
     if (hit_end)
     {
-      mutex_enter_blocking(platform_get_log_mutex());
+      EnterLoggingSafe();
       dbgmsg("End of fetch Images");
-      mutex_exit(platform_get_log_mutex());
+      ExitLoggingSafe();
 
     }
     hit_end = false;
@@ -189,9 +196,9 @@ void I2CServer::HandleFetchImage(const std::unique_ptr<ImageResponse<i2c_server_
   {
     if (hit_end)
     {
-      mutex_enter_blocking(platform_get_log_mutex());
+      EnterLoggingSafe();
       dbgmsg("End of Fetch image");
-      mutex_exit(platform_get_log_mutex());
+      ExitLoggingSafe();
     }
     hit_end = false;
     auto msgBuf = "";
@@ -249,36 +256,36 @@ void I2CServer::Poll() {
   {
     if (filenameTransferState == FilenameTransferState::Start)
     {
-      mutex_enter_blocking(platform_get_log_mutex());
+      EnterLoggingSafe();
       dbgmsg("I2C Server: Beginning of fetch filenames");
       RequestReset(i2c_server_source_t::FetchFilenames);
       filenameTransferState = FilenameTransferState::Sending;
       ImageRequest<i2c_server_source_t> request(image_request_t::Next, i2c_server_source_t::FetchFilenames);
       imageRequestPipe->RequestImageSafe(request);
-      mutex_exit(platform_get_log_mutex());
+      ExitLoggingSafe();
     }
     else if (filenameTransferState == FilenameTransferState::Received)
     {
-      mutex_enter_blocking(platform_get_log_mutex());
+      EnterLoggingSafe();
       filenameTransferState = FilenameTransferState::Sending;
       ImageRequest<i2c_server_source_t> request(image_request_t::Next, i2c_server_source_t::FetchFilenames);
       imageRequestPipe->RequestImageSafe(request);
-      mutex_exit(platform_get_log_mutex());
+      ExitLoggingSafe();
     }
 
     if (sendFiles) {
-      mutex_enter_blocking(platform_get_log_mutex());
+      EnterLoggingSafe();
       dbgmsg("I2C Server: Beginning of Fetch Images");
       RequestReset(i2c_server_source_t::FetchImages);
       ImageRequest<i2c_server_source_t> request;
       request.SetType(image_request_t::Next);
       request.SetSource(i2c_server_source_t::FetchImages);
       imageRequestPipe->RequestImageSafe(request);
-      mutex_exit(platform_get_log_mutex());
+      ExitLoggingSafe();
     }
 
     if (sendNextImage) {
-      mutex_enter_blocking(platform_get_log_mutex());    
+      EnterLoggingSafe();
       if (!isIterating) {
         dbgmsg("I2C Server: Beginning of Fetch Image");
         isIterating = true;
@@ -289,7 +296,7 @@ void I2CServer::Poll() {
       request.SetSource(i2c_server_source_t::FetchImage);
       imageRequestPipe->RequestImageSafe(request);    
       sendNextImage = false;
-      mutex_exit(platform_get_log_mutex());
+      ExitLoggingSafe();
     }
   }
 
@@ -299,7 +306,7 @@ void I2CServer::Poll() {
   switch (requestType) {
   case I2C_CLIENT_API_VERSION:
   {
-    mutex_enter_blocking(platform_get_log_mutex()); 
+    EnterLoggingSafe();
     wire->requestFrom(CLIENT_ADDR, 2);
     uint16_t length = ReadInLength(wire);
     if (length > 0)
@@ -314,7 +321,11 @@ void I2CServer::Poll() {
 
         wire->requestFrom(CLIENT_ADDR, toRecv);
         while (toRecv > 0) {
-          while (wire->available() == 0) { }
+          while (wire->available() == 0) {
+#ifndef CONTROL_CROSS_CORE_QUEUE
+            ide_protocol_poll();
+#endif
+          }
           buffer[pos++] = wire->read();
           toRecv--;
         }
@@ -356,12 +367,12 @@ void I2CServer::Poll() {
       writeLengthPrefacedString(wire, I2C_SERVER_API_VERSION, strlen(I2C_API_VERSION), I2C_API_VERSION);
       delete[] buffer;
     }
-    mutex_exit(platform_get_log_mutex());
+    ExitLoggingSafe();
     break;
   }
 
   case I2C_CLIENT_SUBSCRIBE_STATUS_JSON: {
-    mutex_enter_blocking(platform_get_log_mutex()); 
+    EnterLoggingSafe();
     wire->requestFrom(CLIENT_ADDR, 2);
     if (ReadInLength(wire) != 0) {
       logmsg("Length was not 0 for subscribe request.");
@@ -372,7 +383,7 @@ void I2CServer::Poll() {
     
     // Send over the current status.
     writeLengthPrefacedString(wire, I2C_SERVER_SYSTEM_STATUS_JSON, status.length(), status.c_str());
-    mutex_exit(platform_get_log_mutex());
+    ExitLoggingSafe();
     break;
   }
 
@@ -390,7 +401,11 @@ void I2CServer::Poll() {
 
         wire->requestFrom(CLIENT_ADDR, toRecv);
         while (toRecv > 0) {
-          while (wire->available() == 0) { }
+          while (wire->available() == 0) {
+#ifndef CONTROL_CROSS_CORE_QUEUE
+            ide_protocol_poll();
+#endif
+          }
           buffer[pos++] = wire->read();
           toRecv--;
         }
@@ -399,14 +414,14 @@ void I2CServer::Poll() {
       if (buffer[0] != '\0')
       {
 
-        mutex_enter_blocking(platform_get_log_mutex());
+        EnterLoggingSafe();
 
         RequestReset(i2c_server_source_t::SetToCurrent);
         ImageRequest<i2c_server_source_t> current(image_request_t::Current, i2c_server_source_t::SetToCurrent);
         current.SetCurrentFilename(std::make_unique<std::string>(buffer));
         logmsg("I2C Client requested the current image be set to: ", current.GetCurrentFilename().c_str());
         imageRequestPipe->RequestImageSafe(current);
-        mutex_exit(platform_get_log_mutex());
+        ExitLoggingSafe();
       }
 
 
@@ -420,9 +435,9 @@ void I2CServer::Poll() {
 
     wire->requestFrom(CLIENT_ADDR, 2);
     if (ReadInLength(wire) != 0) {
-      mutex_enter_blocking(platform_get_log_mutex());
+      EnterLoggingSafe();
       logmsg("Length was not 0 for eject image request.");
-      mutex_exit(platform_get_log_mutex());
+      ExitLoggingSafe();
     }
 
     deviceControl->EjectImageSafe();
@@ -431,39 +446,39 @@ void I2CServer::Poll() {
 
   case I2C_CLIENT_FETCH_FILENAMES: {
     wire->requestFrom(CLIENT_ADDR, 2);
-    mutex_enter_blocking(platform_get_log_mutex());
+    EnterLoggingSafe();
     if (ReadInLength(wire) != 0) {
       logmsg("Length was not 0 for fetch filenames request.");
     }
     
-    logmsg("I2C Client is fetching filenames");
-    mutex_exit(platform_get_log_mutex());
+    dbgmsg("I2C Client is fetching filenames");
+    ExitLoggingSafe();
     sendFilenames = true;
     break;
   }
   
   case I2C_CLIENT_FETCH_IMAGES_JSON: {
     wire->requestFrom(CLIENT_ADDR, 2);
-    mutex_enter_blocking(platform_get_log_mutex());
+    EnterLoggingSafe();
     if (ReadInLength(wire) != 0) {
       logmsg("Length was not 0 for fetch images request.");
     }
     
     dbgmsg("I2C Client is fetching images");
-    mutex_exit(platform_get_log_mutex());
+    ExitLoggingSafe();
     sendFiles = true;
     break;
   }
 
   case I2C_CLIENT_FETCH_ITR_IMAGE: {
     wire->requestFrom(CLIENT_ADDR, 2);
-    mutex_enter_blocking(platform_get_log_mutex());
+    EnterLoggingSafe();
     if (ReadInLength(wire) != 0) {
       logmsg("Length was not 0 for fetch iterate image request.");
     }
     
     dbgmsg("I2C Client is fetching iterate image");
-    mutex_exit(platform_get_log_mutex());
+    ExitLoggingSafe();
     sendNextImage = true;
     
     break;
@@ -471,7 +486,7 @@ void I2CServer::Poll() {
 
   case I2C_CLIENT_FETCH_SSID: {
     wire->requestFrom(CLIENT_ADDR, 2);
-    mutex_enter_blocking(platform_get_log_mutex());
+    EnterLoggingSafe();
     if (ReadInLength(wire) != 0) {
       logmsg("Length was not 0 for fetch ssid request.");
     }
@@ -479,14 +494,14 @@ void I2CServer::Poll() {
     if (ssid.length() == 0) {
       logmsg("I2C Client requested the WiFi SSID, but the SSID is not configured.");
     }
-    mutex_exit(platform_get_log_mutex());
+    ExitLoggingSafe();
     writeLengthPrefacedString(wire, I2C_SERVER_SSID, ssid.length(), ssid.c_str());
     break;
   }
 
   case I2C_CLIENT_FETCH_SSID_PASS: {
     wire->requestFrom(CLIENT_ADDR, 2);
-    mutex_enter_blocking(platform_get_log_mutex());
+    EnterLoggingSafe();
     if (ReadInLength(wire) != 0) {
       logmsg("Length was not 0 for fetch ssid pass request.");
     }
@@ -494,7 +509,7 @@ void I2CServer::Poll() {
     if (password.length() == 0) {
       logmsg("I2C Client requested SSID password, but the SSID password is not configured.");
     }
-    mutex_exit(platform_get_log_mutex());
+    ExitLoggingSafe();
     writeLengthPrefacedString(wire, I2C_SERVER_SSID_PASS, password.length(), password.c_str());
     break;
   }
@@ -517,28 +532,31 @@ void I2CServer::Poll() {
 
         wire->requestFrom(CLIENT_ADDR, toRecv);
         while (toRecv > 0) {
-          while (wire->available() == 0) { }
+          while (wire->available() == 0) {
+#ifndef CONTROL_CROSS_CORE_QUEUE
+            ide_protocol_poll();
+#endif
+          }
           buffer[pos++] = wire->read();
           toRecv--;
         }
       }
-      mutex_enter_blocking(platform_get_log_mutex());
+      EnterLoggingSafe();
       logmsg("I2C Client IP address is: ", buffer);
-      mutex_exit(platform_get_log_mutex());
+      ExitLoggingSafe();
     }
-    
     break;
   }
-    
+
   case I2C_CLIENT_NET_DOWN: {
     wire->requestFrom(CLIENT_ADDR, 2);
-    mutex_enter_blocking(platform_get_log_mutex());
+    EnterLoggingSafe();
     if (ReadInLength(wire) != 0) {
       logmsg("Length was not 0 for NET_DOWN request/notification.");
     }
 
     logmsg("I2C Client network is down.");
-    mutex_exit(platform_get_log_mutex());
+    ExitLoggingSafe();
     break;
   }
 
@@ -562,11 +580,24 @@ bool I2CServer::WifiCredentialsSet() {
   return !ssid.empty() && !password.empty();
 }
 
-
 void I2CServer::UpdateFilenames() {
-  mutex_enter_blocking(platform_get_log_mutex());
+  EnterLoggingSafe();
   logmsg("Sending request to client to update the filenames");
-  mutex_exit(platform_get_log_mutex());
+  ExitLoggingSafe();
   auto emptyMsgBuf = "";
   writeLengthPrefacedString(wire, I2C_SERVER_UPDATE_FILENAME_CACHE, 0, emptyMsgBuf);
+}
+
+void I2CServer::EnterLoggingSafe()
+{
+#ifdef CONTROL_CROSS_CORE_QUEUE
+  mutex_enter_blocking(platform_get_log_mutex());
+#endif
+}
+
+void I2CServer::ExitLoggingSafe()
+{
+#ifdef CONTROL_CROSS_CORE_QUEUE
+  mutex_exit(platform_get_log_mutex());
+#endif
 }

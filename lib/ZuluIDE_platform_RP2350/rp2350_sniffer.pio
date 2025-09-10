@@ -1,0 +1,96 @@
+/**
+ * Run "pioasm rp2350_sniffer.pio rp2350_sniffer.pio.h" to regenerate the C header from this.
+ *
+ * ZuluIDE™ - Copyright (c) 2023 Rabbit Hole Computing™
+ *
+ * ZuluIDE™ firmware is licensed under the GPL version 3 or any later version. 
+ *
+ * https://www.gnu.org/licenses/gpl-3.0.html
+ * ----
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version. 
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details. 
+ *
+ * Under Section 7 of GPL version 3, you are granted additional
+ * permissions described in the ZuluIDE Hardware Support Library Exception
+ * (GPL-3.0_HSL_Exception.md), as published by Rabbit Hole Computing™.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+**/
+
+/* This file implements a logic sniffer functionality for RP2350.
+ * It captures the state of following signals:
+ *  DIOW, DIOR, DA0, DA1, DA2, CS0, CS1, DMACK
+ *  D0-D15
+ *  DATA_SEL, DATA_DIR, IORDY
+ *
+ * The captured data is run-length-encoded by a PIO state machine.
+ *
+ * Encoding of the captured data:
+ *    Bits 31..27: D (Short time delta)
+ *    Bits 26..0:  P (Pin states or long time delta)
+ *
+ * If D != 31, then P is the new state of the 27 IO pins.
+ * Clock cycles since previous sample is 5 * (31 - D)
+ *
+ * If D == 31 and P <= 0x03FFFFFF, then P is a long time delta.
+ * Pin states have not changed and clock cycles is 5 * (0x03FFFFFF - P + 3)
+ *
+ * If D == 31 and 0x03FFFFFF < P <= 0x07FFFFFE, these are used for system timestamp
+ * reporting by CPU.
+ *
+ * If D == 31 and P == 0x07FFFFFF (whole word is all ones), then maximum time delta
+ * has passed. Clock cycles is 5 * (0x03FFFFFF + 3) (approx 2.2 seconds @ 150 MHz)
+ *
+ */
+
+.program rp2350_sniffer
+.pio_version 1
+.fifo rx
+.in 27 left auto 32
+.out 0 right
+
+lg_change:
+    mov y, ~null     ; Set Y to all ones
+    in y, 5          ; Load the top 5 bits to value 31 to indicate long time delta
+    in osr, 27       ; Load the 27 bit time delta and autopush
+    mov osr, null    ; Set time delta to 0 for the pin state push below
+
+PUBLIC change:
+    in osr, 5        ; Load 5-bit time delta (value 0..30)
+    in x, 27         ; Load pin states and autopush
+    mov y, x         ; Set the next pin states to compare against
+    set x, 30        ; Initialize next time delta counter
+
+loop:
+    mov osr, x       ; Keep time delta counter in osr temporarily
+    mov x, pins      ; Load pin states for comparison
+    jmp x != y, change  ; If pin values have changed, push new state
+    mov x, osr       ; Load time delta counter back
+    jmp x--, loop    ; Loop until time delta overflows
+
+    ; Time delta exceeded 30 cycles, encode as long gap
+
+    .wrap_target
+long_gap:
+    mov osr, ~null   ; Set OSR to all ones
+    out null, 6      ; Modify OSR to 0x03FFFFFF
+    mov x, osr       ; Load the new time delta counter to x
+
+loop_lg:
+    mov osr, x       ; Keep time delta counter in osr temporarily
+    mov x, pins      ; Load pin states for comparison
+    jmp x != y, lg_change  ; If pin values have changed, push new state
+    mov x, osr       ; Load time delta counter back
+    jmp x--, loop_lg ; Loop until time delta overflows
+
+    ; Timestamp has wrapped, X is now 0xFFFFFFFF
+    in x, 32         ; Push the word that indicates long gap at maximum time delta
+    .wrap
