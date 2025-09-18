@@ -400,10 +400,6 @@ void IDECDROMDevice::set_image(IDEImage *image)
     else
     {
         m_devinfo.medium_type = ATAPI_MEDIUM_NONE;
-        // Notify host of media change
-        m_atapi_state.unit_attention = true;
-        m_atapi_state.sense_key = ATAPI_SENSE_NOT_READY;
-        m_atapi_state.sense_asc = ATAPI_ASC_NO_MEDIUM;
     }
 
 
@@ -452,6 +448,7 @@ bool IDECDROMDevice::atapi_cmd_not_ready_error()
 bool IDECDROMDevice::atapi_set_cd_speed(const uint8_t *cmd)
 {
     doStopAudio();
+    if (!is_medium_present()) return atapi_cmd_not_ready_error();
     uint16_t read_speed = parse_be16(&cmd[2]);
     uint16_t write_speed = parse_be16(&cmd[4]);
     dbgmsg("-- Host requested read_speed=", (int)read_speed, ", write_speed=", (int)write_speed);
@@ -571,7 +568,12 @@ bool IDECDROMDevice::atapi_read_track_information(const uint8_t *cmd)
 
 bool IDECDROMDevice::atapi_read_sub_channel(const uint8_t * cmd)
 {
-    if (!is_medium_present()) return atapi_cmd_not_ready_error();
+    if (!is_medium_present())
+    {
+        doStopAudio();
+        return atapi_cmd_not_ready_error();
+    }
+
     if (m_atapi_state.not_ready) return atapi_cmd_error(ATAPI_SENSE_NOT_READY, ATAPI_ASC_UNIT_BECOMING_READY);
 
     bool time = (cmd[1] & 0x02);
@@ -849,6 +851,11 @@ bool IDECDROMDevice::atapi_start_stop_unit(const uint8_t *cmd)
 
 bool IDECDROMDevice::atapi_play_audio_10(const uint8_t *cmd)
 {
+    if (!is_medium_present())
+    {
+        doStopAudio();
+        return atapi_cmd_not_ready_error();
+    }
     uint32_t lba = parse_be32(&cmd[2]);
     uint16_t blocks = parse_be16(&cmd[7]);
 
@@ -857,6 +864,11 @@ bool IDECDROMDevice::atapi_play_audio_10(const uint8_t *cmd)
 
 bool IDECDROMDevice::atapi_play_audio_12(const uint8_t *cmd)
 {
+    if (!is_medium_present())
+    {
+        doStopAudio();
+        return atapi_cmd_not_ready_error();
+    }
     uint32_t lba = parse_be32(&cmd[2]);
     uint32_t blocks = parse_be32(&cmd[6]);
 
@@ -866,6 +878,11 @@ bool IDECDROMDevice::atapi_play_audio_12(const uint8_t *cmd)
 
 bool IDECDROMDevice::atapi_play_audio_msf(const uint8_t *cmd)
 {
+    if (!is_medium_present())
+    {
+        doStopAudio();
+        return atapi_cmd_not_ready_error();
+    }
     uint8_t m = cmd[3];
     uint8_t s = cmd[4];
     uint8_t f = cmd[5];
