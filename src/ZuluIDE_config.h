@@ -1,5 +1,5 @@
 /**
- * ZuluIDE™ - Copyright (c) 2023 Rabbit Hole Computing™
+ * ZuluIDE™ - Copyright (c) 2023-2025 Rabbit Hole Computing™
  *
  * ZuluIDE™ firmware is licensed under the GPL version 3 or any later version. 
  *
@@ -31,7 +31,7 @@
 #include <ZuluIDE_platform.h>
 
 // Use variables for version number
-#define FW_VER_NUM      "2025.09.10"
+#define FW_VER_NUM      "2025.09.18"
 #define FW_VER_SUFFIX   "release"
 #define ZULU_FW_VERSION FW_VER_NUM "-" FW_VER_SUFFIX
 
