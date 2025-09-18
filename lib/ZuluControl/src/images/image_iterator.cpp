@@ -315,10 +315,23 @@ static bool folderContainsCueSheet(FsFile &dir)
 }
 
 static bool fileIsValidImage(FsFile& file, const char* fileName, bool warning) {
-  // Directories are allowed if they contain a .cue sheet
-  if (file.isDirectory() && !folderContainsCueSheet(file)) {
-    if (warning) logmsg("-- Ignoring directory \"",fileName,"\", no .cue file found within");
+  if (file.isHidden())
     return false;
+
+  // Directories are allowed if they contain a .cue sheet and the first character is alphanumeric
+  if (file.isDirectory())
+  {
+    if (!isalnum(fileName[0]))
+    {
+      if (warning) logmsg("-- Ignoring directory \"",fileName,"\", first character is not alphanumeric");
+      return false;
+    }
+    if (!folderContainsCueSheet(file))
+    {
+      if (warning) logmsg("-- Ignoring directory \"",fileName,"\", no .cue file found within");
+      return false;
+    }
+    return true;
   }
 
   // If the file name is bad, skip it.
