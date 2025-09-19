@@ -98,7 +98,9 @@ static void do_phy_reset()
     // \todo if the code base support two devices, make `disable_iordy` a per device setting
     g_ide_config.disable_iordy = ((g_ide_devices[0] != NULL) && (g_ide_devices[0]->disables_iordy()))
                                  || ((g_ide_devices[1] != NULL) && (g_ide_devices[1]->disables_iordy()));
-    g_ide_config.enable_packet_intrq = ini_getbool("IDE", "atapi_intrq", 0, CONFIGFILE);
+    bool default_intrq = ((g_ide_devices[0] != NULL) && (g_ide_devices[0]->atapi_intrq_default_on()))
+                                 || ((g_ide_devices[1] != NULL) && (g_ide_devices[1]->atapi_intrq_default_on()));
+    g_ide_config.enable_packet_intrq = ini_getbool("IDE", "atapi_intrq", default_intrq, CONFIGFILE);
 
     if (g_ide_config.enable_dev0 && !g_ide_config.enable_dev1)
     {

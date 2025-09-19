@@ -53,6 +53,9 @@ public:
     virtual bool set_load_deferred(const char* image_name) override;
     virtual bool is_load_deferred() override;
 
+    // The default value of the zuluide.ini setting atapi_intrq
+    virtual bool atapi_intrq_default_on() override {return true;}
+
 protected:
     virtual bool cmd_identify_packet_device(ide_registers_t *regs) override;
     virtual bool cmd_get_media_status(ide_registers_t *regs);
