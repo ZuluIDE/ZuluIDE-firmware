@@ -90,6 +90,8 @@ public:
     virtual bool set_load_deferred(const char* image_name) = 0;
     virtual bool is_load_deferred() = 0;
 
+    // The default value of the zuluide.ini setting atapi_intrq
+    virtual bool atapi_intrq_default_on() {return false;}
 
 protected:
     struct {
