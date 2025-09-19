@@ -188,6 +188,7 @@ bool IDERigidDevice::handle_command(ide_registers_t *regs)
         case IDE_CMD_INIT_DEV_PARAMS: return cmd_init_dev_params(regs);
         case IDE_CMD_IDENTIFY_DEVICE: return cmd_identify_device(regs);
         case IDE_CMD_RECALIBRATE: return cmd_recalibrate(regs);
+        case IDE_CMD_STANDBY_IMMEDIATE: return cmd_standby_immediate(regs);
         case IDE_CMD_IDLE_97H:
         case IDE_CMD_IDLE_E3H: return cmd_idle(regs);
 
@@ -420,7 +421,7 @@ bool IDERigidDevice::cmd_read_buffer(ide_registers_t *regs)
         logmsg("IDERigidDevice::cmd_read_buffer() failed");
         return false;
     }
-    ide_phy_assert_irq(IDE_STATUS_DEVRDY | IDE_STATUS_DSC | IDE_STATUS_DATAREQ);
+    ide_phy_assert_irq(IDE_STATUS_DEVRDY | IDE_STATUS_DSC);
     return true;
 }
 
@@ -451,7 +452,6 @@ bool IDERigidDevice::cmd_write_buffer(ide_registers_t *regs)
     }
     ide_phy_read_block(ide_disk_buffer, 512, false);
     ide_phy_stop_transfers();
-
     regs->status |= IDE_STATUS_BSY;
     ide_phy_set_regs(regs);
 
@@ -541,7 +541,9 @@ bool IDERigidDevice::cmd_identify_device(ide_registers_t *regs)
     idf[IDE_IDENTIFY_OFFSET_MAX_SECTORS] = 0x8000;// 0x8020;
 
     idf[IDE_IDENTIFY_OFFSET_CAPABILITIES_1] = (m_phy_caps.supports_iordy ? 1 << 11 : 0) |
-                                             1 << 10 ;// iordy may be disabled
+                                             (1 << 10) | // iordy may be disabled
+                                             (1 << 9)  |  // Shall be set to one
+                                             (1 << 8);    // Shall be set to one
     idf[IDE_IDENTIFY_OFFSET_PIO_MODE_ATA1] = (m_phy_caps.max_pio_mode << 8);
     // \todo set on older drives
     // idf[IDE_IDENTIFY_OFFSET_OLD_DMA_TIMING_MODE] = 0x0200;
@@ -566,10 +568,10 @@ bool IDERigidDevice::cmd_identify_device(ide_registers_t *regs)
 
     idf[IDE_IDENTIFY_OFFSET_STANDARD_VERSION_MAJOR] = 0x0078; // Version ATAPI-6
     idf[IDE_IDENTIFY_OFFSET_STANDARD_VERSION_MINOR] = 0x0019; // Minor version rev 3a
-    idf[IDE_IDENTIFY_OFFSET_COMMAND_SET_SUPPORT_1] = 0x0004; //  Removable device command sets supported
+    idf[IDE_IDENTIFY_OFFSET_COMMAND_SET_SUPPORT_1] = 0x7004; //  Removable device command sets supported
     idf[IDE_IDENTIFY_OFFSET_COMMAND_SET_SUPPORT_2] = 0x4000;
     idf[IDE_IDENTIFY_OFFSET_COMMAND_SET_SUPPORT_3] = 0x4000;
-    idf[IDE_IDENTIFY_OFFSET_COMMAND_SET_ENABLED_1] = 0x0004;
+    idf[IDE_IDENTIFY_OFFSET_COMMAND_SET_ENABLED_1] = 0x7004;
 
     idf[IDE_IDENTIFY_OFFSET_MODEINFO_ULTRADMA]  = (m_phy_caps.max_udma_mode >= 0) ? 0x0001 : 0;
     idf[IDE_IDENTIFY_OFFSET_MODEINFO_ULTRADMA] |= (m_ata_state.udma_mode == 0)  ? (1 << 8) : 0;
@@ -631,6 +633,12 @@ bool IDERigidDevice::cmd_recalibrate(ide_registers_t *regs)
     regs->lba_mid =  0;
     regs->device &= 0xF0;
     ide_phy_set_regs(regs);
+    ide_phy_assert_irq(IDE_STATUS_DEVRDY | IDE_STATUS_DSC);
+    return true;
+}
+
+bool IDERigidDevice::cmd_standby_immediate(ide_registers_t *regs)
+{
     ide_phy_assert_irq(IDE_STATUS_DEVRDY | IDE_STATUS_DSC);
     return true;
 }

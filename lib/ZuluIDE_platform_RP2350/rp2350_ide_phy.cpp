@@ -369,7 +369,7 @@ bool ide_phy_can_read_block()
 
 void ide_phy_start_read_buffer(uint32_t blocklen)
 {
-    assert(false); // TODO: implement
+    ide_phy_start_read(blocklen);
 }
 
 void ide_phy_read_block(uint8_t *buf, uint32_t blocklen, bool continue_transfer)
