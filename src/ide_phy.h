@@ -57,9 +57,12 @@ struct ide_phy_config_t {
     bool enable_dev1_zeros; // Answer to register reads for device 1 with zeros
     bool atapi_dev0; // Automatically read command for ATAPI PACKET on device 0
     bool atapi_dev1; // Automatically read command for ATAPI PACKET on device 1
-    bool disable_iordy; // Disable IORDY in PIO mode 
+    bool disable_iordy; // Disable IORDY in PIO mode
     // Enables INTRQ between the initial ATA PACKET command and receiving the ATAPI command
     bool enable_packet_intrq;
+    // IOCS16 signaling for PIO data transfer implementation is not completely to spec on the V2
+    // Not all systems care so this allows the user to disabled it, if the current implementation is an issue
+    bool disable_iocs16;
 };
 
 // Reset the IDE phy

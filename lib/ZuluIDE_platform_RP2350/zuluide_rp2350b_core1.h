@@ -61,6 +61,9 @@ extern struct idecomm_t {
     bool disable_iordy; // Disable IORDY in PIO mode 
     // Enables INTRQ between the initial ATA PACKET command and receiving the ATAPI command
     bool enable_packet_intrq;
+    // IOCS16 signaling for PIO data transfer implementation is not completely to spec on the V2
+    // Not all systems care so this allows the user to disabled it, if the current implementation is an issue
+    bool disable_iocs16;
 
     // Event flags set by core1, cleared by core0
     uint32_t events;
