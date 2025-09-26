@@ -802,6 +802,12 @@ bool IDEATAPIDevice::atapi_cmd_not_ready_error()
 
 bool IDEATAPIDevice::atapi_cmd_error(uint8_t sense_key, uint16_t sense_asc)
 {
+    if (ide_phy_is_command_interrupted())
+    {
+        // Avoid messing up state related to new command
+        return true;
+    }
+
     // Some OSes depend on the the not ready state to be emitted at least once after
     // a media change. This allows not ready to be emitted once and then goes to a normal state
     if (sense_key == ATAPI_SENSE_NOT_READY && m_atapi_state.not_ready && is_medium_present())
@@ -841,6 +847,12 @@ bool IDEATAPIDevice::atapi_cmd_error(uint8_t sense_key, uint16_t sense_asc)
 
 bool IDEATAPIDevice::atapi_cmd_ok()
 {
+    if (ide_phy_is_command_interrupted())
+    {
+        // Avoid messing up state related to new command
+        return true;
+    }
+
     if (m_atapi_state.crc_errors > 0)
     {
         logmsg("-- Detected ", m_atapi_state.crc_errors, " CRC errors during transfer, reporting error to host");
