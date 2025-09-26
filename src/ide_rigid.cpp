@@ -573,9 +573,16 @@ bool IDERigidDevice::cmd_identify_device(ide_registers_t *regs)
     idf[IDE_IDENTIFY_OFFSET_COMMAND_SET_SUPPORT_3] = 0x4000;
     idf[IDE_IDENTIFY_OFFSET_COMMAND_SET_ENABLED_1] = 0x7004;
 
-    idf[IDE_IDENTIFY_OFFSET_MODEINFO_ULTRADMA]  = (m_phy_caps.max_udma_mode >= 0) ? 0x0001 : 0;
-    idf[IDE_IDENTIFY_OFFSET_MODEINFO_ULTRADMA] |= (m_ata_state.udma_mode == 0)  ? (1 << 8) : 0;
-
+    if (m_phy_caps.max_udma_mode >= 0)
+    {
+        // Bitmask of supported UDMA modes
+        idf[IDE_IDENTIFY_OFFSET_MODEINFO_ULTRADMA] = (2 << m_phy_caps.max_udma_mode) - 1;
+        if (m_ata_state.udma_mode >= 0)
+        {
+            // Active UDMA mode
+            idf[IDE_IDENTIFY_OFFSET_MODEINFO_ULTRADMA] |= (1 << (8 + m_ata_state.udma_mode));
+        }
+    }
 
     // Diagnostics results
     const ide_phy_config_t *phycfg = ide_protocol_get_config();
