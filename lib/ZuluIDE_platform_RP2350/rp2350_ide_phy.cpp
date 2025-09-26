@@ -109,6 +109,8 @@ void ide_phy_reset(const ide_phy_config_t* config)
     g_idecomm.atapi_dev1           = config->atapi_dev1;
     g_idecomm.disable_iordy        = config->disable_iordy;
     g_idecomm.enable_packet_intrq  = config->enable_packet_intrq;
+    g_idecomm.disable_iocs16       = config->disable_iocs16;
+    if (g_idecomm.disable_iocs16) dbgmsg("IOCS16 signaling for PIO data transfers is disabled");
     g_idecomm.cpu_freq_hz = clock_get_hz(clk_sys);
     phyregs.state_irqreq = 0;
     phyregs.state_datain = 0;

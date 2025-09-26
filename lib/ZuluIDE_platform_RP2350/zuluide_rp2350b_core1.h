@@ -59,8 +59,15 @@ extern struct idecomm_t {
     bool atapi_dev0; // Automatically read command for ATAPI PACKET on device 0
     bool atapi_dev1; // Automatically read command for ATAPI PACKET on device 1
     bool disable_iordy; // Disable IORDY in PIO mode 
-    // Enables INTRQ between the initial ATA PACKET command and receiving the ATAPI command
+
+   // Enables INTRQ between the initial ATA PACKET command and receiving the ATAPI command
     bool enable_packet_intrq;
+
+    // IOCS16 signaling for PIO data transfer implementation is not completely to spec on the ZuluIDE V2
+    // IOCS16 is being activated for the whole data transfer, instead of based on register address.
+    // This only matters for systems where ATA interface is directly on ISA bus (ATA v2 implementation)
+    // Most of such systems are ok with the current workaround, but if necessary, it can be disabled.
+    bool disable_iocs16;
 
     // Event flags set by core1, cleared by core0
     uint32_t events;
