@@ -65,7 +65,7 @@ static IDERigidDevice g_ide_rigid;
 IDEImageFile g_ide_imagefile;
 static IDEDevice *g_ide_device;
 static bool loadedFirstImage = false;
-
+global_settings_t g_settings = {0};
 zuluide::status::StatusController g_StatusController;
 zuluide::pipe::ImageResponsePipe<zuluide::control::select_controller_source_t> g_ControllerImageResponsePipe;
 zuluide::pipe::ImageRequestPipe<zuluide::control::select_controller_source_t> g_ControllerImageRequestPipe;
@@ -682,6 +682,8 @@ static void zuluide_reload_config()
     g_log_debug = ini_getbool("IDE", "debug", g_log_debug, CONFIGFILE);
     logmsg("-- Debug log setting overridden in " CONFIGFILE ", debug = ", (int)g_log_debug);
   }
+
+  g_settings.udma_enable_auto_switch = ini_getbool("IDE", "udma_enable_auto_switch", g_settings.udma_enable_auto_switch, CONFIGFILE);
 
   g_sniffer_mode = (sniffer_mode_t)ini_getl("IDE", "sniffer", 0, CONFIGFILE);
 

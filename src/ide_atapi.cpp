@@ -324,14 +324,14 @@ bool IDEATAPIDevice::cmd_packet(ide_registers_t *regs)
 
     if (m_atapi_state.dma_requested && m_atapi_state.udma_mode < 0)
     {
-        if (m_phy_caps.max_udma_mode >= 0)
+        if (g_settings.udma_enable_auto_switch && m_phy_caps.max_udma_mode >= 0)
         {
             dbgmsg("---- Host requested DMA transfer while DMA mode is not selected, enabling UDMA0!");
             m_atapi_state.udma_mode = 0;
         }
         else
         {
-            logmsg("---- Host requested DMA  transfer but PHY does not support, continuing with PIO!");
+            logmsg("---- Host requested DMA transfer but PHY does not support or auto switching turned off, continuing with PIO!");
         }
     }
 
