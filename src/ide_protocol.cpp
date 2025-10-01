@@ -108,10 +108,15 @@ static void do_phy_reset()
     {
         if (g_drive1_detected)
         {
-            dbgmsg("-- Operating as primary drive, secondary drive detected");
+            // Depending on PHY support for get_signals and host pull-ups,
+            // this code branch can be reached even when secondary drive is not
+            // actually present.
+            dbgmsg("-- Operating as primary drive");
         }
         else
         {
+            // If we end up here, we should really not have a secondary drive.
+            // In ATAPI mode we will be answering for the secondary drive registers also.
             dbgmsg("-- Operating as primary drive, secondary drive not detected");
         }
     }

@@ -442,14 +442,16 @@ void ide_phy_assert_irq(uint8_t ide_status)
 
 void ide_phy_set_signals(uint8_t signals)
 {
-    /* FIXME: This might be responsible for occassionally disturbing bus communication
-    g_idecomm.set_signals = signals;
-    ide_phy_post_request(CORE1_REQ_SET_SIGNALS);
-    */
+    if (signals != g_idecomm.set_signals)
+    {
+        g_idecomm.set_signals = signals;
+        ide_phy_post_request(CORE1_REQ_SET_SIGNALS);
+    }
 }
 
 uint8_t ide_phy_get_signals()
 {
+    /* Act as if there always is a second drive. */
     return IDE_SIGNAL_DASP | IDE_SIGNAL_PDIAG;
 
     /* FIXME: This occassionally disturbs bus communications.
