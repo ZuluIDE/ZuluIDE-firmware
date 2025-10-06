@@ -169,8 +169,6 @@ void platform_init()
     logmsg("Flash unique ID: ", g_flash_unique_id);
 #endif
 
-    logmsg("System clock is set to ", (int) clock_get_hz(clk_sys), " Hz");
-
     // SD card pins
     // Card is used in SDIO mode, rp2040_sdio.cpp will redirect these to PIO1
     //        pin             function       pup   pdown  out    state fast
@@ -218,10 +216,51 @@ void platform_init()
     gpio_conf(STATUS_LED,     GPIO_FUNC_SIO, false,false, true,  false, false);
 }
 
+#ifdef ENABLE_AUDIO_OUTPUT
+// Increases clk_sys and clk_peri to 200.4MHz at runtime to support
+// division to audio output rates. Invoke before anything is using clk_peri
+// except for the logging UART, which is handled below.
+static void reclock_for_audio() {
+    // ensure UART is fully drained before we mess up its clock
+    uart_tx_wait_blocking(uart0);
+    // switch clk_sys and clk_peri to pll_usb
+    // see code in 2.15.6.1 of the datasheet for useful comments
+    clock_configure(clk_sys,
+            CLOCKS_CLK_SYS_CTRL_SRC_VALUE_CLKSRC_CLK_SYS_AUX,
+            CLOCKS_CLK_SYS_CTRL_AUXSRC_VALUE_CLKSRC_PLL_USB,
+            48 * MHZ,
+            48 * MHZ);
+    clock_configure(clk_peri,
+            0,
+            CLOCKS_CLK_PERI_CTRL_AUXSRC_VALUE_CLKSRC_PLL_USB,
+            48 * MHZ,
+            48 * MHZ);
+    // reset PLL for 200.4MHz sys clock
+    pll_init(pll_sys, 2, 1002000000, 5, 1);
+    // switch clocks back to pll_sys
+    clock_configure(clk_sys,
+            CLOCKS_CLK_SYS_CTRL_SRC_VALUE_CLKSRC_CLK_SYS_AUX,
+            CLOCKS_CLK_SYS_CTRL_AUXSRC_VALUE_CLKSRC_PLL_SYS,
+            200400000,
+            200400000);
+    clock_configure(clk_peri,
+            0,
+            CLOCKS_CLK_PERI_CTRL_AUXSRC_VALUE_CLKSRC_PLL_SYS,
+            200400000,
+            200400000);
+    // reset UART for the new clock speed
+    uart_init(uart0, 1000000);
+}
+#endif
+
 // late_init() only runs in main application
 void platform_late_init()
 {
-    
+#ifdef ENABLE_AUDIO_OUTPUT
+    reclock_for_audio();
+    audio_init();
+#endif
+    logmsg("System clock is set to ", (int) clock_get_hz(clk_sys), " Hz");
 }
 
 void platform_write_led(bool state)

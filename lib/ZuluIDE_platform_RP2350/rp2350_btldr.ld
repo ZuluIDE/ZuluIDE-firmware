@@ -61,6 +61,7 @@ SECTIONS
         *:ZuluControl_platform*(*)
         *Adafruit*:*(*)
         *libWire*:*(*)
+        *libSPI*:*(*)
     }
 
     .text : {
