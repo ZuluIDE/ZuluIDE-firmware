@@ -177,6 +177,7 @@ bool IDERigidDevice::handle_command(ide_registers_t *regs)
         // Supported IDE commands
         case IDE_CMD_NOP: return cmd_nop(regs);
         case IDE_CMD_SET_FEATURES: return cmd_set_features(regs);
+        case IDE_CMD_SEEK: return cmd_seek(regs);
         case IDE_CMD_READ_DMA: return cmd_read(regs, true, false);
         case IDE_CMD_WRITE_DMA: return cmd_write(regs, true);
         case IDE_CMD_READ_SECTORS_WOUT_RETRIES:
@@ -278,6 +279,14 @@ bool IDERigidDevice::cmd_set_features(ide_registers_t *regs)
 
     return true;
 }
+
+bool IDERigidDevice::cmd_seek(ide_registers_t *regs)
+{
+    // always return expected value
+    ide_phy_assert_irq(IDE_STATUS_DEVRDY | IDE_STATUS_DSC);
+    return true;
+}
+
 
 // "ATAPI devices shall swap bytes for ASCII fields to maintain compatibility with ATA."
 static void copy_id_string(uint16_t *dst, size_t maxwords, const char *src)
