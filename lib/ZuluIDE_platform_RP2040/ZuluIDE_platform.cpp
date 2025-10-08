@@ -145,8 +145,6 @@ static void reclock_for_audio() {
     // reset UART for the new clock speed
     uart_init(uart0, 1000000);
 }
-
-
 #endif
 
 static void reclock_to_default()

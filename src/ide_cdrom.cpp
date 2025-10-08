@@ -1186,7 +1186,6 @@ bool IDECDROMDevice::doReadSubChannel(bool time, bool subq, uint8_t parameter, u
         }
         len += 4;
 
-        if (len > allocation_length) len = allocation_length;
         atapi_send_data(m_buffer.bytes, std::min<uint32_t>(allocation_length, len));
         return atapi_cmd_ok();
     }

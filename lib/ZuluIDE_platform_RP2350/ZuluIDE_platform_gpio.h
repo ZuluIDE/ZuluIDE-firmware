@@ -85,12 +85,12 @@
     // i2s PIO settings
     #define I2S_PIO_HW pio2_hw
     #define I2S_PIO_SM 1
-    // 44.1KHz to the nearest integer with a sys clk of 152.4MHz and 2 x 16-bit samples with the pio clock running 2x I2S clock
-    // 152.4Mhz / 16 / 2 / 2 / 44.1KHz = 53.997 ~= 54
-    #define I2S_PIO_DIVIDER 54
+    // 44.1KHz to the nearest integer with a sys clk of 200.4MHz and 2 x 16-bit samples with the pio clock running 2x I2S clock
+    /// 200.4Mhz / 16 / 2 / 2 / 44.1KHz = 71.003 ~= 71
+    #define I2S_PIO_DIVIDER 71
     // audio subsystem DMA channels
-    #define SOUND_DMA_CHA 6
-    #define SOUND_DMA_CHB 7
+    #define SOUND_DMA_CHA 7
+    #define SOUND_DMA_CHB 8
     // IO expander I2S pins being used as SPI for audio
     #define GPIO_I2S_BCLK  40
     #define GPIO_I2S_LRCLK 41

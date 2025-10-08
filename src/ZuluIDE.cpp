@@ -193,6 +193,16 @@ void print_sd_info()
     logmsg("SD card detected, FAT", (int)SD.vol()->fatType(),
                     " volume size: ", (int)(size / 1024 / 1024), " MB");
 
+#if defined(HAS_SDIO_CLASS) && HAS_SDIO_CLASS
+    int speed = ((SdioCard*)SD.card())->kHzSdClk();
+    if (speed > 0)
+    {
+      logmsg("SD card communication speed: ",
+        (int)((speed + 500) / 1000), " MHz, ",
+        (int)((speed + 1000) / 2000), " MB/s");
+    }
+#endif
+
     cid_t sd_cid;
 
     if(SD.card()->readCID(&sd_cid))
