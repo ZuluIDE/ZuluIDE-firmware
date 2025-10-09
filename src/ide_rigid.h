@@ -127,6 +127,7 @@ protected:
     // IDE command handlers
     virtual bool cmd_nop(ide_registers_t *regs);
     virtual bool cmd_set_features(ide_registers_t *regs);
+    virtual bool cmd_seek(ide_registers_t *regs);
     virtual bool cmd_read(ide_registers_t *regs, bool dma_transfer, bool verify_only);
     virtual bool cmd_write(ide_registers_t *regs, bool dma_transfer);
     virtual bool cmd_read_buffer(ide_registers_t *regs);
