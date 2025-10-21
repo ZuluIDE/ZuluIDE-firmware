@@ -631,7 +631,7 @@ bool IDEATAPIDevice::atapi_recv_data(uint8_t *data, size_t blocksize, size_t num
     else
     {
         // Combine blocks for better performance
-        while (blocksize * 2 < max_blocksize && (num_blocks & 1) == 0)
+        while (blocksize * 2 <= max_blocksize && (num_blocks & 1) == 0)
         {
             blocksize *= 2;
             num_blocks >>= 1;
