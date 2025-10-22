@@ -120,6 +120,10 @@ void platform_init()
     multicore_reset_core1();
 #endif
 
+    // Set stack overflow limit, with space reserved for exception entry
+    extern uint32_t __StackBottom; // From rp2350.ld
+    __asm__("msr msplim, %0": : "r"((uint32_t)&__StackBottom + 32) : "memory");
+
     /* Check dip switch settings */
     //        pin             function       pup   pdown  out    state fast
     gpio_conf(IDE_DATASEL,      GPIO_FUNC_SIO, false, false, true, true, true);
@@ -399,8 +403,21 @@ static void dump_stack(uint32_t *sp)
     }
 }
 
+static const char *cfsr_desc(uint32_t cfsr)
+{
+    if (cfsr & 0x000000FF) return "MemManage";
+    if (cfsr & 0x0000FF00) return "BusFault";
+    if (cfsr & 0x00010000) return "UndefInstr";
+    if (cfsr & 0x00100000) return "StackOverflow";
+    if (cfsr & 0x01000000) return "Unaligned";
+    if (cfsr & 0x02000000) return "DivByZero";
+    if (cfsr) return "Fault";
+    return "No fault";
+}
+
 extern "C" __attribute__((noinline))
-void show_hardfault(uint32_t *sp, uint32_t r4, uint32_t r5, uint32_t r6, uint32_t r7)
+void show_hardfault(uint32_t *sp, uint32_t r4, uint32_t r5, uint32_t r6,
+    uint32_t r7, uint32_t r8, uint32_t r9, uint32_t r10, uint32_t r11)
 {
     uint32_t pc = sp[6];
     uint32_t lr = sp[5];
@@ -413,8 +430,9 @@ void show_hardfault(uint32_t *sp, uint32_t r4, uint32_t r5, uint32_t r6, uint32_
     logmsg("CRASH!");
     logmsg("Platform: ", g_platform_name);
     logmsg("FW Version: ", g_log_firmwareversion);
-    logmsg("CFSR: ", (uint32_t)scb_hw->cfsr);
-    logmsg("BFAR: ", (uint32_t)scb_hw->bfar);
+    logmsg("CFSR: ", (uint32_t)scb_hw->cfsr, " ", cfsr_desc(scb_hw->cfsr));
+    logmsg("BFAR: ", (uint32_t)scb_hw->bfar, (scb_hw->cfsr & (1 << 15)) ? " valid" : " not valid");
+    logmsg("MMFAR: ", (uint32_t)scb_hw->mmfar, (scb_hw->cfsr & (1 << 7)) ? " valid" : " not valid");
     logmsg("SP: ", (uint32_t)sp);
     logmsg("PC: ", pc);
     logmsg("LR: ", lr);
@@ -426,6 +444,11 @@ void show_hardfault(uint32_t *sp, uint32_t r4, uint32_t r5, uint32_t r6, uint32_
     logmsg("R5: ", r5);
     logmsg("R6: ", r6, (sec_fault ? " (SFAR)" : ""));
     logmsg("R7: ", r7, (sec_fault ? " (SFSR)" : ""));
+    logmsg("R8: ", r8);
+    logmsg("R9: ", r9);
+    logmsg("R10: ", r10);
+    logmsg("R11: ", r11);
+    logmsg("R12: ", sp[4]);
 
     dump_stack(sp);
 
@@ -456,13 +479,17 @@ void show_hardfault(uint32_t *sp, uint32_t r4, uint32_t r5, uint32_t r6, uint32_
 extern "C" __attribute__((naked, interrupt))
 void isr_hardfault(void)
 {
-    // Copies stack pointer and R4..R7 into function arguments
+    // Copies stack pointer and R4..R11 into function arguments
+    // Reuses stack from beginning in case we have overflowed it (we don't need to return)
+    extern uint32_t __StackTop; // From rp2350.ld
+    register uint32_t stacktop asm("r1") = (uint32_t)&__StackTop;
     asm("mrs r0, msp\n"
+        "msr msp, %0\n"
         "mov r1, r4\n"
         "mov r2, r5\n"
         "mov r3, r6\n"
-        "mov r4, r7\n"
-        "bl show_hardfault": : : "r0");
+        "stmdb sp!, {r7, r8, r9, r10, r11}\n"
+        "bl show_hardfault": : "r"(stacktop) : "r0");
 }
 
 extern "C" void __assert_func(const char *file, int line, const char *func, const char *failedexpr)
