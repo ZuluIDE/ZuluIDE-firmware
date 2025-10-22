@@ -30,6 +30,9 @@
 
 using namespace zuluide::images;
 
+// The cue sheet buffer is statically allocated to avoid running out of stack space
+char ImageIterator::cuesheet[MAX_CUE_SHEET_SIZE];
+
 static bool is_valid_filename(const char *name, bool warning = false);
 static bool fileIsValidImage(FsFile& file, const char* fileName, bool warning = false);
 
