@@ -85,7 +85,7 @@ namespace zuluide::images {
     bool currentIsFirst;
     bool currentIsLast;
     bool parseMultiPartBinCueSize;
-    char cuesheet[MAX_CUE_SHEET_SIZE];
+    static char cuesheet[MAX_CUE_SHEET_SIZE];
   };
   
 }

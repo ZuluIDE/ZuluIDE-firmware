@@ -325,7 +325,7 @@ SECTIONS
     __StackOneTop = ORIGIN(RAM_CORE1_STACK) + LENGTH(RAM_CORE1_STACK);
     __StackTop = ORIGIN(SCRATCH_Y) + LENGTH(SCRATCH_Y);
     __StackOneBottom = ORIGIN(RAM_CORE1_STACK);
-    __StackBottom = __StackTop - SIZEOF(.stack_dummy);
+    __StackBottom = __scratch_y_end__;
     PROVIDE(__stack = __StackTop);
 
     __core1_stack__ = ORIGIN(RAM_CORE1_STACK) + LENGTH(RAM_CORE1_STACK);
