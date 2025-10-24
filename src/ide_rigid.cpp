@@ -410,7 +410,11 @@ bool IDERigidDevice::cmd_write(ide_registers_t *regs, bool dma_transfer)
                             this);
     }
 
-    if (!status)
+    if (status)
+    {
+        ide_phy_assert_irq(IDE_STATUS_DEVRDY | IDE_STATUS_DSC);
+    }
+    else
     {
         regs->error = IDE_ERROR_ABORT;
         ide_phy_set_regs(regs);
@@ -895,23 +899,19 @@ bool IDERigidDevice::ata_recv_data(uint8_t *data, size_t blocksize, size_t num_b
         blocksize /= split;
         num_blocks *= split;
     }
-    // Causing timeouts
-    // else
-    // {
-    //     // Combine blocks for better performance
-    //     while (blocksize * 2 < max_blocksize && (num_blocks & 1) == 0)
-    //     {
-    //         blocksize *= 2;
-    //         num_blocks >>= 1;
-    //     }
-    // }
-
-
+    else
+    {
+        // Combine blocks for better performance
+        while (blocksize * 2 <= max_blocksize && (num_blocks & 1) == 0)
+        {
+            blocksize *= 2;
+            num_blocks >>= 1;
+        }
+    }
 
     // Start data transfer for first block
     int udma_mode = (m_ata_state.dma_requested ? m_ata_state.udma_mode : -1);
-    if (first_xfer)
-        ide_phy_start_ata_read(blocksize, udma_mode);
+    ide_phy_start_ata_read(blocksize, udma_mode);
 
     // Receive blocks
     for (size_t i = 0; i < num_blocks; i++)
@@ -922,6 +922,7 @@ bool IDERigidDevice::ata_recv_data(uint8_t *data, size_t blocksize, size_t num_b
             if ((uint32_t)(millis() - start) > 10000)
             {
                 logmsg("IDERigidDevice::ata_recv_data read timeout on block ", (int)(i + 1), "/", (int)num_blocks);
+                ide_phy_print_debug();
                 ide_phy_stop_transfers();
                 return false;
             }
@@ -929,22 +930,23 @@ bool IDERigidDevice::ata_recv_data(uint8_t *data, size_t blocksize, size_t num_b
             if (ide_phy_is_command_interrupted())
             {
                 dbgmsg("IDERigidDevice::ata_recv_data() interrupted");
-                ide_phy_stop_transfers();
+                ide_phy_print_debug();
                 return false;
             }
         }
 
         // Read out previous block
-        bool continue_transfer = !last_xfer || (i + 1 < num_blocks);
+        bool continue_transfer = (i + 1 < num_blocks);
         // dbgmsg("Reading datablock ", (int)i, " continue ", continue_transfer);
         ide_phy_ata_read_block(data + blocksize * i, blocksize, continue_transfer);
     }
 
-    if (last_xfer)
+    ide_phy_stop_transfers(&m_ata_state.crc_errors);
+    if (m_ata_state.crc_errors > 0)
     {
-        ide_phy_stop_transfers();
-        if (m_ata_state.dma_requested)
-            ide_phy_assert_irq(IDE_STATUS_DEVRDY | IDE_STATUS_DSC);
+        // Return false to stop writing incorrect data to drive
+        logmsg("IDERigidDevice::ata_recv_data UDMA checksum errors: ", (int)m_ata_state.crc_errors);
+        return false;
     }
     return true;
 }

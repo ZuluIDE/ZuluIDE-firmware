@@ -41,14 +41,14 @@ enum ide_event_t {
 struct ide_registers_t {
     uint8_t status;
     uint8_t command;
-    uint8_t device;
+    uint8_t device; // Lower 4 bits LBA[27:24]/Head
     uint8_t device_control;
     uint8_t error;
     uint8_t feature;
     uint8_t sector_count;
-    uint8_t lba_low;
-    uint8_t lba_mid;
-    uint8_t lba_high;
+    uint8_t lba_low; // In CHS mode - Sector Number
+    uint8_t lba_mid; // In CHS mode - Cylinder Low
+    uint8_t lba_high; // In CHS mode - Cylinder High
 };
 
 struct ide_phy_config_t {
