@@ -72,10 +72,12 @@ bool ImageIterator::MovePrevious()
     requires: IsEmpty == false
  */
 bool ImageIterator::Move(bool forward) {
-  char current_candidate[MAX_FILE_PATH + 1] = {0};
-  char prev_candidate[MAX_FILE_PATH + 1] = {0};
-  char result_candidate[MAX_FILE_PATH + 1] = {0};
-
+  static char current_candidate[MAX_FILE_PATH + 1];
+  static char prev_candidate[MAX_FILE_PATH + 1];
+  static char result_candidate[MAX_FILE_PATH + 1];
+  current_candidate[0] = '\0';
+  prev_candidate[0] = '\0';
+  result_candidate[0] = '\0';
   // Grab the filename of the current image or reset if the file is no longer valid
   if (candidate[0] && currentFile.open(&root, candidate, O_RDONLY))
     currentFile.getName(prev_candidate, sizeof(prev_candidate));
@@ -254,9 +256,11 @@ void ImageIterator::Reset(bool warning) {
   bool oneIsValid = false;
   firstIdx = 0;
   lastIdx = 0;
-  char curFilePath[MAX_FILE_PATH+1];
-  char firstFilename[MAX_FILE_PATH+1] = {0};
-  char lastFilename[MAX_FILE_PATH+1] = {0};
+  static char curFilePath[MAX_FILE_PATH+1];
+  static char firstFilename[MAX_FILE_PATH+1];
+  static char lastFilename[MAX_FILE_PATH+1];
+  firstFilename[0] = '\0';
+  lastFilename[0] = '\0';
   memcpy(candidate, 0, sizeof(candidate));
   candidateImageType = Image::ImageType::unknown;
 
@@ -427,13 +431,10 @@ bool searchForCueSheetFile(FsFile *directory, FsFile &outputFile) {
     char filename[MAX_FILE_PATH + 1];
     if (outputFile.getName(filename, sizeof(filename)) &&
       strncasecmp(filename + strlen(filename) - 4, ".cue", 4) == 0) {
-
       return true;
     }
-
-    outputFile.close();
   }
-
+  outputFile.close();
   return false;
 }
 
@@ -453,6 +454,7 @@ bool ImageIterator::FetchSizeFromCueFile() {
     file.close();
     return false;
   }
+  file.close();
   char dirname[MAX_FILE_PATH + 1];
   currentFile.getName(dirname, sizeof(dirname));
   
@@ -465,14 +467,14 @@ bool ImageIterator::FetchSizeFromCueFile() {
   while (current) {
     if (currentfilename != current->filename) {
       // This track file has not be summed yet.
-      FsFile trackFile;
-      if (trackFile.open(&currentFile, current->filename, O_RDONLY)) {
-        totalSize += trackFile.fileSize();
-        trackFile.close();
+      if (file.open(&currentFile, current->filename, O_RDONLY)) {
+        totalSize += file.fileSize();
+        file.close();
         currentfilename = current->filename;
       } else {
         logmsg("Failed to read \"", dirname, "/", current->filename, "\"");
         // If we cannot open a track file, we cannot proceed in a meaningful way.
+        file.close();
         return false;
       }
     }
