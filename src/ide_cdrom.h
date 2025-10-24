@@ -157,4 +157,7 @@ protected:
     bool doPauseResumeAudio(bool resume);
 
     bool doPlayAudio(uint32_t lba, uint32_t length);
+
+    // shared memory for when a temporary filename is need
+    char m_filename[MAX_FILE_PATH + 1];
 };
