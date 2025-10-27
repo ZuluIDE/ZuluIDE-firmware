@@ -189,11 +189,14 @@ bool IDERigidDevice::handle_command(ide_registers_t *regs)
         case IDE_CMD_INIT_DEV_PARAMS: return cmd_init_dev_params(regs);
         case IDE_CMD_IDENTIFY_DEVICE: return cmd_identify_device(regs);
         case IDE_CMD_RECALIBRATE: return cmd_recalibrate(regs);
-        case IDE_CMD_STANDBY_IMMEDIATE: return cmd_standby_immediate(regs);
-        case IDE_CMD_IDLE_97H:
+        case IDE_CMD_STANDBY_IMMEDIATE_94H: // fall through
+        case IDE_CMD_STANDBY_IMMEDIATE_E0H: // fall through
+        case IDE_CMD_STANDBY_96H:           // fall through
+        case IDE_CMD_STANDBY_E2H: return cmd_standby(regs);
+        case IDE_CMD_IDLE_IMMEDIATE_95H: // fall through
+        case IDE_CMD_IDLE_IMMEDIATE_E1H: // fall through
+        case IDE_CMD_IDLE_97H:           // fall through
         case IDE_CMD_IDLE_E3H: return cmd_idle(regs);
-
-
         default: return false;
     }
 }
@@ -657,19 +660,30 @@ bool IDERigidDevice::cmd_recalibrate(ide_registers_t *regs)
     return true;
 }
 
-bool IDERigidDevice::cmd_standby_immediate(ide_registers_t *regs)
+bool IDERigidDevice::cmd_standby(ide_registers_t *regs)
 {
+    if (regs->command == IDE_CMD_STANDBY_96H || regs->command == IDE_CMD_STANDBY_E2H)
+    {
+        dbgmsg("Standby command is a stub, timeout value of ", regs->sector_count, " ignored. Signaling INTRQ and device ready");
+    }
+    else
+    {
+        dbgmsg("Standby immediate command is a stub, signaling INTRQ and device ready");
+    }
     ide_phy_assert_irq(IDE_STATUS_DEVRDY | IDE_STATUS_DSC);
     return true;
 }
 
 bool IDERigidDevice::cmd_idle(ide_registers_t *regs)
 {
-    if (regs->sector_count == 0)
-        dbgmsg("IDERigidDevice::cmd_idle() - disabling timeout");
+    if (regs->command == IDE_CMD_IDLE_97H || regs->command == IDE_CMD_IDLE_E3H)
+    {
+        dbgmsg("Idle command is a stub, timeout value of ", regs->sector_count, " ignored. Signaling INTRQ and device ready");
+    }
     else
-        dbgmsg("IDERigidDevice::cmd_idle() - ignoring timeout setting ");
-
+    {
+        dbgmsg("Idle immediate command is a stub, signaling INTRQ and device ready");
+    }
     ide_phy_assert_irq(IDE_STATUS_DEVRDY | IDE_STATUS_DSC);
     return true;
 }
