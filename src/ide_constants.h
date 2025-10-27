@@ -89,6 +89,9 @@ X(IDE_CMD_CFA_TRANSLATE_SECTOR                      , 0x87) \
 X(IDE_CMD_EXECUTE_DEVICE_DIAGNOSTIC                 , 0x90) \
 X(IDE_CMD_INIT_DEV_PARAMS                           , 0x91) \
 X(IDE_CMD_DOWNLOAD_MICROCODE                        , 0x92) \
+X(IDE_CMD_STANDBY_IMMEDIATE_94H                     , 0x94) \
+X(IDE_CMD_IDLE_IMMEDIATE_95H                        , 0x95) \
+X(IDE_CMD_STANDBY_96H                               , 0x96) \
 X(IDE_CMD_IDLE_97H                                  , 0x97) \
 X(IDE_CMD_PACKET                                    , 0xA0) \
 X(IDE_CMD_IDENTIFY_PACKET_DEVICE                    , 0xA1) \
@@ -108,9 +111,9 @@ X(IDE_CMD_CHECK_MEDIA_CARD_TYPE                     , 0xD1) \
 X(IDE_CMD_GET_MEDIA_STATUS                          , 0xDA) \
 X(IDE_CMD_MEDIA_LOCK                                , 0xDE) \
 X(IDE_CMD_MEDIA_UNLOCK                              , 0xDF) \
-X(IDE_CMD_STANDBY_IMMEDIATE                         , 0xE0) \
-X(IDE_CMD_IDLE_IMMEDIATE                            , 0xE1) \
-X(IDE_CMD_STANDBY                                   , 0xE2) \
+X(IDE_CMD_STANDBY_IMMEDIATE_E0H                     , 0xE0) \
+X(IDE_CMD_IDLE_IMMEDIATE_E1H                        , 0xE1) \
+X(IDE_CMD_STANDBY_E2H                               , 0xE2) \
 X(IDE_CMD_IDLE_E3H                                  , 0xE3) \
 X(IDE_CMD_READ_BUFFER                               , 0xE4) \
 X(IDE_CMD_CHECK_POWER_MODE                          , 0xE5) \
