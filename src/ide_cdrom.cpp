@@ -310,7 +310,6 @@ void IDECDROMDevice::reset()
 
 void IDECDROMDevice::set_image(IDEImage *image)
 {
-    char filename[MAX_FILE_PATH];
     bool valid = false;
     clear_cached_track_info();
 
@@ -319,12 +318,13 @@ void IDECDROMDevice::set_image(IDEImage *image)
 
     if (image &&
         !image->is_folder() &&
-        image->get_filename(filename, sizeof(filename)) &&
-        strncasecmp(filename + strlen(filename) - 4, ".bin", 4) == 0)
+        image->get_filename(m_filename, sizeof(m_filename)) &&
+        strncasecmp(m_filename + strlen(m_filename) - 4, ".bin", 4) == 0)
     {
         // There is a cue sheet with the same name as the .bin
-        char cuesheetname[MAX_FILE_PATH + 1] = {0};
-        strncpy(cuesheetname, filename, strlen(filename) - 4);
+        static char cuesheetname[MAX_FILE_PATH + 1];
+        cuesheetname[0] = '\0';
+        strncpy(cuesheetname, m_filename, strlen(m_filename) - 4);
         strlcat(cuesheetname, ".cue", sizeof(cuesheetname));
 
         IDEImageFile *imagefile = (IDEImageFile*)image;
@@ -337,20 +337,21 @@ void IDECDROMDevice::set_image(IDEImage *image)
     else if (image && image->is_folder())
     {
         // This is a folder, find the first valid cue sheet file
-        char foldername[MAX_FILE_PATH + 1] = {0};
+        static char foldername[MAX_FILE_PATH + 1];
+        foldername[0] = '\0';
         image->get_foldername(foldername, sizeof(foldername));
 
         IDEImageFile *imagefile = (IDEImageFile*)image;
         FsFile *folder = imagefile->get_folder();
         FsFile iterfile;
         valid = false;
-        filename[0] = '\0';
+        m_filename[0] = '\0';
         while (!valid && iterfile.openNext(folder, O_RDONLY))
         {
-            iterfile.getName(filename, sizeof(filename));
-            if (strncasecmp(filename + strlen(filename) - 4, ".cue", 4) == 0)
+            iterfile.getName(m_filename, sizeof(m_filename));
+            if (strncasecmp(m_filename + strlen(m_filename) - 4, ".cue", 4) == 0)
             {
-                valid = loadAndValidateCueSheet(folder, filename);
+                valid = loadAndValidateCueSheet(folder, m_filename);
             }
         }
 
@@ -1645,14 +1646,13 @@ void IDECDROMDevice::insert_media(IDEImage *image)
 {
     doStopAudio();
     zuluide::images::ImageIterator img_iterator;
-    char filename[MAX_FILE_PATH+1];
 
     img_iterator.Reset();
     if (!img_iterator.IsEmpty())
     {
-        if (image && image->get_image_name(filename, sizeof(filename)))
+        if (image && image->get_image_name(m_filename, sizeof(m_filename)))
         {
-            if (!img_iterator.MoveToFile(filename))
+            if (!img_iterator.MoveToFile(m_filename))
                 img_iterator.MoveNext();
         }
         else
@@ -1675,15 +1675,14 @@ void IDECDROMDevice::insert_next_media(IDEImage *image)
 {
     doStopAudio();
     zuluide::images::ImageIterator img_iterator;
-    char filename[MAX_FILE_PATH+1];
     if (m_devinfo.removable && m_removable.ejected)
     {
         img_iterator.Reset();
         if (!img_iterator.IsEmpty())
         {
-            if (image && image->get_image_name(filename, sizeof(filename)))
+            if (image && image->get_image_name(m_filename, sizeof(m_filename)))
             {
-                if (!img_iterator.MoveToFile(filename))
+                if (!img_iterator.MoveToFile(m_filename))
                 {
                     img_iterator.MoveNext();
                 }
@@ -1848,9 +1847,8 @@ bool IDECDROMDevice::selectBinFileForTrack(const CUETrackInfo *track)
 
     m_selected_file_index = track->file_index;
 
-    char filename[MAX_FILE_PATH + 1];
-    if (m_image->get_filename(filename, sizeof(filename)) &&
-        strncasecmp(track->filename, filename, sizeof(filename)) == 0)
+    if (m_image->get_filename(m_filename, sizeof(m_filename)) &&
+        strncasecmp(track->filename, m_filename, sizeof(m_filename)) == 0)
     {
         // We already have the correct binfile open.
         return true;
