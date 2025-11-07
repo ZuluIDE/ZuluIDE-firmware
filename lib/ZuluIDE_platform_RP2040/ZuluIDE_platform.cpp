@@ -42,7 +42,7 @@
 #include <pico/multicore.h>
 #include "rp2040_fpga.h"
 #include <strings.h>
-#include <RP2040USB.h>
+#include <USB.h>
 #include <SerialUSB.h>
 #include <class/cdc/cdc_device.h>
 #include <Wire.h>
@@ -299,7 +299,7 @@ void platform_late_init()
     audio_init();
 #endif
     platform_check_for_controller();
-    __USBStart();
+    USB.begin();
 }
 
 uint8_t platform_check_for_controller()
