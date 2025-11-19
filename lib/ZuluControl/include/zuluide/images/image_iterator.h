@@ -30,7 +30,6 @@
 #include <SdFat.h>
 #include <CUEParser.h>
 
-#define MAX_CUE_SHEET_SIZE 4096
 // Maximum path length for files on SD card
 #define MAX_FILE_PATH 255
 
@@ -85,7 +84,6 @@ namespace zuluide::images {
     bool currentIsFirst;
     bool currentIsLast;
     bool parseMultiPartBinCueSize;
-    static char cuesheet[MAX_CUE_SHEET_SIZE];
   };
   
 }

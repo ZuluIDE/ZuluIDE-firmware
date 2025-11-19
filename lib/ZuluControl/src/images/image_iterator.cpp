@@ -27,11 +27,9 @@
 #include <memory>
 #include "ZuluIDE_log.h"
 #include <string>
+#include <scp/SharedCUEParser.h>
 
 using namespace zuluide::images;
-
-// The cue sheet buffer is statically allocated to avoid running out of stack space
-char ImageIterator::cuesheet[MAX_CUE_SHEET_SIZE];
 
 static bool is_valid_filename(const char *name, bool warning = false);
 static bool fileIsValidImage(FsFile& file, const char* fileName, bool warning = false);
@@ -404,24 +402,18 @@ static bool is_valid_filename(const char *name, bool warning)
   return true;
 }
 
-bool tryReadQueueSheet(FsFile &cuesheetfile, char* cuesheet) {
+bool tryReadQueueSheet(FsFile &cuesheetfile) {
   if (!cuesheetfile.isOpen()) {
     logmsg("---- Failed to load CUE sheet.");
     return false;
   }
   
-  if (cuesheetfile.size() > MAX_CUE_SHEET_SIZE) {
-    logmsg("---- WARNING: CUE sheet length ", (int)cuesheetfile.size(), " exceeds maximum ",
-      (int)sizeof(cuesheet), " bytes");
+  if (cuesheetfile.size() > SharedCUEParser::max_cue_sheet_size()) {
+    char filename[CUE_MAX_FILENAME + 1];
+    cuesheetfile.getName(filename, sizeof(filename));
+    logmsg("---- WARNING: Cannot find CUE/BIN image filesize, ", filename,", exceeds maximum size available for CUE sheet ",
+      (int)SharedCUEParser::max_cue_sheet_size(), " bytes. Size of CUE sheet is ", cuesheetfile.size() , " bytes");
     return false;
-  }
-
-  auto bytesread = cuesheetfile.read(cuesheet, MAX_CUE_SHEET_SIZE);
-  if (bytesread < 0) {
-    logmsg("---- Failed to read CUE sheet");
-    return false;
-  } else if (bytesread < MAX_CUE_SHEET_SIZE) {
-    cuesheet[bytesread+1] = 0;
   }
   return true;
 }
@@ -449,17 +441,32 @@ bool ImageIterator::FetchSizeFromCueFile() {
     return false;
   }
     
-  if (!tryReadQueueSheet(file, cuesheet)) {
-    logmsg("Failed to read the queuesheet into memory.");
+  if (!tryReadQueueSheet(file)) {
+    logmsg("Failed to read the CUE sheet into memory.");
     file.close();
     return false;
   }
-  file.close();
   char dirname[MAX_FILE_PATH + 1];
+  char cuesheetpath[MAX_FILE_PATH + 1];
   currentFile.getName(dirname, sizeof(dirname));
   
-  CUEParser parser(cuesheet);
-  parser.restart();
+  if (strlen(dirname) > 0)
+  {
+      strcpy(cuesheetpath, "/");
+      strcat(cuesheetpath, dirname);
+      strcat(cuesheetpath, "/");
+  }
+  else
+  {
+      cuesheetpath[0] = '\0';
+  }
+  if ( 0 == file.getName(&cuesheetpath[strlen(cuesheetpath)], sizeof(cuesheetpath) - strlen(cuesheetpath)))
+  {
+    logmsg("Could not get full file path for CUE sheet");
+    return false;
+  }
+  file.close();
+  SharedCUEParser parser(cuesheetpath);
   auto current = parser.next_track(0);
   uint64_t totalSize = 0;
   std::string currentfilename = "";
@@ -467,9 +474,10 @@ bool ImageIterator::FetchSizeFromCueFile() {
   while (current) {
     if (currentfilename != current->filename) {
       // This track file has not be summed yet.
-      if (file.open(&currentFile, current->filename, O_RDONLY)) {
-        totalSize += file.fileSize();
-        file.close();
+      FsFile trackFile;
+      if (trackFile.open(&currentFile, current->filename, O_RDONLY)) {
+        totalSize += trackFile.fileSize();
+        trackFile.close();
         currentfilename = current->filename;
       } else {
         logmsg("Failed to read \"", dirname, "/", current->filename, "\"");
