@@ -38,7 +38,9 @@ The name of the folder is used as the name when switching images in alphabetical
 
 Cycling Images
 --------------
-Currently the only way to cycle to the next image for a removable device is the eject the medium via the operating system. This will load the next valid file in alphabetic order.
+All later revisions of ZuluSCSI Compact RP2040 have a hardware eject button on the board, along with a pin header that can be used for attaching a switch, which will simulate an eject, and move to the next image alphabetically, if you are not using the hardware control board.
+
+You can also cycle through images by sending the eject command from within an operating system. This will load the next valid image file in alphabetic order.
 
 USB Mass Storage
 ----------------
