@@ -369,12 +369,7 @@ void IDECDROMDevice::set_image(IDEImage *image)
     if (!valid)
     {
         // No cue sheet, use as plain binary image.
-        strcpy(m_cuesheet, R"(
-            FILE "" BINARY
-            TRACK 01 MODE1/2048
-            INDEX 01 00:00:00
-        )");
-        m_cueparser = CUEParser(m_cuesheet);
+        m_cueparser = SharedCUEParser();
     }
 
     if (image)
@@ -1519,23 +1514,30 @@ bool IDECDROMDevice::loadAndValidateCueSheet(FsFile *dir, const char *cuesheetna
         return false;
     }
 
-    if (cuesheetfile.size() > sizeof(m_cuesheet))
+    if (cuesheetfile.size() > SharedCUEParser::max_cue_sheet_size())
     {
         logmsg("---- WARNING: CUE sheet length ", (int)cuesheetfile.size(), " exceeds maximum ",
-                (int)sizeof(m_cuesheet), " bytes");
-    }
-
-    int len = cuesheetfile.read(m_cuesheet, sizeof(m_cuesheet));
-    cuesheetfile.close();
-    if (len <= 0)
-    {
-        m_cuesheet[0] = 0;
-        logmsg("---- Failed to read cue sheet from ", cuesheetname);
+                (int)SharedCUEParser::max_cue_sheet_size(), " bytes for device reads and playback");
         return false;
     }
 
-    m_cuesheet[len] = 0;
-    m_cueparser = CUEParser(m_cuesheet);
+    char cuesheetpath[MAX_FILE_PATH + 1];
+    char tmp[MAX_FILE_PATH + 1];
+    dir->getName(tmp, sizeof(tmp));
+    if (strlen(tmp) > 0)
+    {
+        strcpy(cuesheetpath, "/");
+        strcat(cuesheetpath, tmp);
+        strcat(cuesheetpath, "/");
+    }
+    else
+    {
+        cuesheetpath[0] = '\0';
+    }
+
+    cuesheetfile.getName(tmp, sizeof(tmp));
+    strcat(cuesheetpath, tmp);
+    m_cueparser = SharedCUEParser(cuesheetpath);
 
     const CUETrackInfo *trackinfo;
     int trackcount = 0;

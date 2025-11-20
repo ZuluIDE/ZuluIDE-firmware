@@ -160,7 +160,6 @@ void ImageResponsePipe<SrcType>::HandleRequest(ImageRequest<SrcType>& current)
         }
         else
         {
-          logmsg("Got matching file for current");
           response->SetStatus(imageIterator.IsLast() ? response_status_t::End : response_status_t::More);
           response->SetImage(std::move(std::make_unique<zuluide::images::Image>(imageIterator.Get())));
         }
