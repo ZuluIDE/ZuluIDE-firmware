@@ -18,17 +18,16 @@ static void write_default_cuesheet(char * cue_sheet)
 
 SharedCUEParser::SharedCUEParser()
 {
-    _cue_filepath[0] = '\0';
-    m_cue_sheet = _shared_cuesheet;
-    if (_shared_cuesheet[0] == '\0')
-    {
-        write_default_cuesheet(_shared_cuesheet);
-    }
-    restart();
+    set("");
 }
 
-SharedCUEParser::SharedCUEParser(char* path)
+SharedCUEParser::SharedCUEParser(const char* path)
 {
+    set(path);
+}
+
+ void SharedCUEParser::set(const char* path)
+ {
     strcpy(_cue_filepath, path);
     m_cue_sheet = _shared_cuesheet;
     if (path[0] == '\0' && _shared_cuesheet[0] == '\0')
@@ -36,7 +35,7 @@ SharedCUEParser::SharedCUEParser(char* path)
         write_default_cuesheet(_shared_cuesheet);
     }
     restart();
-}
+ }
 
 // Restart parsing from beginning of file
 void SharedCUEParser::restart()
