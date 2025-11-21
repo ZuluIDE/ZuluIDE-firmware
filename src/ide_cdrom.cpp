@@ -1506,7 +1506,7 @@ ssize_t IDECDROMDevice::read_callback(const uint8_t *data, size_t blocksize, siz
 
 bool IDECDROMDevice::loadAndValidateCueSheet(FsFile *dir, const char *cuesheetname)
 {
-    FsFile cuesheetfile;
+    static FsFile cuesheetfile;
     cuesheetfile.open(dir, cuesheetname);
     if (!cuesheetfile.isOpen())
     {
@@ -1521,23 +1521,25 @@ bool IDECDROMDevice::loadAndValidateCueSheet(FsFile *dir, const char *cuesheetna
         return false;
     }
 
-    char cuesheetpath[MAX_FILE_PATH + 1];
-    char tmp[MAX_FILE_PATH + 1];
-    dir->getName(tmp, sizeof(tmp));
-    if (strlen(tmp) > 0)
+    static char cuesheetpath[MAX_FILE_PATH + 1];
+    cuesheetpath[0] ='/';
+    cuesheetpath[1] = '\0';
+    dir->getName(&cuesheetpath[1], sizeof(cuesheetpath) - 1);
+    size_t path_len = strlen(cuesheetpath);
+    if (path_len > 1)
     {
-        strcpy(cuesheetpath, "/");
-        strcat(cuesheetpath, tmp);
         strcat(cuesheetpath, "/");
+        path_len = strlen(cuesheetpath);
     }
     else
     {
+        path_len = 0;
         cuesheetpath[0] = '\0';
     }
 
-    cuesheetfile.getName(tmp, sizeof(tmp));
-    strcat(cuesheetpath, tmp);
-    m_cueparser = SharedCUEParser(cuesheetpath);
+    cuesheetfile.getName(&cuesheetpath[path_len], sizeof(cuesheetpath) - path_len);
+    cuesheetfile.close();
+    m_cueparser.set(cuesheetpath);
 
     const CUETrackInfo *trackinfo;
     int trackcount = 0;

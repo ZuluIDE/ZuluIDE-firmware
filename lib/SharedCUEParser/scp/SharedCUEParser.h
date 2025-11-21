@@ -9,8 +9,9 @@ class SharedCUEParser : public CUEParser
 {
 public:
     SharedCUEParser();
-    SharedCUEParser(char* path);
+    SharedCUEParser(const char* path);
     
+    virtual void set(const char* path);
     // Restart parsing from beginning of file
     virtual void restart() override;
 
