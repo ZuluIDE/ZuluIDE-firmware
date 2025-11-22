@@ -459,7 +459,7 @@ bool IDECDROMDevice::atapi_read_disc_information(const uint8_t *cmd)
     doStopAudio();
 
     if (!is_medium_present()) return atapi_cmd_not_ready_error();
-    if (m_atapi_state.not_ready) return atapi_cmd_error(ATAPI_SENSE_NOT_READY, ATAPI_ASC_UNIT_BECOMING_READY);
+    if (m_atapi_state.not_ready) return atapi_cmd_error(ATAPI_SENSE_NOT_READY, ATAPI_ASC_MEDIUM_CHANGE);
 
     uint16_t allocationLength = parse_be16(&cmd[7]);
 
@@ -489,7 +489,7 @@ bool IDECDROMDevice::atapi_read_track_information(const uint8_t *cmd)
     doStopAudio();
 
     if (!is_medium_present()) return atapi_cmd_not_ready_error();
-    if (m_atapi_state.not_ready) return atapi_cmd_error(ATAPI_SENSE_NOT_READY, ATAPI_ASC_UNIT_BECOMING_READY);
+    if (m_atapi_state.not_ready) return atapi_cmd_error(ATAPI_SENSE_NOT_READY, ATAPI_ASC_MEDIUM_CHANGE);
 
     bool track = (cmd[1] & 0x01);
     uint32_t lba = parse_be32(&cmd[2]);
@@ -573,7 +573,7 @@ bool IDECDROMDevice::atapi_read_sub_channel(const uint8_t * cmd)
         return atapi_cmd_not_ready_error();
     }
 
-    if (m_atapi_state.not_ready) return atapi_cmd_error(ATAPI_SENSE_NOT_READY, ATAPI_ASC_UNIT_BECOMING_READY);
+    if (m_atapi_state.not_ready) return atapi_cmd_error(ATAPI_SENSE_NOT_READY, ATAPI_ASC_MEDIUM_CHANGE);
 
     bool time = (cmd[1] & 0x02);
     bool subq = (cmd[2] & 0x40);
@@ -587,7 +587,7 @@ bool IDECDROMDevice::atapi_read_sub_channel(const uint8_t * cmd)
 bool IDECDROMDevice::atapi_read_toc(const uint8_t *cmd)
 {
     if (!is_medium_present()) return atapi_cmd_not_ready_error();
-    if (m_atapi_state.not_ready) return atapi_cmd_error(ATAPI_SENSE_NOT_READY, ATAPI_ASC_UNIT_BECOMING_READY);
+    if (m_atapi_state.not_ready) return atapi_cmd_error(ATAPI_SENSE_NOT_READY, ATAPI_ASC_MEDIUM_CHANGE);
 
     bool MSF = (cmd[1] & 0x02);
     uint8_t track = cmd[6];
@@ -635,7 +635,7 @@ bool IDECDROMDevice::atapi_read_header(const uint8_t *cmd)
     doStopAudio();
 
     if (!is_medium_present()) return atapi_cmd_not_ready_error();
-    if (m_atapi_state.not_ready) return atapi_cmd_error(ATAPI_SENSE_NOT_READY, ATAPI_ASC_UNIT_BECOMING_READY);
+    if (m_atapi_state.not_ready) return atapi_cmd_error(ATAPI_SENSE_NOT_READY, ATAPI_ASC_MEDIUM_CHANGE);
 
     bool MSF = (cmd[1] & 0x02);
     uint32_t lba = 0; // IGNORED for now
@@ -671,7 +671,7 @@ bool IDECDROMDevice::atapi_read_cd(const uint8_t *cmd)
 {
     doStopAudio();
     if (!is_medium_present()) return atapi_cmd_not_ready_error();
-    if (m_atapi_state.not_ready) return atapi_cmd_error(ATAPI_SENSE_NOT_READY, ATAPI_ASC_UNIT_BECOMING_READY);
+    if (m_atapi_state.not_ready) return atapi_cmd_error(ATAPI_SENSE_NOT_READY, ATAPI_ASC_MEDIUM_CHANGE);
 
     uint8_t sector_type = (cmd[1] >> 2) & 7;
     uint32_t lba = parse_be32(&cmd[2]);
@@ -686,7 +686,7 @@ bool IDECDROMDevice::atapi_read_cd_msf(const uint8_t *cmd)
 {
     doStopAudio();
     if (!is_medium_present()) return atapi_cmd_not_ready_error();
-    if (m_atapi_state.not_ready) return atapi_cmd_error(ATAPI_SENSE_NOT_READY, ATAPI_ASC_UNIT_BECOMING_READY);
+    if (m_atapi_state.not_ready) return atapi_cmd_error(ATAPI_SENSE_NOT_READY, ATAPI_ASC_MEDIUM_CHANGE);
 
     uint8_t sector_type = (cmd[1] >> 2) & 7;
     uint32_t start = MSF2LBA(cmd[3], cmd[4], cmd[5], false);
@@ -946,7 +946,8 @@ bool IDECDROMDevice::atapi_seek_10(const uint8_t *cmd)
 {
 #ifdef ENABLE_AUDIO_OUTPUT
     uint32_t lba = parse_be32(&cmd[2]);
-    doPlayAudio(lba, 0);
+    if (audio_is_playing())
+        doPlayAudio(lba, 0);
 #endif
     return atapi_cmd_ok();
 }
@@ -1964,7 +1965,8 @@ size_t IDECDROMDevice::atapi_get_mode_page(uint8_t page_ctrl, uint8_t page_idx, 
         buffer[4] = 0x00; // byte 4: no features supported
 #endif
         buffer[5] = 0x03; // byte 5: CD-DA ok with accurate streaming, no other features
-        buffer[6] = 0x28; // byte 6: tray loader, ejection ok, but prevent/allow not supported
+        buffer[6] = 0x29; // byte 6: tray loader, ejection ok, allows locking
+        buffer[6] |= m_removable.prevent_removable ? 0x2 : 0x00; // locked state
 #ifdef ENABLE_AUDIO_OUTPUT
         buffer[7] = 0x03; // byte 7: separate channel mute and volumes
 #else
