@@ -889,7 +889,7 @@ bool IDEATAPIDevice::atapi_test_unit_ready(const uint8_t *cmd)
 
     if (m_atapi_state.not_ready)
     {
-        return atapi_cmd_not_ready_error();
+        return atapi_cmd_error(ATAPI_SENSE_NOT_READY, ATAPI_ASC_MEDIUM_CHANGE);
     }
     return atapi_cmd_ok();
 }
@@ -1191,7 +1191,7 @@ bool IDEATAPIDevice::atapi_read_capacity(const uint8_t *cmd)
 {
     if (!is_medium_present()) return atapi_cmd_not_ready_error();
 
-    if (m_atapi_state.not_ready) return atapi_cmd_error(ATAPI_SENSE_NOT_READY, ATAPI_ASC_UNIT_BECOMING_READY);
+    if (m_atapi_state.not_ready) return atapi_cmd_error(ATAPI_SENSE_NOT_READY, ATAPI_ASC_MEDIUM_CHANGE);
 
     uint32_t last_lba = this->capacity_lba() - 1;
     uint8_t *buf = m_buffer.bytes;
@@ -1228,7 +1228,7 @@ bool IDEATAPIDevice::atapi_read(const uint8_t *cmd)
     }
 
     if (!is_medium_present()) return atapi_cmd_not_ready_error();
-    if (m_atapi_state.not_ready) return atapi_cmd_error(ATAPI_SENSE_NOT_READY, ATAPI_ASC_UNIT_BECOMING_READY);
+    if (m_atapi_state.not_ready) return atapi_cmd_error(ATAPI_SENSE_NOT_READY, ATAPI_ASC_MEDIUM_CHANGE);
 
     if (lba + transfer_len > capacity_lba())
     {
@@ -1277,7 +1277,7 @@ bool IDEATAPIDevice::atapi_write(const uint8_t *cmd)
     {
         return atapi_cmd_not_ready_error();
     }
-    else if (m_atapi_state.not_ready) return atapi_cmd_error(ATAPI_SENSE_NOT_READY, ATAPI_ASC_UNIT_BECOMING_READY);
+    else if (m_atapi_state.not_ready) return atapi_cmd_error(ATAPI_SENSE_NOT_READY, ATAPI_ASC_MEDIUM_CHANGE);
 
     uint32_t lba, transfer_len;
     if (cmd[0] == ATAPI_CMD_WRITE6)
