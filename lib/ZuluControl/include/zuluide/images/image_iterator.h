@@ -66,11 +66,17 @@ namespace zuluide::images {
 	Defaults to true.
      **/
     void SetParseMultiPartBinCueSize(bool value);
+
   private:
     bool Move(bool forward = true);
     bool FetchSizeFromCueFile();
     FsFile currentFile;
-    FsFile root;
+    bool is_valid_filename(const char *name, bool warning = false);
+    bool fileIsValidImage(FsFile& file, const char* fileName, bool warning = false);
+    bool tryReadQueueSheet(FsFile &cuesheetfile);
+    bool searchForCueSheetFile(FsFile *directory, FsFile &outputFile);
+    bool folderContainsCueSheet(FsFile &dir);
+
     char candidate[MAX_FILE_PATH + 1];
     uint64_t candidateSizeInBytes;
     Image::ImageType candidateImageType;
@@ -84,6 +90,10 @@ namespace zuluide::images {
     bool currentIsFirst;
     bool currentIsLast;
     bool parseMultiPartBinCueSize;
+
+    static FsFile root;
+    static char tmpFilePath[MAX_FILE_PATH + 1];
+    static FsFile tmpFsFile;
   };
   
 }
