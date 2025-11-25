@@ -1436,7 +1436,12 @@ void IDEATAPIDevice::eject_button_poll(bool immediate)
 
 void IDEATAPIDevice::button_eject_media()
 {
-    if (!m_removable.prevent_removable || m_removable.ignore_prevent_removal)
+    if (is_loaded_without_media())
+    {
+        set_loaded_without_media(false);
+        if(m_removable.load_first_image_cb) m_removable.load_first_image_cb();
+    }
+    else if (!m_removable.prevent_removable || m_removable.ignore_prevent_removal)
         eject_media();
     else
         dbgmsg("Attempted to eject media but host has set drive to prevent removable");

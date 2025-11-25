@@ -76,6 +76,12 @@ public:
 
     virtual inline bool set_load_deferred(const char* image_name) override {return false;}
     virtual inline bool is_load_deferred() override {return false;}
+
+    virtual inline bool is_removable() override {return false;}
+    virtual inline bool is_loaded_without_media() override {return false;}
+    virtual inline void set_loaded_without_media(bool no_media) override{;}
+
+    virtual void set_load_first_image_cb(void (*load_image_cb)()) override {;}
 protected:
     IDEImage *m_image;
 

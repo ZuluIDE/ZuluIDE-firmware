@@ -93,6 +93,14 @@ public:
     // The default value of the zuluide.ini setting atapi_intrq
     virtual bool atapi_intrq_default_on() {return false;}
 
+    // Is device removable
+    virtual bool is_removable() = 0;
+
+    // This is the state of media for the device at init or SD insertion
+    virtual bool is_loaded_without_media() = 0;
+    virtual void set_loaded_without_media(bool no_media) = 0;
+    virtual void set_load_first_image_cb(void (*load_image_cb)()) = 0;
+
 protected:
     struct {
         int dev_index;
