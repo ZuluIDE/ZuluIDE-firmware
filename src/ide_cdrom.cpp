@@ -946,7 +946,7 @@ bool IDECDROMDevice::atapi_seek_10(const uint8_t *cmd)
 {
 #ifdef ENABLE_AUDIO_OUTPUT
     uint32_t lba = parse_be32(&cmd[2]);
-    doPlayAudio(lba, 0);
+    if (audio_is_playing()) doPlayAudio(lba, 0);
 #endif
     return atapi_cmd_ok();
 }
@@ -1969,7 +1969,8 @@ size_t IDECDROMDevice::atapi_get_mode_page(uint8_t page_ctrl, uint8_t page_idx, 
         buffer[4] = 0x00; // byte 4: no features supported
 #endif
         buffer[5] = 0x03; // byte 5: CD-DA ok with accurate streaming, no other features
-        buffer[6] = 0x28; // byte 6: tray loader, ejection ok, but prevent/allow not supported
+        buffer[6] = 0x29; // byte 6: tray loader, ejection ok, allows locking
+        buffer[6] |= m_removable.prevent_removable ? 0x2 : 0x00; // locked state
 #ifdef ENABLE_AUDIO_OUTPUT
         buffer[7] = 0x03; // byte 7: separate channel mute and volumes
 #else
