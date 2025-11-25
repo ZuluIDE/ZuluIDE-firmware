@@ -573,7 +573,7 @@ void loadFirstImage() {
   bool quiet = ini_getbool("IDE", "quiet_image_parsing", 0, CONFIGFILE);
   if (!quiet) logmsg("Parsing images on the SD card");
   zuluide::images::ImageIterator imgIterator;
-  volatile bool success = false;
+  bool success = false;
   if (ini_getbool("IDE", "init_with_last_used_image", 1, CONFIGFILE))
   {
     imgIterator.Reset(!quiet);
@@ -596,11 +596,13 @@ void loadFirstImage() {
         if (!quiet) logmsg("-- Last used image \"", image_name.c_str(), "\" not found");
       }
     }
+    quiet = true;
   }
 
   if (!success)
   {
-    imgIterator.Reset(true);
+
+    imgIterator.Reset(!quiet);
     if (!imgIterator.IsEmpty() && imgIterator.MoveNext()) {
       logmsg("Loading first image ", imgIterator.Get().GetFilename().c_str());
       g_StatusController.LoadImage(imgIterator.Get());
