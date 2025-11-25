@@ -1626,7 +1626,12 @@ void IDECDROMDevice::eject_media()
 
 void IDECDROMDevice::button_eject_media()
 {
-    if (m_removable.prevent_removable)
+    if (m_removable.loaded_without_media)
+    {
+        m_removable.loaded_without_media = false;
+        if(m_removable.load_first_image_cb) m_removable.load_first_image_cb();
+    }
+    else if (m_removable.prevent_removable)
     {
         if (m_removable.ignore_prevent_removal)
         {

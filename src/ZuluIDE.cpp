@@ -565,8 +565,16 @@ void setupStatusController()
     ide_protocol_init(g_ide_device, NULL); // Primary device
   else
     ide_protocol_init(NULL, g_ide_device); // Secondary device
-
-  loadFirstImage();
+  if (g_ide_device->is_removable() && ini_getbool("IDE", "no_media_on_init", 0, CONFIGFILE))
+  {
+    g_ide_device->set_image(nullptr);
+    g_ide_device->set_loaded_without_media(true);
+    g_ide_device->set_load_first_image_cb(loadFirstImage);
+  }
+  else
+  {
+        loadFirstImage();
+  }
 }
 
 void loadFirstImage() {
@@ -639,8 +647,14 @@ void clear_image() {
 }
 
 void status_observer(const zuluide::status::SystemStatus& current) {
-  // We need to check and see what changes have occured.
-  if (loadedFirstImage && !current.LoadedImagesAreEqual(g_previous_controller_status)) {
+  // We need to check and see what changes have occurred.
+  if (g_ide_device->is_loaded_without_media() && current.HasLoadedImage()) {
+
+    load_image(current.GetLoadedImage());
+    g_ide_device->set_loaded_without_media(false);
+    loadedFirstImage = true;
+  }
+  else if ((loadedFirstImage && !current.LoadedImagesAreEqual(g_previous_controller_status))) {
     // The current image has changed.
     if (current.HasLoadedImage()) 
     {
@@ -652,7 +666,6 @@ void status_observer(const zuluide::status::SystemStatus& current) {
         clear_image();
     }
   }
-
   g_previous_controller_status = current;
 }
 
@@ -867,8 +880,20 @@ void zuluide_main_loop(void)
             zuluide_reload_config();
 
             g_StatusController.SetIsCardPresent(true);
-            loadFirstImage();
-            g_ide_device->sd_card_inserted();
+            if (g_ide_device->is_removable() && !ini_getbool("IDE", "no_media_on_sd_insert", 0, CONFIGFILE))
+            {
+              g_ide_device->set_image(nullptr);
+              g_ide_imagefile.close();
+              g_ide_device->set_loaded_without_media(true);
+              loadedFirstImage = false;
+              g_ide_device->set_load_first_image_cb(loadFirstImage);
+            }
+            else
+            {
+              loadFirstImage();
+              g_ide_device->sd_card_inserted();
+
+            }
         }
         else
         {

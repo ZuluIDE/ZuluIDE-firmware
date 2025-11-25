@@ -84,7 +84,11 @@ public:
 
     virtual void fill_device_signature(ide_registers_t *regs) override;
 
+    virtual inline bool is_removable() override {return m_devinfo.removable;}
 
+    virtual inline bool is_loaded_without_media() override {return m_removable.loaded_without_media;}
+    virtual inline void set_loaded_without_media(bool no_media) override {m_removable.loaded_without_media = no_media;}
+    virtual inline void set_load_first_image_cb(void (*load_image_cb)()) override {m_removable.load_first_image_cb = load_image_cb;}
 
 protected:
     IDEImage *m_image;
@@ -133,6 +137,8 @@ protected:
 
     struct
     {
+        bool loaded_without_media;
+        void (*load_first_image_cb)();
         bool ejected;
         bool reinsert_media_on_inquiry;
         bool reinsert_media_after_eject;
