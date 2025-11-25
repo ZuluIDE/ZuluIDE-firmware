@@ -880,7 +880,7 @@ void zuluide_main_loop(void)
             zuluide_reload_config();
 
             g_StatusController.SetIsCardPresent(true);
-            if (g_ide_device->is_removable() && !ini_getbool("IDE", "no_media_on_sd_insert", 0, CONFIGFILE))
+            if (g_ide_device->is_removable() && ini_getbool("IDE", "no_media_on_sd_insert", 0, CONFIGFILE))
             {
               g_ide_device->set_image(nullptr);
               g_ide_imagefile.close();
@@ -892,7 +892,6 @@ void zuluide_main_loop(void)
             {
               loadFirstImage();
               g_ide_device->sd_card_inserted();
-
             }
         }
         else
