@@ -152,9 +152,6 @@ void IDERigidDevice::reset()
 void IDERigidDevice::set_image(IDEImage *image)
 {
     m_image = image;
-    // \todo replace with ATA media change
-    // m_atapi_state.unit_attention = true;
-    // m_atapi_state.sense_asc = ATAPI_ASC_MEDIUM_CHANGE;
 }
 
 void IDERigidDevice::insert_media(IDEImage *image)

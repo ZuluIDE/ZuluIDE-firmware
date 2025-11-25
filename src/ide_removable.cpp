@@ -74,9 +74,6 @@ void IDERemovable::set_image(IDEImage *image)
 
     IDEATAPIDevice::set_image(image);
 
-    // Notify host of media change
-    m_atapi_state.unit_attention = true;
-
     if (!image)
     {
         m_devinfo.media_status_events = ATAPI_MEDIA_EVENT_EJECTREQ;

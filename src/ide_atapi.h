@@ -86,6 +86,8 @@ public:
 
     virtual inline bool is_removable() override {return m_devinfo.removable;}
 
+    virtual void loaded_new_media() override;
+
     virtual inline bool is_loaded_without_media() override {return m_removable.loaded_without_media;}
     virtual inline void set_loaded_without_media(bool no_media) override {m_removable.loaded_without_media = no_media;}
     virtual inline void set_load_first_image_cb(void (*load_image_cb)()) override {m_removable.load_first_image_cb = load_image_cb;}
@@ -197,6 +199,8 @@ protected:
     bool atapi_cmd_ok();
 
     // ATAPI command handlers
+
+    virtual bool handle_atapi_command_wrapper(const uint8_t *cmd);
     virtual bool handle_atapi_command(const uint8_t *cmd);
     virtual bool atapi_test_unit_ready(const uint8_t *cmd);
     virtual bool atapi_start_stop_unit(const uint8_t *cmd);

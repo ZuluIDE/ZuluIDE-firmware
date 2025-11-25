@@ -655,12 +655,14 @@ void status_observer(const zuluide::status::SystemStatus& current) {
     load_image(current.GetLoadedImage());
     g_ide_device->set_loaded_without_media(false);
     loadedFirstImage = true;
+    g_ide_device->loaded_new_media();
   }
   else if ((loadedFirstImage && !current.LoadedImagesAreEqual(g_previous_controller_status))) {
     // The current image has changed.
     if (current.HasLoadedImage()) 
     {
       load_image(current.GetLoadedImage());
+      g_ide_device->loaded_new_media();
     } 
     else
     {
