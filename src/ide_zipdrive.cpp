@@ -110,6 +110,7 @@ void IDEZipDrive::button_eject_media()
     {
         m_removable.loaded_without_media = false;
         if(m_removable.load_first_image_cb) m_removable.load_first_image_cb();
+        loaded_new_media();
     }
     else if (m_removable.prevent_removable)
         m_zip_disk_info.button_pressed = true;
@@ -140,9 +141,7 @@ void IDEZipDrive::insert_media(IDEImage *image)
             logmsg("-- Device loading media: \"", img_iterator.Get().GetFilename().c_str(), "\"");
             m_removable.ejected = false;
             set_image(&g_ide_imagefile);
-            m_atapi_state.unit_attention = true;
-            m_atapi_state.sense_asc = ATAPI_ASC_MEDIUM_CHANGE;
-            set_not_ready(true);
+            loaded_new_media();
         }
     }
         img_iterator.Cleanup();

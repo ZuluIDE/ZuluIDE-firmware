@@ -380,7 +380,8 @@ bool IDEATAPIDevice::cmd_packet(ide_registers_t *regs)
     ide_phy_read_block(cmdbuf, sizeof(cmdbuf));
 
     dbgmsg("-- ATAPI command: ", get_atapi_command_name(cmdbuf[0]), " ", bytearray(cmdbuf, 12));
-    return handle_atapi_command(cmdbuf);
+
+    return handle_atapi_command_wrapper(cmdbuf);
 }
 
 bool IDEATAPIDevice::cmd_device_reset(ide_registers_t *regs)
@@ -433,6 +434,14 @@ void IDEATAPIDevice::fill_device_signature(ide_registers_t *regs)
     regs->lba_high = 0xEB;
     regs->sector_count = 0x01;
 }
+
+void IDEATAPIDevice::loaded_new_media()
+{
+    m_atapi_state.unit_attention = true;
+    m_atapi_state.sense_asc = ATAPI_ASC_MEDIUM_CHANGE;
+    set_not_ready(true);
+}
+
 
 bool IDEATAPIDevice::atapi_send_data(const uint8_t *data, size_t blocksize, size_t num_blocks)
 {
@@ -734,14 +743,19 @@ bool IDEATAPIDevice::atapi_recv_data_block(uint8_t *data, uint16_t blocksize)
     return true;
 }
 
-bool IDEATAPIDevice::handle_atapi_command(const uint8_t *cmd)
+bool IDEATAPIDevice::handle_atapi_command_wrapper(const uint8_t *cmd)
 {
-
-    // INQUIRY and REQUEST SENSE bypass unit attention
+        // INQUIRY and REQUEST SENSE bypass unit attention
     switch (cmd[0])
     {
         case ATAPI_CMD_INQUIRY:         return atapi_inquiry(cmd);
         case ATAPI_CMD_REQUEST_SENSE:   return atapi_request_sense(cmd);
+    }
+
+    if (m_atapi_state.not_ready)
+    {
+        m_atapi_state.not_ready = false;
+        return atapi_cmd_not_ready_error();
     }
 
     if (m_atapi_state.unit_attention)
@@ -750,6 +764,11 @@ bool IDEATAPIDevice::handle_atapi_command(const uint8_t *cmd)
         return atapi_cmd_error(ATAPI_SENSE_UNIT_ATTENTION, m_atapi_state.sense_asc);
     }
 
+    return handle_atapi_command(cmd);
+
+}
+bool IDEATAPIDevice::handle_atapi_command(const uint8_t *cmd)
+{
     switch (cmd[0])
     {
         case ATAPI_CMD_TEST_UNIT_READY: return atapi_test_unit_ready(cmd);
@@ -806,13 +825,6 @@ bool IDEATAPIDevice::atapi_cmd_error(uint8_t sense_key, uint16_t sense_asc)
     {
         // Avoid messing up state related to new command
         return true;
-    }
-
-    // Some OSes depend on the the not ready state to be emitted at least once after
-    // a media change. This allows not ready to be emitted once and then goes to a normal state
-    if (sense_key == ATAPI_SENSE_NOT_READY && m_atapi_state.not_ready && is_medium_present())
-    {
-        set_not_ready(false);
     }
 
     if (m_atapi_state.data_state == ATAPI_DATA_WRITE)
@@ -887,10 +899,6 @@ bool IDEATAPIDevice::atapi_test_unit_ready(const uint8_t *cmd)
         return atapi_cmd_not_ready_error();
     }
 
-    if (m_atapi_state.not_ready)
-    {
-        return atapi_cmd_not_ready_error();
-    }
     return atapi_cmd_ok();
 }
 
@@ -1078,20 +1086,26 @@ bool IDEATAPIDevice::atapi_mode_select(const uint8_t *cmd)
 
 bool IDEATAPIDevice::atapi_request_sense(const uint8_t *cmd)
 {
+
+    uint8_t sense_key =  m_atapi_state.not_ready ? ATAPI_SENSE_NOT_READY : m_atapi_state.sense_key;
+    uint16_t sense_asc =  m_atapi_state.not_ready ? ATAPI_ASC_NO_MEDIUM : m_atapi_state.sense_asc;
     uint8_t req_bytes = cmd[4];
 
     uint8_t *resp = m_buffer.bytes;
     size_t sense_length = 18;
     memset(resp, 0, sense_length);
-    resp[0] = 0x80 | (m_atapi_state.sense_key != 0 ? 0x70 : 0);
-    resp[2] = m_atapi_state.sense_key;
+    resp[0] = 0x80 | (sense_key != 0 ? 0x70 : 0);
+    resp[2] = sense_key;
     resp[7] = sense_length - 7;
-    write_be16(&resp[12], m_atapi_state.sense_asc);
+    write_be16(&resp[12], sense_asc);
 
     if (req_bytes < sense_length) sense_length = req_bytes;
     atapi_send_data(m_buffer.bytes, sense_length);
 
-    m_atapi_state.unit_attention = false;
+    if (m_atapi_state.not_ready)
+        m_atapi_state.not_ready = false;
+    else
+        m_atapi_state.unit_attention = false;
 
     return atapi_cmd_ok();
 }
@@ -1191,8 +1205,6 @@ bool IDEATAPIDevice::atapi_read_capacity(const uint8_t *cmd)
 {
     if (!is_medium_present()) return atapi_cmd_not_ready_error();
 
-    if (m_atapi_state.not_ready) return atapi_cmd_error(ATAPI_SENSE_NOT_READY, ATAPI_ASC_UNIT_BECOMING_READY);
-
     uint32_t last_lba = this->capacity_lba() - 1;
     uint8_t *buf = m_buffer.bytes;
     write_be32(&buf[0], last_lba);
@@ -1228,7 +1240,6 @@ bool IDEATAPIDevice::atapi_read(const uint8_t *cmd)
     }
 
     if (!is_medium_present()) return atapi_cmd_not_ready_error();
-    if (m_atapi_state.not_ready) return atapi_cmd_error(ATAPI_SENSE_NOT_READY, ATAPI_ASC_UNIT_BECOMING_READY);
 
     if (lba + transfer_len > capacity_lba())
     {
@@ -1277,7 +1288,6 @@ bool IDEATAPIDevice::atapi_write(const uint8_t *cmd)
     {
         return atapi_cmd_not_ready_error();
     }
-    else if (m_atapi_state.not_ready) return atapi_cmd_error(ATAPI_SENSE_NOT_READY, ATAPI_ASC_UNIT_BECOMING_READY);
 
     uint32_t lba, transfer_len;
     if (cmd[0] == ATAPI_CMD_WRITE6)
@@ -1421,7 +1431,6 @@ void IDEATAPIDevice::eject_button_poll(bool immediate)
 
         if (ejectors)
         {
-            //m_atapi_state.unit_attention = true;
             dbgmsg("Ejection button pressed");
             if (m_removable.ejected)
                 insert_next_media(m_image);
@@ -1440,6 +1449,7 @@ void IDEATAPIDevice::button_eject_media()
     {
         set_loaded_without_media(false);
         if(m_removable.load_first_image_cb) m_removable.load_first_image_cb();
+        loaded_new_media();
     }
     else if (!m_removable.prevent_removable || m_removable.ignore_prevent_removal)
         eject_media();
@@ -1491,9 +1501,7 @@ void IDEATAPIDevice::insert_media(IDEImage *image)
                 logmsg("-- Device loading media: \"", img_iterator.Get().GetFilename().c_str(), "\"");
                 m_removable.ejected = false;
                 set_image(&g_ide_imagefile);
-                m_atapi_state.unit_attention = true;
-                m_atapi_state.sense_asc = ATAPI_ASC_MEDIUM_CHANGE;
-                set_not_ready(true);
+                loaded_new_media();
             }
         }
         img_iterator.Cleanup();
@@ -1536,6 +1544,7 @@ void IDEATAPIDevice::insert_next_media(IDEImage *image)
                 m_removable.ejected = false;
                 g_StatusController.LoadImage(img_iterator.Get());
                 g_previous_controller_status = g_StatusController.GetStatus();
+                loaded_new_media();
             }
         }
         img_iterator.Cleanup();

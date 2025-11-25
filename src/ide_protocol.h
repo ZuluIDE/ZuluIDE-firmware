@@ -96,6 +96,9 @@ public:
     // Is device removable
     virtual bool is_removable() = 0;
 
+    // Run when new media is loaded
+    virtual void loaded_new_media() = 0;
+
     // This is the state of media for the device at init or SD insertion
     virtual bool is_loaded_without_media() = 0;
     virtual void set_loaded_without_media(bool no_media) = 0;

@@ -459,7 +459,6 @@ bool IDECDROMDevice::atapi_read_disc_information(const uint8_t *cmd)
     doStopAudio();
 
     if (!is_medium_present()) return atapi_cmd_not_ready_error();
-    if (m_atapi_state.not_ready) return atapi_cmd_error(ATAPI_SENSE_NOT_READY, ATAPI_ASC_UNIT_BECOMING_READY);
 
     uint16_t allocationLength = parse_be16(&cmd[7]);
 
@@ -1630,6 +1629,7 @@ void IDECDROMDevice::button_eject_media()
     {
         m_removable.loaded_without_media = false;
         if(m_removable.load_first_image_cb) m_removable.load_first_image_cb();
+        loaded_new_media();
     }
     else if (m_removable.prevent_removable)
     {
@@ -1674,7 +1674,7 @@ void IDECDROMDevice::insert_media(IDEImage *image)
             m_removable.ejected = false;
             set_image(&g_ide_imagefile);
             set_esn_event(esn_event_t::MNewMedia);
-            set_not_ready(true);
+            loaded_new_media();
         }
     }
     img_iterator.Cleanup();
@@ -1717,6 +1717,7 @@ void IDECDROMDevice::insert_next_media(IDEImage *image)
                 g_previous_controller_status = g_StatusController.GetStatus();
                 g_StatusController.LoadImage(img_iterator.Get());
                 set_esn_event(esn_event_t::MNewMedia);
+                loaded_new_media();
             }
         }
         img_iterator.Cleanup();
