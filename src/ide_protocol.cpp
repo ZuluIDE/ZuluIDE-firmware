@@ -70,17 +70,17 @@ bool g_ignore_cmd_interrupt;
 
 static void do_phy_reset()
 {
-    if (g_ide_config.enable_dev0 && !g_ide_config.enable_dev1)
+    if (g_ide_devices[1] == NULL)
     {
         bool force_drive1 = ini_getbool("IDE", "has_drive1", false, CONFIGFILE);
         bool force_no_drive1 = !ini_getbool("IDE", "has_drive1", true, CONFIGFILE);
 
-        if (force_drive1)
+        if (force_drive1 && !g_drive1_detected)
         {
             dbgmsg("-- Config has_drive1=1, forcing second drive presence");
             g_drive1_detected = true;
         }
-        else if (force_no_drive1)
+        else if (force_no_drive1 && g_drive1_detected)
         {
             dbgmsg("-- Config has_drive1=0, forcing second drive absence");
             g_drive1_detected = false;
@@ -104,29 +104,21 @@ static void do_phy_reset()
     g_ide_config.disable_iocs16 = ini_getbool("IDE", "disable_iocs16", false, CONFIGFILE);
 
 
-    if (g_ide_config.enable_dev0 && !g_ide_config.enable_dev1)
+    if (g_ide_config.enable_dev0 && g_ide_config.enable_dev1_zeros)
     {
-        if (g_drive1_detected)
-        {
-            // Depending on PHY support for get_signals and host pull-ups,
-            // this code branch can be reached even when secondary drive is not
-            // actually present.
-            dbgmsg("-- Operating as primary drive");
-        }
-        else
-        {
-            // If we end up here, we should really not have a secondary drive.
-            // In ATAPI mode we will be answering for the secondary drive registers also.
-            dbgmsg("-- Operating as primary drive, secondary drive not detected");
-        }
+        dbgmsg("-- IDE PHY reset, operating as primary drive without secondary drive");
+    }
+    else if (g_ide_config.enable_dev0 && !g_ide_config.enable_dev1)
+    {
+        dbgmsg("-- IDE PHY reset, operating as primary drive");
     }
     else if (g_ide_config.enable_dev1 && !g_ide_config.enable_dev0)
     {
-        dbgmsg("-- Operating as secondary drive");
+        dbgmsg("-- IDE PHY reset, operating as secondary drive");
     }
     else
     {
-        dbgmsg("-- Operating as two drives");
+        dbgmsg("-- IDE PHY reset, operating as two drives");
     }
 
     ide_phy_reset(&g_ide_config);
@@ -263,6 +255,8 @@ void ide_protocol_poll()
                 // \todo move to a reset or init function
                 g_exec_dev_diag_state = EXEC_DEV_DIAG_STATE_IDLE;
 
+                do_phy_reset();
+
                 if (g_ide_devices[1])
                 {
                      // Clear DEV bit in device reg within 1ms if secondary device
@@ -276,12 +270,6 @@ void ide_protocol_poll()
                 g_last_reset_time = millis();
                 g_last_reset_event = evt;
 
-                if (evt == IDE_EVENT_HWRST)
-                {
-                    // Some drives don't assert DASP after SWRST,
-                    // keep result from latest HWRST.
-                    g_drive1_detected = false;
-                }
                 if (g_ide_devices[0]) g_ide_devices[0]->reset();
                 if (g_ide_devices[1]) g_ide_devices[1]->reset();
             }
@@ -363,19 +351,37 @@ void ide_protocol_poll()
         }
         else if (g_last_reset_event == IDE_EVENT_HWRST)
         {
-            // Monitor presence of secondary device
-            uint8_t signals = ide_phy_get_signals();
-
-            if (signals & IDE_SIGNAL_DASP)
+            if (ini_haskey("IDE", "has_drive1", CONFIGFILE))
             {
-                g_drive1_detected = true;
-            }
-
-            if (time_passed > 500)
-            {
-                // Apply configuration based on whether drive1 was present
-                do_phy_reset();
+                // No need to wait for DASP because the presence of drive1
+                // is set by config file
                 g_last_reset_event = IDE_EVENT_NONE;
+            }
+            else if (time_passed > 10)
+            {
+                // Detect presence of secondary device based on DASP signal
+                uint8_t signals = ide_phy_get_signals();
+
+                // We can be sure of detection status when DASP assertion is
+                // detected or if 500 ms has passed without detection.
+                if ((signals & IDE_SIGNAL_DASP) || time_passed > 500)
+                {
+                    bool detected = (signals & IDE_SIGNAL_DASP);
+
+                    if (detected != g_drive1_detected)
+                    {
+                        if (detected)
+                            dbgmsg("-- Secondary drive detected");
+                        else
+                            dbgmsg("-- Secondary drive not detected");
+
+                        // Apply configuration based on whether drive1 was present
+                        g_drive1_detected = detected;
+                        do_phy_reset();
+                    }
+
+                    g_last_reset_event = IDE_EVENT_NONE;
+                }
             }
         }
     }

@@ -444,10 +444,6 @@ void ide_phy_set_signals(uint8_t signals)
 
 uint8_t ide_phy_get_signals()
 {
-    /* Act as if there always is a second drive. */
-    return IDE_SIGNAL_DASP | IDE_SIGNAL_PDIAG;
-
-    /* FIXME: This occassionally disturbs bus communications.
     static uint32_t last_poll = 0;
 
     // The DASP and PDIAG signals are held for several seconds
@@ -457,9 +453,10 @@ uint8_t ide_phy_get_signals()
     {
         last_poll = time_now;
         ide_phy_post_request(CORE1_REQ_GET_SIGNALS);
+        sleep_us(10);
     }
 
-    return g_idecomm.get_signals;*/
+    return g_idecomm.get_signals;
 }
 
 const ide_phy_capabilities_t *ide_phy_get_capabilities()
