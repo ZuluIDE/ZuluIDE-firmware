@@ -255,6 +255,8 @@ void ide_protocol_poll()
                 // \todo move to a reset or init function
                 g_exec_dev_diag_state = EXEC_DEV_DIAG_STATE_IDLE;
 
+                do_phy_reset();
+
                 if (g_ide_devices[1])
                 {
                      // Clear DEV bit in device reg within 1ms if secondary device
