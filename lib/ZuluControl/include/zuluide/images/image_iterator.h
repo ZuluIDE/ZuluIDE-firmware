@@ -31,7 +31,7 @@
 #include <CUEParser.h>
 
 // Maximum path length for files on SD card
-#define MAX_FILE_PATH 255
+#define MAX_FILE_PATH 256
 
 namespace zuluide::images {
 

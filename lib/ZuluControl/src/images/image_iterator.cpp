@@ -95,9 +95,8 @@ bool ImageIterator::Move(bool forward) {
   do {
     maxIterations--;
     // Check the file.
-    if (currentFile.openNext(&root, O_RDONLY)) {
-      memset(current_candidate, 0, sizeof(current_candidate));
-      currentFile.getName(current_candidate, sizeof(current_candidate));
+    if (currentFile.openNext(&root, O_RDONLY) &&
+        currentFile.getName(current_candidate, sizeof(current_candidate)) < sizeof(current_candidate) - 1) {
       bool isValid = fileIsValidImage(currentFile, current_candidate);
       next = currentFile.dirIndex();
 
@@ -261,7 +260,7 @@ void ImageIterator::Reset(bool warning) {
   static char lastFilename[MAX_FILE_PATH+1];
   firstFilename[0] = '\0';
   lastFilename[0] = '\0';
-  memcpy(candidate, 0, sizeof(candidate));
+  memset(candidate, 0, sizeof(candidate));
   candidateImageType = Image::ImageType::unknown;
 
   // Walk the directory to count the number of files.
@@ -270,8 +269,7 @@ void ImageIterator::Reset(bool warning) {
 
     // Get the file name and check that it is valid..
     memset(curFilePath, 0, sizeof(curFilePath));
-    curFile.getName(curFilePath, sizeof(curFilePath));
-    if (fileIsValidImage(curFile, curFilePath, warning)) {
+    if (curFile.getName(curFilePath, sizeof(curFilePath)) < sizeof(curFilePath) - 1 && fileIsValidImage(curFile, curFilePath, warning)) {
       oneIsValid = true;
       if (!firstFilename[0] || strcasecmp(firstFilename, curFilePath) > 0)
       {
@@ -309,11 +307,21 @@ bool ImageIterator::folderContainsCueSheet(FsFile &dir)
   FsFile file;
   while (file.openNext(&dir, O_RDONLY))
   {
-    if (file.getName(tmpFilePath, sizeof(tmpFilePath)) &&
+    size_t dirname_len = dir.getName(tmpFilePath, sizeof(tmpFilePath));
+    size_t filename_len = file.getName(tmpFilePath, sizeof(tmpFilePath));
+    if ( filename_len < sizeof(tmpFilePath) - 1 &&
+        filename_len > 4 &&
         (strncasecmp(tmpFilePath + strlen(tmpFilePath) - 4, ".cue", 4) == 0))
     {
       file.close();
-      return true;
+      if (SharedCUEParser::test_path_len(dirname_len, filename_len))
+      {
+        return true;
+      }
+      else
+      {
+        logmsg("Cue sheet full filepath exceeds max character length ", (int)CUE_MAX_FULL_FILEPATH, ", cue sheet file: ",  tmpFilePath);
+      }
     }
   }
   file.close();
@@ -422,7 +430,9 @@ bool ImageIterator::tryReadQueueSheet(FsFile &cuesheetfile) {
 bool ImageIterator::searchForCueSheetFile(FsFile *directory, FsFile &outputFile) {
   while (outputFile.openNext(directory, O_RDONLY)) {
     tmpFilePath[0] = '\0';
-    if (outputFile.getName(tmpFilePath, sizeof(tmpFilePath)) &&
+    size_t nameLen = outputFile.getName(tmpFilePath, sizeof(tmpFilePath));
+    if (nameLen < sizeof(tmpFilePath) - 1 &&
+      nameLen > 4 &&
       strncasecmp(tmpFilePath + strlen(tmpFilePath) - 4, ".cue", 4) == 0) {
       return true;
     }
@@ -447,14 +457,14 @@ bool ImageIterator::FetchSizeFromCueFile() {
     return false;
   }
   static char dirname[MAX_FILE_PATH + 1];
-  static char cuesheetpath[MAX_FILE_PATH + 1];
+  static char cuesheetpath[CUE_MAX_FULL_FILEPATH + 1];
   currentFile.getName(dirname, sizeof(dirname));
-  
+  cuesheetpath[0] = '\0';
   if (strlen(dirname) > 0)
   {
-      strcpy(cuesheetpath, "/");
-      strcat(cuesheetpath, dirname);
-      strcat(cuesheetpath, "/");
+      strlcpy(cuesheetpath, "/", sizeof(cuesheetpath));
+      strlcat(cuesheetpath, dirname, sizeof(cuesheetpath));
+      strlcat(cuesheetpath, "/", sizeof(cuesheetpath));
   }
   else
   {

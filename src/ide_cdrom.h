@@ -69,6 +69,9 @@ public:
 
     virtual void set_esn_event(esn_event_t event);
 
+    // Test if set image recorded valid tracks
+    inline bool tracks_valid() {return m_last_track.track_number > 0;}
+
 protected:
     
     virtual bool handle_atapi_command(const uint8_t *cmd);
@@ -119,7 +122,7 @@ protected:
 
     // Access data from CUE sheet, or dummy data if no cue sheet provided
     SharedCUEParser m_cueparser;
-    bool loadAndValidateCueSheet(FsFile *dir, const char *cuesheetname);
+    bool loadAndValidateCueSheet(FsFile *dir, const char *cuesheetname, CUETrackInfo &first_track, CUETrackInfo &last_track);
     bool getFirstLastTrackInfo(CUETrackInfo &first, CUETrackInfo &last);
     uint32_t getLeadOutLBA(const CUETrackInfo* lasttrack);
     CUETrackInfo getTrackFromLBA(uint32_t lba);
@@ -159,4 +162,7 @@ protected:
 
     // shared memory for when a temporary filename is need
     char m_filename[MAX_FILE_PATH + 1];
+
+    CUETrackInfo m_first_track;
+    CUETrackInfo m_last_track;
 };
