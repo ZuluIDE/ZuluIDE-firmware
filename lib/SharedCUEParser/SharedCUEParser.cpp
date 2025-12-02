@@ -1,10 +1,34 @@
-    
+/**
+ * ZuluIDE™ - Copyright (c) 2025 Rabbit Hole Computing™
+ *
+ * ZuluIDE™ firmware is licensed under the GPL version 3 or any later version. 
+ *
+ * https://www.gnu.org/licenses/gpl-3.0.html
+ * ----
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version. 
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details. 
+ *
+ * Under Section 7 of GPL version 3, you are granted additional
+ * permissions described in the ZuluIDE Hardware Support Library Exception
+ * (GPL-3.0_HSL_Exception.md), as published by Rabbit Hole Computing™.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+**/
+
 #include "scp/SharedCUEParser.h"
 #include <string.h>
 #include <SdFat.h>
 
 extern SdFs SD;
-char SharedCUEParser::_current_file_loaded[CUE_MAX_FILENAME + 1] = {0};
+char SharedCUEParser::_current_file_loaded[CUE_MAX_FULL_FILEPATH + 1] = {0};
 char SharedCUEParser::_shared_cuesheet[MAX_SHARED_CUE_SHEET_SIZE];
 
 static void write_default_cuesheet(char * cue_sheet)
@@ -28,7 +52,7 @@ SharedCUEParser::SharedCUEParser(const char* path)
 
  void SharedCUEParser::set(const char* path)
  {
-    strcpy(_cue_filepath, path);
+    strlcpy(_cue_filepath, path, sizeof(_cue_filepath));
     m_cue_sheet = _shared_cuesheet;
     if (path[0] == '\0' && _shared_cuesheet[0] == '\0')
     {
@@ -60,7 +84,7 @@ void SharedCUEParser::update_file()
 {
     if ( strcasecmp(_cue_filepath, _current_file_loaded) != 0)
     {
-        strcpy(_current_file_loaded, _cue_filepath);
+        strlcpy(_current_file_loaded, _cue_filepath, sizeof(_current_file_loaded));
         // Empty filepath, load simple cuesheet
         if (_current_file_loaded[0] == '\0')
         {
