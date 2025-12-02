@@ -295,6 +295,9 @@ void IDECDROMDevice::initialize(int devidx)
     m_devinfo.profiles[0] = ATAPI_PROFILE_CDROM;
     m_devinfo.current_profile = ATAPI_PROFILE_CDROM;
 
+    memset(&m_first_track, 0, sizeof(m_first_track));
+    memset(&m_last_track, 0, sizeof(m_last_track));
+
     set_esn_event(esn_event_t::NoChange);
 
     clear_cached_track_info();
@@ -312,73 +315,81 @@ void IDECDROMDevice::set_image(IDEImage *image)
 {
     bool valid = false;
     clear_cached_track_info();
-
     IDEATAPIDevice::set_image(image);
+    memset(&m_first_track, 0, sizeof(m_first_track));
+    memset(&m_last_track, 0, sizeof(m_last_track));
+    IDEImageFile *imagefile = (IDEImageFile*)m_image;
     m_selected_file_index = -1;
 
-    if (image &&
-        !image->is_folder() &&
-        image->get_filename(m_filename, sizeof(m_filename)) &&
+    if (m_image &&
+        !m_image->is_folder() &&
+        m_image->get_filename(m_filename, sizeof(m_filename)) &&
+        strlen(m_filename) > 4 &&
         strncasecmp(m_filename + strlen(m_filename) - 4, ".bin", 4) == 0)
     {
         // There is a cue sheet with the same name as the .bin
         static char cuesheetname[MAX_FILE_PATH + 1];
-        cuesheetname[0] = '\0';
+        memset(cuesheetname, 0, sizeof(cuesheetname));
         strncpy(cuesheetname, m_filename, strlen(m_filename) - 4);
         strlcat(cuesheetname, ".cue", sizeof(cuesheetname));
-
-        IDEImageFile *imagefile = (IDEImageFile*)image;
-        valid = loadAndValidateCueSheet(imagefile->get_folder(), cuesheetname);
+        valid = loadAndValidateCueSheet(imagefile->get_folder(), cuesheetname, m_first_track, m_last_track);
 #ifdef ENABLE_AUDIO_OUTPUT
-    if (valid)
-        audio_set_cue_parser(&m_cueparser, imagefile->get_file());
+        if (valid)
+            audio_set_cue_parser(&m_cueparser, imagefile->get_file());
 #endif // ENABLE_AUDIO_OUTPUT
     }
-    else if (image && image->is_folder())
+    else if (m_image && m_image->is_folder())
     {
         // This is a folder, find the first valid cue sheet file
-        static char foldername[MAX_FILE_PATH + 1];
-        foldername[0] = '\0';
-        image->get_foldername(foldername, sizeof(foldername));
-
-        IDEImageFile *imagefile = (IDEImageFile*)image;
         FsFile *folder = imagefile->get_folder();
-        FsFile iterfile;
-        valid = false;
-        m_filename[0] = '\0';
-        while (!valid && iterfile.openNext(folder, O_RDONLY))
+        static char foldername[MAX_FILE_PATH + 1];
+        memset(foldername, 0, sizeof(foldername));
+        if (m_image->get_foldername(foldername, sizeof(foldername)))
         {
-            iterfile.getName(m_filename, sizeof(m_filename));
-            if (strncasecmp(m_filename + strlen(m_filename) - 4, ".cue", 4) == 0)
+            size_t foldername_len = strlen(foldername);
+            FsFile iterfile;
+            valid = false;
+            m_filename[0] = '\0';
+            while (!valid && iterfile.openNext(folder, O_RDONLY))
             {
-                valid = loadAndValidateCueSheet(folder, m_filename);
+                size_t name_len = iterfile.getName(m_filename, sizeof(m_filename));
+                if (name_len < sizeof(m_filename) - 1 &&
+                    SharedCUEParser::test_path_len(foldername_len, name_len) && 
+                    name_len > 4 &&
+                    strncasecmp(m_filename + strlen(m_filename) - 4, ".cue", 4) == 0)
+                {
+                    valid = loadAndValidateCueSheet(folder, m_filename, m_first_track, m_last_track);
+                }
             }
         }
 
         if (!valid)
         {
             logmsg("No valid .cue sheet found in folder '", foldername, "'");
-            image = nullptr;
+            m_image = nullptr;
         }
 #ifdef ENABLE_AUDIO_OUTPUT
         else
+        {
             audio_set_cue_parser(&m_cueparser, folder);
+        }
 #endif // ENABLE_AUDIO_OUTPUT
     }
 
-    if (!valid)
+    if (!valid && m_image)
     {
         // No cue sheet, use as plain binary image.
         m_cueparser = SharedCUEParser();
+        if (!getFirstLastTrackInfo(m_first_track, m_last_track))
+        {
+            m_image = nullptr;
+        }
     }
 
-    if (image)
+    if (m_image && tracks_valid())
     {
-        CUETrackInfo firsttrack, lasttrack;
-        getFirstLastTrackInfo(firsttrack, lasttrack);
-
-        bool firstaudio = (firsttrack.track_mode == CUETrack_AUDIO);
-        bool lastaudio = (lasttrack.track_mode == CUETrack_AUDIO);
+        bool firstaudio = (m_first_track.track_mode == CUETrack_AUDIO);
+        bool lastaudio = (m_last_track.track_mode == CUETrack_AUDIO);
 
         if (firstaudio && lastaudio)
         {
@@ -399,7 +410,7 @@ void IDECDROMDevice::set_image(IDEImage *image)
     }
 
 
-    if (!image)
+    if (!m_image)
     {
         m_devinfo.media_status_events = ATAPI_MEDIA_EVENT_EJECTREQ;
     }
@@ -407,6 +418,7 @@ void IDECDROMDevice::set_image(IDEImage *image)
     {
         m_devinfo.media_status_events = ATAPI_MEDIA_EVENT_NEW;
     }
+
 }
 
 bool IDECDROMDevice::handle_atapi_command(const uint8_t *cmd)
@@ -468,16 +480,15 @@ bool IDECDROMDevice::atapi_read_disc_information(const uint8_t *cmd)
     memcpy(buf, DiscInformation, len);
 
     // Find first and last track number
-    CUETrackInfo first, last;
-    if (!getFirstLastTrackInfo(first, last))
+    if (!tracks_valid())
     {
         logmsg("atapi_read_disc_information() failed to get track info");
         return atapi_cmd_error(ATAPI_SENSE_ABORTED_CMD, ATAPI_ASC_NO_MEDIUM);
     }
 
-    buf[3] = first.track_number;
-    buf[5] = first.track_number;
-    buf[6] = last.track_number;
+    buf[3] = m_first_track.track_number;
+    buf[5] = m_first_track.track_number;
+    buf[6] = m_last_track.track_number;
 
     atapi_send_data(buf, std::min<uint32_t>(allocationLength, len));
     return atapi_cmd_ok();
@@ -1503,9 +1514,12 @@ ssize_t IDECDROMDevice::read_callback(const uint8_t *data, size_t blocksize, siz
     return blocks_done;
 }
 
-bool IDECDROMDevice::loadAndValidateCueSheet(FsFile *dir, const char *cuesheetname)
+bool IDECDROMDevice::loadAndValidateCueSheet(FsFile *dir, const char *cuesheetname, CUETrackInfo &first_track, CUETrackInfo &last_track)
 {
     static FsFile cuesheetfile;
+    memset(&first_track, 0, sizeof(CUETrackInfo));
+    memset(&last_track, 0, sizeof(CUETrackInfo));
+
     cuesheetfile.open(dir, cuesheetname);
     if (!cuesheetfile.isOpen())
     {
@@ -1520,7 +1534,7 @@ bool IDECDROMDevice::loadAndValidateCueSheet(FsFile *dir, const char *cuesheetna
         return false;
     }
 
-    static char cuesheetpath[MAX_FILE_PATH + 1];
+    static char cuesheetpath[CUE_MAX_FULL_FILEPATH + 1];
     cuesheetpath[0] ='/';
     cuesheetpath[1] = '\0';
     dir->getName(&cuesheetpath[1], sizeof(cuesheetpath) - 1);
@@ -1543,6 +1557,7 @@ bool IDECDROMDevice::loadAndValidateCueSheet(FsFile *dir, const char *cuesheetna
     const CUETrackInfo *trackinfo;
     int trackcount = 0;
     uint64_t prev_capacity = 0;
+    bool got_first_track = false;
     while ((trackinfo = m_cueparser.next_track(prev_capacity)) != NULL)
     {
         trackcount++;
@@ -1563,8 +1578,18 @@ bool IDECDROMDevice::loadAndValidateCueSheet(FsFile *dir, const char *cuesheetna
         // Check that the bin file is available
         if (!selectBinFileForTrack(trackinfo))
         {
+            memset(&last_track, 0, sizeof(CUETrackInfo));
             return false;
         }
+
+        if (!got_first_track)
+        {
+            first_track = *trackinfo;
+            got_first_track = true;
+        }
+
+        last_track = *trackinfo;
+
         prev_capacity = m_image->capacity();
     }
 
@@ -1581,7 +1606,6 @@ bool IDECDROMDevice::loadAndValidateCueSheet(FsFile *dir, const char *cuesheetna
 bool IDECDROMDevice::getFirstLastTrackInfo(CUETrackInfo &first, CUETrackInfo &last)
 {
     m_cueparser.restart();
-
     const CUETrackInfo *trackinfo;
     bool got_track = false;
     uint64_t prev_capacity = 0;
@@ -1592,24 +1616,24 @@ bool IDECDROMDevice::getFirstLastTrackInfo(CUETrackInfo &first, CUETrackInfo &la
             first = *trackinfo;
             got_track = true;
         }
-
+        logmsg("this is m_image: ", (uint32_t) m_image);
         last = *trackinfo;
-
-        selectBinFileForTrack(trackinfo);
+        if (!selectBinFileForTrack(trackinfo))
+        {
+            memset(&last, 0, sizeof(last));
+            return false;
+        }
         prev_capacity = m_image->capacity();
     }
-
     return got_track;
 }
 
 uint64_t IDECDROMDevice::capacity_lba()
 {
     if (!m_image) return 0;
-    if (m_cached_capacity_lba == 0)
+    if (m_cached_capacity_lba == 0 && tracks_valid())
     {
-        CUETrackInfo first, last;
-        getFirstLastTrackInfo(first, last);
-        m_cached_capacity_lba = (uint64_t)getLeadOutLBA(&last);
+        m_cached_capacity_lba = (uint64_t)getLeadOutLBA(&m_last_track);
     }
 
     return m_cached_capacity_lba;
