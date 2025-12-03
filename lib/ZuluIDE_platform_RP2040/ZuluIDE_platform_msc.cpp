@@ -33,7 +33,7 @@
 #include "ZuluIDE_platform.h"
 #include "ZuluIDE_log.h"
 #include "ZuluIDE_msc.h"
-
+#include <USB.h>
 #include <class/msc/msc.h>
 #include <class/msc/msc_device.h>
 
@@ -43,7 +43,16 @@
 
 // external global SD variable
 extern SdFs SD;
-static bool unitReady = false;
+
+static struct {
+  bool    unitReady = false;
+  uint8_t usbEpOut;
+  uint8_t usbEpIn;
+  uint8_t usbId;
+  bool usbRegistered = false;
+
+} g_MSC;
+
 
 /* return true if USB presence detected / eligble to enter CR mode */
 bool platform_sense_msc() {
@@ -62,26 +71,41 @@ bool platform_sense_msc() {
 
 /* return true if we should remain in card reader mode and perform periodic tasks */
 bool platform_run_msc() {
-  return unitReady;
+  return g_MSC.unitReady;
 }
 
 /* perform MSC class preinit tasks */
 void platform_enter_msc() {
   dbgmsg("USB MSC buffer size: ", CFG_TUD_MSC_EP_BUFSIZE);
   // MSC is ready for read/write
-  // we don't need any prep, but the var is requried as the MSC callbacks are always active
-  unitReady = true;
+  // we don't need any prep, but the var is required as the MSC callbacks are always active
+  if (!g_MSC.usbRegistered) {
+    USB.disconnect();
+    g_MSC.usbEpIn = USB.registerEndpointIn();
+    g_MSC.usbEpOut = USB.registerEndpointOut();
+    static uint8_t msd_desc[] = { TUD_MSC_DESCRIPTOR(1 /* placeholder */, 0, g_MSC.usbEpOut, g_MSC.usbEpIn, USBD_MSC_EPSIZE) };
+    g_MSC.usbId = USB.registerInterface(1, USBClass::simpleInterface, msd_desc, sizeof(msd_desc), 2, 0);
+    g_MSC.unitReady = true;
+    USB.connect();
+    g_MSC.usbRegistered = true;
+  }
 }
 
 /* perform any cleanup tasks for the MSC-specific functionality */
 void platform_exit_msc() {
-  unitReady = false;
+  g_MSC.unitReady = false;
+  if (g_MSC.usbRegistered)
+  {
+    USB.disconnect();
+    USB.unregisterInterface(g_MSC.usbId);
+    USB.unregisterEndpointOut(g_MSC.usbEpOut);
+    USB.unregisterEndpointIn(g_MSC.usbEpIn);
+    USB.connect();
+    g_MSC.usbRegistered = false;
+  }
 }
 
 /* TinyUSB mass storage callbacks follow */
-
-// usb framework checks this func exists for mass storage config. no code needed.
-void __USBInstallMassStorage() { }
 
 // Invoked when received SCSI_CMD_INQUIRY
 // fill vendor id, product id and revision with string up to 8, 16, 4 characters respectively
@@ -110,7 +134,7 @@ extern "C" uint8_t tud_msc_get_maxlun_cb(void) {
 extern "C" bool tud_msc_is_writable_cb (uint8_t lun)
 {
   (void) lun;
-  return unitReady;
+  return g_MSC.unitReady;
 }
 
 // see https://www.seagate.com/files/staticfiles/support/docs/manual/Interface%20manuals/100293068j.pdf pg 221
@@ -124,7 +148,7 @@ extern "C" bool tud_msc_start_stop_cb(uint8_t lun, uint8_t power_condition, bool
       // load disk storage
       // do nothing as we started "loaded"
     } else {
-      unitReady = false;
+      g_MSC.unitReady = false;
     }
   }
 
@@ -135,7 +159,7 @@ extern "C" bool tud_msc_start_stop_cb(uint8_t lun, uint8_t power_condition, bool
 extern "C" bool tud_msc_test_unit_ready_cb(uint8_t lun) {
   (void) lun;
 
-  return unitReady;
+  return g_MSC.unitReady;
 }
 
 // return size in blocks and block size
@@ -143,7 +167,7 @@ extern "C" void tud_msc_capacity_cb(uint8_t lun, uint32_t *block_count,
                          uint16_t *block_size) {
   (void) lun;
 
-  *block_count = unitReady ? (SD.card()->sectorCount()) : 0;
+  *block_count = g_MSC.unitReady ? (SD.card()->sectorCount()) : 0;
   *block_size = SD_SECTOR_SIZE;
 }
 

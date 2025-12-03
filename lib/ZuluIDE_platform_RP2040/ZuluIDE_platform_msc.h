@@ -27,6 +27,8 @@
 #ifdef PLATFORM_MASS_STORAGE
 #pragma once
 
+#define USBD_MSC_EPSIZE 64
+
 // private constants/enums
 #define SD_SECTOR_SIZE 512
 
