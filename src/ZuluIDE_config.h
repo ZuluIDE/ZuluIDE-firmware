@@ -49,7 +49,7 @@
 #define FIRMWARE_PREFIX "ZuluIDE-FW"
 
 // Maximum path length for files on SD card
-#define MAX_FILE_PATH 255
+#define MAX_FILE_PATH 256
 
 // Transfer buffer size in bytes, must be a power of 2
 #ifndef IDE_BUFFER_SIZE

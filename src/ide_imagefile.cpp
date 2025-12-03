@@ -139,7 +139,14 @@ bool IDEImageFile::get_filename(char *buf, size_t buflen)
     }
     else
     {
-        m_file.getName(buf, buflen);
+        size_t name_len = m_file.getName(buf, buflen);
+        // Assume a string length that fills the buffer exactly to have been truncated
+        if (name_len == buflen - 1)
+        {
+            logmsg("IDEImageFile::get_filename(): file name too long: ", buf);
+            buf[0] = '\0';
+            return false;
+        }
         return true;
     }
 }
@@ -166,7 +173,14 @@ bool IDEImageFile::get_foldername(char *buf, size_t buflen)
         return false;
     }
 
-    m_folder.getName(buf, buflen);
+    size_t name_len = m_folder.getName(buf, buflen);
+    // Assume a string length that fills the buffer exactly to have been truncated
+    if (name_len >= buflen - 1)
+    {
+        logmsg("IDEImageFile::get_foldername(): folder name too long: ", buf);
+        buf[0] = '\0';
+        return false;
+    }
     return true;
 }
 
