@@ -73,8 +73,7 @@ namespace zuluide::images {
     FsFile currentFile;
     bool is_valid_filename(const char *name, bool warning = false);
     bool fileIsValidImage(FsFile& file, const char* fileName, bool warning = false);
-    bool tryReadQueueSheet(FsFile &cuesheetfile);
-    bool searchForCueSheetFile(FsFile *directory, FsFile &outputFile);
+    bool searchForCueSheetFile(FsFile *directory, FsFile *outputFile);
     bool folderContainsCueSheet(FsFile &dir);
 
     char candidate[MAX_FILE_PATH + 1];

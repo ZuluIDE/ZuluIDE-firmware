@@ -26,11 +26,11 @@
 #pragma once
 #include <memory>
 #include <CUEParser.h>
+#include <FsLib/FsFile.h>
 #ifndef MAX_SHARED_CUE_SHEET_SIZE 
 #  define MAX_SHARED_CUE_SHEET_SIZE (12 * 1024)
 #endif
-// Something like "/path_from_root/filename"
-#define CUE_MAX_FULL_FILEPATH (2 * CUE_MAX_FILENAME + 2 /* two slashes*/)
+
 
 class SharedCUEParser : public CUEParser
 {
@@ -38,7 +38,12 @@ public:
     SharedCUEParser();
     SharedCUEParser(const char* path);
     
-    virtual void set(const char* path);
+    // Get a pointer to the cue sheet file
+    virtual FsFile *get_cue_file();
+
+    // Should be run after a cue file has been opened and validated
+    virtual void load_updated_cue();
+
     // Restart parsing from beginning of file
     virtual void restart() override;
 
@@ -52,16 +57,17 @@ public:
     // switching files. This is necessary for getting the correct track
     // lengths when the .cue file references multiple .bin
     virtual const CUETrackInfo *next_track(uint64_t prev_file_size) override;
-    inline static bool test_path_len(size_t directory_len, size_t file_len) { return (directory_len + file_len + 2 /* two slashes in path name*/) <= MAX_SHARED_CUE_SHEET_SIZE;}
 
-    inline static size_t max_cue_sheet_size(){ return MAX_SHARED_CUE_SHEET_SIZE;}
+    inline static size_t max_cue_sheet_size(){ return MAX_SHARED_CUE_SHEET_SIZE - 1;}
 protected:
     // Checks to see if the current buffer is using the needed cue file
     // If not, loads the correct _cue_file into the _shared_cuesheet buffer
-    virtual void update_file();
+    virtual void switch_cue();
+
+    // Load local cue file into shared cue buffer
+    virtual void load_cue();
     char static _shared_cuesheet[MAX_SHARED_CUE_SHEET_SIZE];
-    char static _current_file_loaded[CUE_MAX_FULL_FILEPATH + 1];
-    // max chars "/cue_max_filename-path/cue_max_filename
-    char _cue_filepath[CUE_MAX_FULL_FILEPATH + 1];
+    static FsFile *_current_cue_file;
+    FsFile _cue_file;
 
 };

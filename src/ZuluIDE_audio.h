@@ -156,7 +156,7 @@ void audio_set_file_position(uint32_t lba);
 
 /**
  * Sets the cue_parser
- * cue_parser - the cue parser in use
- * filename - the filename for the bini file for a non directory bin/cue combination
+ * cue_filename - the cue file to use
+ * filename - the filename for the bin file for a non directory bin/cue combination
  */
-void audio_set_cue_parser(CUEParser *cue_parser, FsFile *file);
+void audio_set_cue_parser(char * cue_filename, FsFile *file);
