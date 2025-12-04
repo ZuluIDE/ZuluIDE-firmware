@@ -28,7 +28,7 @@
 #include <hardware/irq.h>
 #include <pico/multicore.h>
 #include "audio.h"
-#include <CUEParser.h>
+#include <scp/SharedCUEParser.h>
 #include <ZuluIDE_audio.h>
 #include <ZuluIDE_config.h>
 #include <ZuluIDE_platform_gpio.h>
@@ -44,7 +44,7 @@ I2S i2s;
 
 static FsFile audio_parent;
 static FsFile audio_file;
-static CUEParser * g_cue_parser = nullptr;
+static SharedCUEParser g_cue_parser;
 // True is using the same filenames for the bin/cue, false if using a directory with multiple bin/wav files
 static bool single_bin_file = false;
 // DMA configuration info
@@ -166,9 +166,9 @@ static bool setup_playback(uint32_t start, uint32_t length, bool continued)
     uint32_t start_of_next_track = 0;
     int file_index = -1;
 
-    g_cue_parser->restart();
+    g_cue_parser.restart();
 
-    while ((find_track_info = g_cue_parser->next_track(file_size)) != nullptr )
+    while ((find_track_info = g_cue_parser.next_track(file_size)) != nullptr )
     {
 
         if (!single_bin_file)
@@ -671,14 +671,16 @@ uint32_t audio_get_lba_position()
 }
 
 
-void audio_set_cue_parser(CUEParser *cue_parser, FsFile* file)
+void audio_set_cue_parser(char *cue_file_name, FsFile* file)
 {
-    g_cue_parser = cue_parser;
     if (file != nullptr)
     {
-        char filename[MAX_FILE_PATH] = {0};
+        logmsg("Cue sheet filename: ", cue_file_name);
+        char filename[MAX_FILE_PATH + 1] = {0};
         if (file->isFile())
         {
+            g_cue_parser.get_cue_file()->open(cue_file_name);
+            g_cue_parser.load_updated_cue();
             file->getName(filename, sizeof(filename));
             audio_file.open(filename, O_RDONLY);
             single_bin_file = true;
@@ -686,6 +688,8 @@ void audio_set_cue_parser(CUEParser *cue_parser, FsFile* file)
         else if (file->isDir())
         {
             file->getName(filename, sizeof(filename));
+            g_cue_parser.get_cue_file()->open(file, cue_file_name);
+            g_cue_parser.load_updated_cue();
             audio_parent.open(filename, O_RDONLY);
             single_bin_file = false;
         }
