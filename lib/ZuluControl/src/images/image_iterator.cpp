@@ -305,23 +305,16 @@ bool ImageIterator::IsLast() {
 bool ImageIterator::folderContainsCueSheet(FsFile &dir)
 {
   FsFile file;
+  dir.rewindDirectory();
   while (file.openNext(&dir, O_RDONLY))
   {
-    size_t dirname_len = dir.getName(tmpFilePath, sizeof(tmpFilePath));
     size_t filename_len = file.getName(tmpFilePath, sizeof(tmpFilePath));
-    if ( filename_len < sizeof(tmpFilePath) - 1 &&
+    if (filename_len < sizeof(tmpFilePath) -1 && // filename not truncated
         filename_len > 4 &&
         (strncasecmp(tmpFilePath + strlen(tmpFilePath) - 4, ".cue", 4) == 0))
     {
       file.close();
-      if (SharedCUEParser::test_path_len(dirname_len, filename_len))
-      {
-        return true;
-      }
-      else
-      {
-        logmsg("Cue sheet full filepath exceeds max character length ", (int)CUE_MAX_FULL_FILEPATH, ", cue sheet file: ",  tmpFilePath);
-      }
+      return true;
     }
   }
   file.close();
@@ -342,7 +335,7 @@ bool ImageIterator::fileIsValidImage(FsFile& file, const char* fileName, bool wa
     }
     if (!folderContainsCueSheet(file))
     {
-      if (warning) logmsg("-- Ignoring directory \"",fileName,"\", no .cue file found within");
+      if (warning) logmsg("-- Ignoring directory \"",fileName,"\", no .cue file found within or .cue filename exceeds max length ", MAX_FILE_PATH - 1);
       return false;
     }
     return true;
@@ -411,33 +404,17 @@ bool ImageIterator::is_valid_filename(const char *name, bool warning)
   return true;
 }
 
-bool ImageIterator::tryReadQueueSheet(FsFile &cuesheetfile) {
-  if (!cuesheetfile.isOpen()) {
-    logmsg("---- Failed to load CUE sheet.");
-    return false;
-  }
-  
-  if (cuesheetfile.size() > SharedCUEParser::max_cue_sheet_size()) {
-    tmpFilePath[0] = '\0';
-    cuesheetfile.getName(tmpFilePath, sizeof(tmpFilePath));
-    logmsg("---- WARNING: Cannot find CUE/BIN image filesize, ", tmpFilePath,", exceeds maximum size available for CUE sheet ",
-      (int)SharedCUEParser::max_cue_sheet_size(), " bytes. Size of CUE sheet is ", cuesheetfile.size() , " bytes");
-    return false;
-  }
-  return true;
-}
-
-bool ImageIterator::searchForCueSheetFile(FsFile *directory, FsFile &outputFile) {
-  while (outputFile.openNext(directory, O_RDONLY)) {
-    tmpFilePath[0] = '\0';
-    size_t nameLen = outputFile.getName(tmpFilePath, sizeof(tmpFilePath));
+bool ImageIterator::searchForCueSheetFile(FsFile *directory, FsFile *outputFile) {
+  directory->rewindDirectory();
+  while (outputFile->openNext(directory, O_RDONLY)) {
+    size_t nameLen = outputFile->getName(tmpFilePath, sizeof(tmpFilePath));
     if (nameLen < sizeof(tmpFilePath) - 1 &&
       nameLen > 4 &&
       strncasecmp(tmpFilePath + strlen(tmpFilePath) - 4, ".cue", 4) == 0) {
       return true;
     }
   }
-  outputFile.close();
+  outputFile->close();
   return false;
 }
 
@@ -445,58 +422,42 @@ bool ImageIterator::FetchSizeFromCueFile() {
   if (!parseMultiPartBinCueSize) {
     return false;
   }
-  tmpFsFile.rewind();
-  if (!searchForCueSheetFile(&currentFile, tmpFsFile)) {
-    logmsg("Unabled find CUE sheet.");
+  SharedCUEParser parser;
+  if (!searchForCueSheetFile(&currentFile, parser.get_cue_file())) {
+    logmsg("---- Unable to find CUE sheet.");
     return false;
   }
-    
-  if (!tryReadQueueSheet(tmpFsFile)) {
-    logmsg("Failed to read the CUE sheet into memory.");
-    tmpFsFile.close();
+
+
+  if (parser.get_cue_file()->size() > (uint64_t)parser.max_cue_sheet_size()) {
+    static char cuesheet_name[MAX_FILE_PATH + 1];
+    parser.get_cue_file()->getName(cuesheet_name, sizeof(cuesheet_name));
+    logmsg("---- CUE sheet: ", cuesheet_name," too large to fit in ", (int) parser.max_cue_sheet_size(), " byte cache");
+    parser.get_cue_file()->close();
     return false;
   }
-  static char dirname[MAX_FILE_PATH + 1];
-  static char cuesheetpath[CUE_MAX_FULL_FILEPATH + 1];
-  currentFile.getName(dirname, sizeof(dirname));
-  cuesheetpath[0] = '\0';
-  if (strlen(dirname) > 0)
-  {
-      strlcpy(cuesheetpath, "/", sizeof(cuesheetpath));
-      strlcat(cuesheetpath, dirname, sizeof(cuesheetpath));
-      strlcat(cuesheetpath, "/", sizeof(cuesheetpath));
-  }
-  else
-  {
-      cuesheetpath[0] = '\0';
-  }
-  if ( 0 == tmpFsFile.getName(&cuesheetpath[strlen(cuesheetpath)], sizeof(cuesheetpath) - strlen(cuesheetpath)))
-  {
-    logmsg("Could not get full file path for CUE sheet");
-    return false;
-  }
-  tmpFsFile.close();
-  SharedCUEParser parser(cuesheetpath);
-  auto current = parser.next_track(0);
+
+  parser.load_updated_cue();
+  auto currentTrack = parser.next_track(0);
   uint64_t totalSize = 0;
   std::string currentfilename = "";
   // Check each track. Whenever a file changes, sum its size.
-  while (current) {
-    if (currentfilename != current->filename) {
+  while (currentTrack) {
+    if (currentfilename != currentTrack->filename) {
       // This track file has not be summed yet.
-      if (tmpFsFile.open(&currentFile, current->filename, O_RDONLY)) {
+      if (tmpFsFile.open(&currentFile, currentTrack->filename, O_RDONLY)) {
         totalSize += tmpFsFile.fileSize();
         tmpFsFile.close();
-        currentfilename = current->filename;
+        currentfilename = currentTrack->filename;
       } else {
-        logmsg("Failed to read \"", dirname, "/", current->filename, "\"");
+        logmsg("Failed to read ", currentTrack->filename, "\"");
         // If we cannot open a track file, we cannot proceed in a meaningful way.
         tmpFsFile.close();
         return false;
       }
     }
     
-    current = parser.next_track(totalSize);
+    currentTrack = parser.next_track(totalSize);
   }
     
   candidateImageType = Image::ImageType::cdrom;

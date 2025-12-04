@@ -320,7 +320,7 @@ void IDECDROMDevice::set_image(IDEImage *image)
     memset(&m_last_track, 0, sizeof(m_last_track));
     IDEImageFile *imagefile = (IDEImageFile*)m_image;
     m_selected_file_index = -1;
-
+    static char cuesheetname[MAX_FILE_PATH + 1];
     if (m_image &&
         !m_image->is_folder() &&
         m_image->get_filename(m_filename, sizeof(m_filename)) &&
@@ -328,14 +328,13 @@ void IDECDROMDevice::set_image(IDEImage *image)
         strncasecmp(m_filename + strlen(m_filename) - 4, ".bin", 4) == 0)
     {
         // There is a cue sheet with the same name as the .bin
-        static char cuesheetname[MAX_FILE_PATH + 1];
         memset(cuesheetname, 0, sizeof(cuesheetname));
         strncpy(cuesheetname, m_filename, strlen(m_filename) - 4);
         strlcat(cuesheetname, ".cue", sizeof(cuesheetname));
         valid = loadAndValidateCueSheet(imagefile->get_folder(), cuesheetname, m_first_track, m_last_track);
 #ifdef ENABLE_AUDIO_OUTPUT
         if (valid)
-            audio_set_cue_parser(&m_cueparser, imagefile->get_file());
+            audio_set_cue_parser(cuesheetname, imagefile->get_file());
 #endif // ENABLE_AUDIO_OUTPUT
     }
     else if (m_image && m_image->is_folder())
@@ -346,21 +345,19 @@ void IDECDROMDevice::set_image(IDEImage *image)
         memset(foldername, 0, sizeof(foldername));
         if (m_image->get_foldername(foldername, sizeof(foldername)))
         {
-            size_t foldername_len = strlen(foldername);
             FsFile iterfile;
             valid = false;
-            m_filename[0] = '\0';
             while (!valid && iterfile.openNext(folder, O_RDONLY))
             {
-                size_t name_len = iterfile.getName(m_filename, sizeof(m_filename));
-                if (name_len < sizeof(m_filename) - 1 &&
-                    SharedCUEParser::test_path_len(foldername_len, name_len) && 
+                size_t name_len = iterfile.getName(cuesheetname, sizeof(cuesheetname));
+                if (name_len < sizeof(cuesheetname) - 1 && // filename not truncated
                     name_len > 4 &&
-                    strncasecmp(m_filename + strlen(m_filename) - 4, ".cue", 4) == 0)
+                    strncasecmp(cuesheetname + strlen(cuesheetname) - 4, ".cue", 4) == 0)
                 {
-                    valid = loadAndValidateCueSheet(folder, m_filename, m_first_track, m_last_track);
+                    valid = loadAndValidateCueSheet(folder, cuesheetname, m_first_track, m_last_track);
                 }
             }
+            iterfile.close();
         }
 
         if (!valid)
@@ -371,7 +368,8 @@ void IDECDROMDevice::set_image(IDEImage *image)
 #ifdef ENABLE_AUDIO_OUTPUT
         else
         {
-            audio_set_cue_parser(&m_cueparser, folder);
+            logmsg("FOldername: ", foldername);
+            audio_set_cue_parser(cuesheetname, folder);
         }
 #endif // ENABLE_AUDIO_OUTPUT
     }
@@ -379,7 +377,8 @@ void IDECDROMDevice::set_image(IDEImage *image)
     if (!valid && m_image)
     {
         // No cue sheet, use as plain binary image.
-        m_cueparser = SharedCUEParser();
+        m_cueparser.get_cue_file()->close();
+        m_cueparser.load_updated_cue();
         if (!getFirstLastTrackInfo(m_first_track, m_last_track))
         {
             m_image = nullptr;
@@ -1516,44 +1515,27 @@ ssize_t IDECDROMDevice::read_callback(const uint8_t *data, size_t blocksize, siz
 
 bool IDECDROMDevice::loadAndValidateCueSheet(FsFile *dir, const char *cuesheetname, CUETrackInfo &first_track, CUETrackInfo &last_track)
 {
-    static FsFile cuesheetfile;
     memset(&first_track, 0, sizeof(CUETrackInfo));
     memset(&last_track, 0, sizeof(CUETrackInfo));
-
-    cuesheetfile.open(dir, cuesheetname);
-    if (!cuesheetfile.isOpen())
+    FsFile *cue_file = m_cueparser.get_cue_file();
+    cue_file->open(dir, cuesheetname);
+    m_cueparser.load_updated_cue();
+    if (!cue_file->isOpen())
     {
         logmsg("---- No CUE sheet found at ", cuesheetname);
+        cue_file->close();
+        m_cueparser.load_updated_cue();
         return false;
     }
 
-    if (cuesheetfile.size() > SharedCUEParser::max_cue_sheet_size())
+    if (cue_file->size() > SharedCUEParser::max_cue_sheet_size())
     {
-        logmsg("---- WARNING: CUE sheet length ", (int)cuesheetfile.size(), " exceeds maximum ",
+        logmsg("---- WARNING: CUE sheet length ", (int)cue_file->size(), " exceeds maximum ",
                 (int)SharedCUEParser::max_cue_sheet_size(), " bytes for device reads and playback");
+        cue_file->close();
+        m_cueparser.load_updated_cue();
         return false;
     }
-
-    static char cuesheetpath[CUE_MAX_FULL_FILEPATH + 1];
-    cuesheetpath[0] ='/';
-    cuesheetpath[1] = '\0';
-    dir->getName(&cuesheetpath[1], sizeof(cuesheetpath) - 1);
-    size_t path_len = strlen(cuesheetpath);
-    if (path_len > 1)
-    {
-        strcat(cuesheetpath, "/");
-        path_len = strlen(cuesheetpath);
-    }
-    else
-    {
-        path_len = 0;
-        cuesheetpath[0] = '\0';
-    }
-
-    cuesheetfile.getName(&cuesheetpath[path_len], sizeof(cuesheetpath) - path_len);
-    cuesheetfile.close();
-    m_cueparser.set(cuesheetpath);
-
     const CUETrackInfo *trackinfo;
     int trackcount = 0;
     uint64_t prev_capacity = 0;
@@ -1596,6 +1578,8 @@ bool IDECDROMDevice::loadAndValidateCueSheet(FsFile *dir, const char *cuesheetna
     if (trackcount == 0)
     {
         logmsg("---- Opened cue sheet ", cuesheetname, " but no valid tracks found");
+        cue_file->close();
+        m_cueparser.load_updated_cue();
         return false;
     }
 
@@ -1616,7 +1600,6 @@ bool IDECDROMDevice::getFirstLastTrackInfo(CUETrackInfo &first, CUETrackInfo &la
             first = *trackinfo;
             got_track = true;
         }
-        logmsg("this is m_image: ", (uint32_t) m_image);
         last = *trackinfo;
         if (!selectBinFileForTrack(trackinfo))
         {
