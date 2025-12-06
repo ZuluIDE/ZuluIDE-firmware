@@ -36,6 +36,10 @@ Image files that have one `.cue` file and multiple `.bin` files should be placed
 The `.bin` file is located by the name given in the `.cue` text file.
 The name of the folder is used as the name when switching images in alphabetical order.
 
+Red Book CD audio playback emulation
+-------------------------
+CD Audio playback emulation is fully functional. The RP2350 microcontroller generates digital i2s audio which is sent to an optional DAC "hat" plug-in board, which uses a [PCM5100A DAC](https://www.ti.com/product/PCM5100A), which converts the digital audio signal to stereo line-level audio via a standard MPC-2 CD-ROM audio connector (LGGR).
+
 Cycling Images
 --------------
 All versions of ZuluIDE V2 and later revisions of ZuluSCSI Compact RP2040 have a hardware eject button on the board, along with a pin header that can be used for attaching a switch, which will simulate an eject, and move to the next image alphabetically, if you are not using the hardware control board.
