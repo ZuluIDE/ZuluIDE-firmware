@@ -32,7 +32,7 @@
 
 // Use variables for version number
 #define FW_VER_NUM      "2025.12.06"
-#define FW_VER_SUFFIX   "release"
+#define FW_VER_SUFFIX   "test"
 #define ZULU_FW_VERSION FW_VER_NUM "-" FW_VER_SUFFIX
 
 // Configuration and log file paths
