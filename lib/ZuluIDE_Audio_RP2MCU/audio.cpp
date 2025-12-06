@@ -673,6 +673,9 @@ uint32_t audio_get_lba_position()
 
 void audio_set_cue_parser(char *cue_file_name, FsFile* file)
 {
+    // Reset volume whenever a image changes
+    audio_set_volume(DEFAULT_VOLUME_LEVEL, DEFAULT_VOLUME_LEVEL);
+    audio_set_channel(AUDIO_CHANNEL_ENABLE_MASK);
     if (file != nullptr)
     {
         logmsg("Cue sheet filename: ", cue_file_name);
