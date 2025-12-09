@@ -49,6 +49,7 @@
 #include <zuluide/pipe/image_response_pipe.h>
 #include "control/std_display_controller.h"
 #include "control/control_interface.h"
+#include "ZuluIDE_create_image.h"
 
 #include <zip_parser.h>
 bool g_sdcard_present;
@@ -766,6 +767,7 @@ static void zuluide_setup_sd_card()
 
         check_for_unused_update_files();
         firmware_update();
+        searchAndCreateImage((uint8_t*) g_ide_buffer, sizeof(g_ide_buffer));
     }
 }
 
@@ -882,6 +884,8 @@ void zuluide_main_loop(void)
 
             init_logfile();
             zuluide_reload_config();
+            searchAndCreateImage((uint8_t*) g_ide_buffer, sizeof(g_ide_buffer));
+
 
             g_StatusController.SetIsCardPresent(true);
             if (g_ide_device->is_removable() && ini_getbool("IDE", "no_media_on_sd_insert", 0, CONFIGFILE))

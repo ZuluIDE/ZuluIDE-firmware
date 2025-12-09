@@ -66,3 +66,6 @@
 // Watchdog will first issue a bus reset and if that does not help, crashdump.
 #define WATCHDOG_BUS_RESET_TIMEOUT 15000
 #define WATCHDOG_CRASH_TIMEOUT 30000
+
+// Prefix for command file to create new image (case-insensitive)
+#define CREATEFILE "create"

@@ -41,6 +41,7 @@
 #include <hardware/flash.h>
 #include <pico/multicore.h>
 #include <strings.h>
+#include <USB.h>
 #include <SerialUSB.h>
 #include <class/cdc/cdc_device.h>
 #include "ZuluIDE_platform_gpio.h"
@@ -265,6 +266,7 @@ void platform_late_init()
     audio_init();
 #endif
     logmsg("System clock is set to ", (int) clock_get_hz(clk_sys), " Hz");
+      USB.begin();
 }
 
 void platform_write_led(bool state)
@@ -350,6 +352,19 @@ int platform_get_device_id(void)
         else
             return 0;    // PRI/SEC switch off, primary device
     }
+}
+
+/****************************************/
+/* Direct serial access                 */
+/************************************** */
+bool platform_serial_ready()
+{
+    return Serial.availableForWrite();
+}
+
+size_t platform_serial_write(uint8_t *buf, size_t len)
+{
+    return Serial.write(buf, len);
 }
 
 /*****************************************/
@@ -871,6 +886,7 @@ void platform_poll(bool only_from_main)
     audio_poll();
 #endif // ENABLE_AUDIO_OUTPUT
 }
+
 
 /*****************************************/
 /* Flash reprogramming from bootloader   */

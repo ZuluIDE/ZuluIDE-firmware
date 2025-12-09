@@ -467,6 +467,20 @@ int platform_get_device_id(void)
     }
 }
 
+/****************************************/
+/* Direct serial access                 */
+/************************************** */
+bool platform_serial_ready()
+{
+    return Serial.availableForWrite();
+}
+
+size_t platform_serial_write(uint8_t *buf, size_t len)
+{
+    return Serial.write(buf, len);
+}
+
+
 /*****************************************/
 /* Crash handlers                        */
 /*****************************************/
