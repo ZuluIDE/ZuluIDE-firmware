@@ -25,7 +25,8 @@
 
 #include <zuluide/images/image_iterator.h>
 #include <memory>
-#include "ZuluIDE_log.h"
+#include <ZuluIDE_log.h>
+#include <ZuluIDE_config.h>
 #include <string>
 #include <scp/SharedCUEParser.h>
 
@@ -269,7 +270,8 @@ void ImageIterator::Reset(bool warning) {
 
     // Get the file name and check that it is valid..
     memset(curFilePath, 0, sizeof(curFilePath));
-    if (curFile.getName(curFilePath, sizeof(curFilePath)) < sizeof(curFilePath) - 1 && fileIsValidImage(curFile, curFilePath, warning)) {
+    size_t filenameLen = curFile.getName(curFilePath, sizeof(curFilePath));
+    if (filenameLen < sizeof(curFilePath) - 1 && fileIsValidImage(curFile, curFilePath, warning)) {
       oneIsValid = true;
       if (!firstFilename[0] || strcasecmp(firstFilename, curFilePath) > 0)
       {
@@ -350,15 +352,21 @@ bool ImageIterator::fileIsValidImage(FsFile& file, const char* fileName, bool wa
  */
 bool ImageIterator::is_valid_filename(const char *name, bool warning)
 {
-  if (strncasecmp(name, "ice5lp1k_top_bitmap.bin", sizeof("ice5lp1k_top_bitmap.bin")) == 0){
+  if (strcasecmp(name, "ice5lp1k_top_bitmap.bin") == 0){
     // Ignore FPGA bitstream
     return false;
   }
 
-  if (strncasecmp(name, "sniff.dat", sizeof("sniff.dat")) == 0) {
+  if (strcasecmp(name, "sniff.dat") == 0) {
     if (warning) logmsg("-- Ignore bus sniffer output file \"sniff.dat\"");
     return false;
   }
+
+  if (strncasecmp(name, CREATEFILE, strlen(CREATEFILE)) == 0) {
+    if (warning) logmsg("-- Ignoring \"", name, "\" with prefix \"", CREATEFILE,"\", used to create images");
+    return false;
+  }
+
 
   if (!isalnum(name[0])) {
     // Skip names beginning with special character

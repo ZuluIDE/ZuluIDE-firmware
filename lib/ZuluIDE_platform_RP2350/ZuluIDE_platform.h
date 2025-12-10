@@ -159,6 +159,12 @@ void platform_set_input_interface(zuluide::control::InputReceiver* inputReceiver
 void platform_poll_input();
 
 
+/* serial ready for writing */
+bool platform_serial_ready();
+
+/* write directly to the serial port*/
+size_t platform_serial_write(uint8_t *buf, size_t len);
+
 // Reprogram firmware in main program area.
 // The flash is divided to three sections in rp2350.ld:
 // 1. 128 kB encrypted HSL
