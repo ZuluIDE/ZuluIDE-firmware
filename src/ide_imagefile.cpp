@@ -104,6 +104,15 @@ bool IDEImageFile::internal_open(const char *filename)
         return false;
     }
 
+    if (m_file.getContainerFormat() == ZuluContainerFs::Container::None)
+    {
+        dbgmsg("No container metadata found, treating as a normal image");
+    }
+    else
+    {
+        logmsg("Image is a ", m_file.getContainerNameCstr(), " container");
+    }
+
     m_capacity = m_file.size();
     dbgmsg("Image file ", filename, " size ", (int)m_capacity);
 

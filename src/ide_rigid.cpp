@@ -29,6 +29,7 @@
 #include "ZuluIDE.h"
 #include "ZuluIDE_config.h"
 #include <minIni.h>
+#include <ZCFileFs.h>
 extern uint8_t g_ide_signals;
 static uint8_t ide_disk_buffer[512];
 
@@ -89,6 +90,11 @@ void IDERigidDevice::post_image_setup()
         found_chs = true;
         method = "INI config";
     }
+    else if (((IDEImageFile*)(m_image))->direct_file()->setCHS(m_devinfo.cylinders, m_devinfo.heads, m_devinfo.sectors_per_track))
+    {
+        // Use settings from container, for example Microsoft VHD
+        method = "container config";
+    }
     else if (cap <= IDE_CHS_528MB_LIMIT_BYTES)
     {
         found_chs = find_chs_capacity(lba, 1024, 1, m_devinfo.cylinders, m_devinfo.heads, m_devinfo.sectors_per_track);
@@ -124,7 +130,6 @@ void IDERigidDevice::post_image_setup()
         m_devinfo.sectors_per_track = 63;
         method = "defaults for large image";
     }
-
     m_devinfo.current_cylinders = m_devinfo.cylinders;
     m_devinfo.current_heads = m_devinfo.heads;
     m_devinfo.current_sectors = m_devinfo.sectors_per_track;
