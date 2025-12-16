@@ -101,7 +101,25 @@ bool IDEImageFile::internal_open(const char *filename)
     if (!m_file.isOpen())
     {
         m_capacity = 0;
+        if (m_file.isUnsupportedContainerType())
+        {
+            logmsg("");
+            logmsg("============ ERROR: Unsupported container image type ============");
+            logmsg("Image is a ", m_file.getContainerNameCstr(), " container but the image type is unsupported.");
+            logmsg("Please use a container with a fixed size or fully allocated image");
+            logmsg("=================================================================");
+            logmsg("");
+        }
         return false;
+    }
+
+    if (m_file.getContainerFormat() == ZuluContainerFs::Container::None)
+    {
+        dbgmsg("No container metadata found, treating as a normal image");
+    }
+    else
+    {
+        logmsg("Image is a ", m_file.getContainerNameCstr(), " container");
     }
 
     m_capacity = m_file.size();

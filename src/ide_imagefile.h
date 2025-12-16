@@ -26,6 +26,7 @@
 #pragma once
 #include <stddef.h>
 #include <SdFat.h>
+#include <ZCFsFile.h>
 #include <zuluide/ide_drive_type.h>
 
 // Interface for emulated image files
@@ -95,6 +96,7 @@ public:
     virtual void set_drive_type(drive_type_t type) = 0;
     virtual drive_type_t get_drive_type() = 0;
 
+    virtual ZuluContainerFs::ZCFsFile* direct_file() = 0;
 
 };
 
@@ -144,10 +146,11 @@ public:
 
     // This is direct access to the file object, ideally this should be remove
     // But this makes importing the audio playback code easier
-    virtual FsFile* direct_file() {return &m_file;}
+    virtual ZuluContainerFs::ZCFsFile* direct_file() override {return &m_file;}
+
 
 protected:
-    FsFile m_file;
+    ZuluContainerFs::ZCFsFile m_file;
     SdCard *m_blockdev;
 
     bool m_is_folder;
