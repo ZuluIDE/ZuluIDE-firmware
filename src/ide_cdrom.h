@@ -92,6 +92,7 @@ protected:
     virtual bool atapi_stop_play_scan_audio(const uint8_t *cmd);
     virtual bool atapi_pause_resume_audio(const uint8_t *cmd);
     virtual bool atapi_seek_10(const uint8_t *cmd);
+    virtual bool atapi_mechanism_status(const uint8_t *cmd);
     
     bool doReadTOC(bool MSF, uint8_t track, uint16_t allocationLength);
     bool doReadSessionInfo(bool MSF, uint16_t allocationLength);
@@ -131,9 +132,9 @@ protected:
     uint32_t m_cached_end_lba;
     uint64_t m_cached_capacity_lba;
 
+    int m_selected_file_index;
     // If the .cue file has data split across multiple files,
     // this function will reopen m_imagefile when track is changed.
-    int m_selected_file_index;
     bool selectBinFileForTrack(const CUETrackInfo *track);
 
     // ATAPI configuration pages

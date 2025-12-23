@@ -890,13 +890,13 @@ bool IDEATAPIDevice::atapi_cmd_ok()
 
 bool IDEATAPIDevice::atapi_test_unit_ready(const uint8_t *cmd)
 {
+    if (!is_medium_present())
+    {
+        return atapi_cmd_not_ready_error();
+    }
     if (m_devinfo.removable && m_removable.ejected && m_removable.reinsert_media_after_eject)
     {
         insert_next_media(m_image);
-    }
-    else if (!has_image())
-    {
-        return atapi_cmd_not_ready_error();
     }
 
     return atapi_cmd_ok();
@@ -1448,7 +1448,11 @@ void IDEATAPIDevice::button_eject_media()
     if (is_loaded_without_media())
     {
         set_loaded_without_media(false);
-        if(m_removable.load_first_image_cb) m_removable.load_first_image_cb();
+        if(m_removable.load_first_image_cb) 
+        {
+            m_removable.load_first_image_cb();
+            m_removable.load_first_image_cb = nullptr;
+        }
         loaded_new_media();
     }
     else if (!m_removable.prevent_removable || m_removable.ignore_prevent_removal)

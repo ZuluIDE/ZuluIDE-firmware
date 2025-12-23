@@ -109,7 +109,11 @@ void IDEZipDrive::button_eject_media()
     if (m_removable.loaded_without_media)
     {
         m_removable.loaded_without_media = false;
-        if(m_removable.load_first_image_cb) m_removable.load_first_image_cb();
+        if(m_removable.load_first_image_cb) 
+        {
+            m_removable.load_first_image_cb();
+            m_removable.load_first_image_cb = nullptr;
+        }
         loaded_new_media();
     }
     else if (m_removable.prevent_removable)

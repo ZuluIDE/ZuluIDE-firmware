@@ -318,6 +318,7 @@ void IDECDROMDevice::set_image(IDEImage *image)
     IDEATAPIDevice::set_image(image);
     memset(&m_first_track, 0, sizeof(m_first_track));
     memset(&m_last_track, 0, sizeof(m_last_track));
+    memset(&m_cd_read_format, 0, sizeof(m_cd_read_format));
     IDEImageFile *imagefile = (IDEImageFile*)m_image;
     m_selected_file_index = -1;
     static char cuesheetname[MAX_FILE_PATH + 1];
@@ -368,7 +369,6 @@ void IDECDROMDevice::set_image(IDEImage *image)
 #ifdef ENABLE_AUDIO_OUTPUT
         else
         {
-            logmsg("FOldername: ", foldername);
             audio_set_cue_parser(cuesheetname, folder);
         }
 #endif // ENABLE_AUDIO_OUTPUT
@@ -439,6 +439,7 @@ bool IDECDROMDevice::handle_atapi_command(const uint8_t *cmd)
         case ATAPI_CMD_PAUSE_RESUME_AUDIO:      return atapi_pause_resume_audio(cmd);
         case ATAPI_CMD_STOP_PLAY_SCAN_AUDIO:    return atapi_stop_play_scan_audio(cmd);
         case ATAPI_CMD_SEEK10:                  return atapi_seek_10(cmd);
+        case ATAPI_CMD_MECHANISM_STATUS:        return atapi_mechanism_status(cmd);
         // Stream feature not supported, returning invalid command here
         // to avoid warnings in log
         case ATAPI_CMD_GET_PERFORMANCE:         return atapi_cmd_error(ATAPI_SENSE_ILLEGAL_REQ, ATAPI_ASC_INVALID_CMD);
@@ -799,15 +800,15 @@ bool IDECDROMDevice::atapi_get_event_status_notification(const uint8_t *cmd)
             buf[2] = IDECDROMDevice::esn_class_request_t::Media; // Media status events
             buf[3] = 0x12; // Supported events
             buf[4] = 0x00; // No Change
-            if (m_removable.ejected)
-            {
-                dbgmsg("---- Event: No change (media not present)");
-                buf[5] = 0x00;
-            }
-            else
+            if (is_medium_present())
             {
                 dbgmsg("---- Event: no change (media present)");
                 buf[5] = 0x02; // Media Present
+            }
+            else
+            {
+                dbgmsg("---- Event: No change (media not present)");
+                buf[5] = 0x00;
             }
             buf[6] = 0; // Start slot
             buf[7] = 0; // End slot
@@ -817,10 +818,6 @@ bool IDECDROMDevice::atapi_get_event_status_notification(const uint8_t *cmd)
             if (m_devinfo.removable && m_removable.ejected && m_removable.reinsert_media_after_eject && m_removable.ignore_prevent_removal)
             {
                 insert_next_media(m_image);
-            }
-            else if (!has_image())
-            {
-                return atapi_cmd_not_ready_error();
             }
         }
     }
@@ -960,6 +957,43 @@ bool IDECDROMDevice::atapi_seek_10(const uint8_t *cmd)
     return atapi_cmd_ok();
 }
 
+
+bool IDECDROMDevice::atapi_mechanism_status(const uint8_t *cmd)
+{
+    uint32_t allocation_len = parse_be16(&cmd[8]);
+    if (allocation_len == 0)
+    {
+        return atapi_cmd_ok();
+    }
+
+    // lba is only valid if audio is playing or data is being read
+    // since data reading is completed during a read command the
+    // lba value will never be valid for reading so 0 is okay in this instance
+    uint32_t lba = 0;
+
+    bool has_medium = is_medium_present();
+    bool audio_playing = false;
+
+#ifdef ENABLE_AUDIO_OUTPUT
+    audio_playing = audio_is_playing();
+    if (has_medium && audio_playing)
+    {
+        lba = audio_get_lba_position();
+    }
+#endif
+
+    uint8_t *buf = m_buffer.bytes;
+    buf[0] = 0x00; // no fault
+    buf[1] = audio_playing ? 0x20 : 0x00;
+    buf[1] |= has_medium ? 0x00 : 0x10; // tray is open if has_medium is false
+    write_be24(&buf[2], lba); // 3 byte lba - will only be audio current playback lba
+    buf[5] = 0x00; // 0 slots - not a CD changer
+    write_be16(&buf[6], 0); // length of slot table is 0 - no a CD changer
+
+    uint32_t len = 8;
+    atapi_send_data(buf, std::min<uint32_t>(len, allocation_len));
+    return atapi_cmd_ok();
+}
 
 bool IDECDROMDevice::doReadTOC(bool MSF, uint8_t track, uint16_t allocationLength)
 {
@@ -1406,6 +1440,7 @@ bool IDECDROMDevice::doReadCD(uint32_t lba, uint32_t length, uint8_t sector_type
 
         length_done += length;
         lba += length;
+
     }
 
     return atapi_send_wait_finish() && atapi_cmd_ok();
@@ -1635,7 +1670,11 @@ void IDECDROMDevice::button_eject_media()
     if (m_removable.loaded_without_media)
     {
         m_removable.loaded_without_media = false;
-        if(m_removable.load_first_image_cb) m_removable.load_first_image_cb();
+        if(m_removable.load_first_image_cb) 
+        {
+            m_removable.load_first_image_cb();
+            m_removable.load_first_image_cb = nullptr;
+        }
         loaded_new_media();
     }
     else if (m_removable.prevent_removable)
