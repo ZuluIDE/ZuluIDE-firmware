@@ -49,7 +49,9 @@ public:
     virtual void insert_media(IDEImage *image = nullptr) override;
 
     virtual void insert_next_media(IDEImage *image = nullptr) override;
-    
+
+    virtual void loaded_new_media() override;
+
     // esn - event status notification
     enum class esn_event_t 
     {

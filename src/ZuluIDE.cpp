@@ -571,6 +571,7 @@ void setupStatusController()
     g_ide_device->set_image(nullptr);
     g_ide_device->set_loaded_without_media(true);
     g_ide_device->set_load_first_image_cb(loadFirstImage);
+    g_ide_device->eject_media();
   }
   else
   {
@@ -799,12 +800,9 @@ void zuluide_init(void)
   // Setup the status controller.
   setupStatusController();
 
-  if (!g_ide_device->is_medium_present() && !g_ide_device->is_loaded_without_media())
+  if (!g_ide_device->is_medium_present())
   {
     // Set to ejected state if there is no media present
-    // and loaded_without_media has not been set.
-    // This is to avoid auto insertion when loaded_without_media has been set
-    // and resinsert options are set to 1
     g_ide_device->eject_media();
   }
 
@@ -873,12 +871,18 @@ void zuluide_main_loop(void)
                     g_sdcard_present = false;
                     g_StatusController.SetIsCardPresent(false);
                     logmsg("SD card removed, trying to reinit");
-                    g_ide_device->set_image(NULL);
-                    if (g_ide_device->is_removable() && !ini_getbool("IDE", "no_media_on_sd_insert", 0, CONFIGFILE))
+                    if (g_ide_device->is_removable())
                     {
-                      g_ide_device->eject_media();
+                        if (ini_getbool("IDE", "no_media_on_sd_insert", 0, CONFIGFILE))
+                        {
+                            g_ide_device->set_loaded_without_media(true);
+                            g_loadedFirstImage = false;
+                            g_ide_device->set_load_first_image_cb(loadFirstImage);
+                        }
+                        g_ide_device->eject_media();
                     }
                     g_ide_imagefile.close();
+                    g_ide_device->set_image(nullptr);
                 }
             }
         }
@@ -898,17 +902,8 @@ void zuluide_main_loop(void)
             zuluide_reload_config();
             searchAndCreateImage((uint8_t*) g_ide_buffer, sizeof(g_ide_buffer));
 
-
             g_StatusController.SetIsCardPresent(true);
-            if (g_ide_device->is_removable() && ini_getbool("IDE", "no_media_on_sd_insert", 0, CONFIGFILE))
-            {
-              g_ide_device->set_image(nullptr);
-              g_ide_imagefile.close();
-              g_ide_device->set_loaded_without_media(true);
-              g_loadedFirstImage = false;
-              g_ide_device->set_load_first_image_cb(loadFirstImage);
-            }
-            else
+            if (!g_ide_device->is_loaded_without_media())
             {
               loadFirstImage();
               g_ide_device->sd_card_inserted();
