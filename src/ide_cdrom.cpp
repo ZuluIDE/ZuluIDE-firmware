@@ -716,7 +716,7 @@ bool IDECDROMDevice::atapi_get_event_status_notification(const uint8_t *cmd)
         return atapi_cmd_error(ATAPI_SENSE_ILLEGAL_REQ, ATAPI_ASC_INVALID_FIELD);
     }
     // Operation change class request
-    else if ((cmd[4] & 0x02) && (m_esn.event != esn_event_t::NoChange && m_esn.current_event == esn_event_t::NoChange))
+    else if ((cmd[4] & 0x02) && (m_esn.event != esn_event_t::NoChange && m_esn.request == esn_class_request_t::OperationChange))
     {
         buf[0] = 0;
         buf[1] = 6; // EventDataLength
@@ -737,6 +737,7 @@ bool IDECDROMDevice::atapi_get_event_status_notification(const uint8_t *cmd)
                 m_esn.event == esn_event_t::MNewMedia
                 || m_esn.event == esn_event_t::MEjectRequest
                 || m_esn.event == esn_event_t::MMediaRemoval
+                || m_esn.event == esn_event_t::CycleRemovalToNewMedia
             ))
         {
             // If the Event Status Notification was Operational Change request
@@ -815,7 +816,11 @@ bool IDECDROMDevice::atapi_get_event_status_notification(const uint8_t *cmd)
             set_esn_event(esn_event_t::NoChange);
 
             // Insert after eject and no change
-            if (m_devinfo.removable && m_removable.ejected && m_removable.reinsert_media_after_eject && m_removable.ignore_prevent_removal)
+            if (m_devinfo.removable 
+                && m_removable.ejected 
+                && m_removable.reinsert_media_after_eject 
+                && m_removable.ignore_prevent_removal
+                && !is_loaded_without_media())
             {
                 insert_next_media(m_image);
             }
@@ -1661,15 +1666,18 @@ uint64_t IDECDROMDevice::capacity_lba()
 void IDECDROMDevice::eject_media()
 {
     doStopAudio();
-
+    if (!m_removable.ejected)
+    {
+        set_esn_event(esn_event_t::MMediaRemoval);
+    }
     IDEATAPIDevice::eject_media();
 }
 
 void IDECDROMDevice::button_eject_media()
 {
-    if (m_removable.loaded_without_media)
+    if (is_loaded_without_media())
     {
-        m_removable.loaded_without_media = false;
+        set_loaded_without_media(false);
         if(m_removable.load_first_image_cb) 
         {
             m_removable.load_first_image_cb();
@@ -1719,7 +1727,6 @@ void IDECDROMDevice::insert_media(IDEImage *image)
             logmsg("-- Device loading media: \"", img_iterator.Get().GetFilename().c_str(), "\"");
             m_removable.ejected = false;
             set_image(&g_ide_imagefile);
-            set_esn_event(esn_event_t::MNewMedia);
             loaded_new_media();
         }
     }
@@ -1762,7 +1769,6 @@ void IDECDROMDevice::insert_next_media(IDEImage *image)
                 m_removable.ejected = false;
                 g_previous_controller_status = g_StatusController.GetStatus();
                 g_StatusController.LoadImage(img_iterator.Get());
-                set_esn_event(esn_event_t::MNewMedia);
                 loaded_new_media();
             }
         }
@@ -1771,12 +1777,38 @@ void IDECDROMDevice::insert_next_media(IDEImage *image)
 
 }
 
+void IDECDROMDevice::loaded_new_media()
+{
+    if (m_removable.ejected)
+    {
+        set_esn_event(esn_event_t::MNewMedia);
+    }
+    else
+    {
+        set_esn_event(esn_event_t::CycleRemovalToNewMedia);
+    }
+    IDEATAPIDevice::loaded_new_media();
+};
+
+void IDECDROMDevice::set_loaded_without_media(bool no_media)
+{
+    if (no_media)
+    {
+        set_esn_event(esn_event_t::MMediaRemoval);
+    }
+    IDEATAPIDevice::set_loaded_without_media(no_media);
+}
+
 void IDECDROMDevice::set_esn_event(esn_event_t event)
 {
-    if (event == esn_event_t::MEjectRequest || event == esn_event_t::MNewMedia || event == esn_event_t::MMediaRemoval)
+    if (event == esn_event_t::MEjectRequest 
+        || event == esn_event_t::MNewMedia 
+        || event == esn_event_t::MMediaRemoval 
+        || event == esn_event_t::CycleRemovalToNewMedia
+    )
     {
         m_esn.event = event;
-        m_esn.request = esn_class_request_t::Media;
+        m_esn.request = esn_class_request_t::OperationChange;
         m_esn.current_event = esn_event_t::NoChange;
     }
     else
@@ -1793,27 +1825,48 @@ void IDECDROMDevice::esn_next_event()
     {
         case esn_event_t::MNewMedia :
         case esn_event_t::MEjectRequest :
+        case esn_event_t::MMediaRemoval :
             if (m_esn.current_event == esn_event_t::NoChange)
             {
+                m_esn.request = esn_class_request_t::Media;
                 m_esn.current_event = m_esn.event;
                 return;
             }
             break;
-        case esn_event_t::MMediaRemoval :
+        case esn_event_t::CycleRemovalToNewMedia :
             if (m_esn.current_event == esn_event_t::NoChange)
             {
-                m_esn.current_event = esn_event_t::MEjectRequest;
+                m_esn.request = esn_class_request_t::Media;
+                m_esn.current_event = esn_event_t::MMediaRemoval;
                 return;
             }
-            if (m_esn.current_event == esn_event_t::MEjectRequest)
+
+            if (m_esn.current_event == esn_event_t::MMediaRemoval)
             {
-                m_esn.current_event =  m_esn.event;
+                if (m_esn.request == esn_class_request_t::Media)
+                {
+                    // Operational Change for NewMedia
+                    m_esn.request = esn_class_request_t::OperationChange;
+                    m_esn.current_event = esn_event_t::MNewMedia;
+                }
                 return;
+            }
+
+            if (m_esn.current_event == esn_event_t::MNewMedia)
+            {
+                if (m_esn.request == esn_class_request_t::OperationChange)
+                {
+                    m_esn.request = esn_class_request_t::Media;
+                    return;
+                }
+                // else if (m_esn.request == esn_class_request_t::Media)
+                // do nothing
             }
             break;
         default:
             break;
     }
+    m_esn.request = esn_class_request_t::OperationChange;
     set_esn_event(esn_event_t::NoChange);
 }
 

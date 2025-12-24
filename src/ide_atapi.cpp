@@ -442,6 +442,14 @@ void IDEATAPIDevice::loaded_new_media()
     set_not_ready(true);
 }
 
+void IDEATAPIDevice::set_loaded_without_media(bool no_media)
+{
+    m_removable.loaded_without_media = no_media;
+    if (no_media)
+    {
+        m_removable.ejected = true;
+    }
+}
 
 bool IDEATAPIDevice::atapi_send_data(const uint8_t *data, size_t blocksize, size_t num_blocks)
 {
@@ -745,11 +753,12 @@ bool IDEATAPIDevice::atapi_recv_data_block(uint8_t *data, uint16_t blocksize)
 
 bool IDEATAPIDevice::handle_atapi_command_wrapper(const uint8_t *cmd)
 {
-        // INQUIRY and REQUEST SENSE bypass unit attention
+        // These command bypass unit attention
     switch (cmd[0])
     {
         case ATAPI_CMD_INQUIRY:         return atapi_inquiry(cmd);
         case ATAPI_CMD_REQUEST_SENSE:   return atapi_request_sense(cmd);
+        case ATAPI_CMD_GET_EVENT_STATUS_NOTIFICATION: return atapi_get_event_status_notification(cmd);
     }
 
     if (m_atapi_state.not_ready)
@@ -780,7 +789,6 @@ bool IDEATAPIDevice::handle_atapi_command(const uint8_t *cmd)
         case ATAPI_CMD_MODE_SELECT6:    return atapi_mode_select(cmd);
         case ATAPI_CMD_MODE_SELECT10:   return atapi_mode_select(cmd);
         case ATAPI_CMD_GET_CONFIGURATION: return atapi_get_configuration(cmd);
-        case ATAPI_CMD_GET_EVENT_STATUS_NOTIFICATION: return atapi_get_event_status_notification(cmd);
         case ATAPI_CMD_READ_CAPACITY:   return atapi_read_capacity(cmd);
         case ATAPI_CMD_READ6:           return atapi_read(cmd);
         case ATAPI_CMD_READ10:          return atapi_read(cmd);
@@ -894,7 +902,10 @@ bool IDEATAPIDevice::atapi_test_unit_ready(const uint8_t *cmd)
     {
         return atapi_cmd_not_ready_error();
     }
-    if (m_devinfo.removable && m_removable.ejected && m_removable.reinsert_media_after_eject)
+    if (m_devinfo.removable 
+        && m_removable.ejected 
+        && m_removable.reinsert_media_after_eject 
+        && !is_loaded_without_media())
     {
         insert_next_media(m_image);
     }
@@ -1168,7 +1179,7 @@ bool IDEATAPIDevice::atapi_get_event_status_notification(const uint8_t *cmd)
         // Async. notification is not supported
         return atapi_cmd_error(ATAPI_SENSE_ILLEGAL_REQ, ATAPI_ASC_INVALID_FIELD);
     }
-    else if (m_devinfo.media_status_events)
+    else if (m_devinfo.media_status_events != ATAPI_MEDIA_EVENT_NOCHG)
     {
         // Report media status events
         uint8_t *buf = m_buffer.bytes;
@@ -1185,7 +1196,7 @@ bool IDEATAPIDevice::atapi_get_event_status_notification(const uint8_t *cmd)
             return atapi_cmd_error(ATAPI_SENSE_ABORTED_CMD, 0);
         }
 
-        m_devinfo.media_status_events = 0;
+        m_devinfo.media_status_events = ATAPI_MEDIA_EVENT_NOCHG;
         return atapi_cmd_ok();
     }
     else
@@ -1406,7 +1417,7 @@ size_t IDEATAPIDevice::atapi_get_configuration(uint8_t return_type, uint16_t fea
 
 bool IDEATAPIDevice::is_medium_present()
 {
-    return has_image() && (!m_devinfo.removable || (m_devinfo.removable && !m_removable.ejected));
+    return has_image() && (!m_devinfo.removable || (m_devinfo.removable && (!m_removable.ejected || is_loaded_without_media())));
 }
 
 void IDEATAPIDevice::eject_button_poll(bool immediate)
@@ -1432,8 +1443,20 @@ void IDEATAPIDevice::eject_button_poll(bool immediate)
         if (ejectors)
         {
             dbgmsg("Ejection button pressed");
-            if (m_removable.ejected)
+            if (is_loaded_without_media())
+            {
+                set_loaded_without_media(false);
+                if(m_removable.load_first_image_cb) 
+                {
+                    m_removable.load_first_image_cb();
+                    m_removable.load_first_image_cb = nullptr;
+                }
+                loaded_new_media();
+            }
+            else if (m_removable.ejected)
+            {
                 insert_next_media(m_image);
+            }
             else
             {
                 button_eject_media();
@@ -1445,17 +1468,7 @@ void IDEATAPIDevice::eject_button_poll(bool immediate)
 
 void IDEATAPIDevice::button_eject_media()
 {
-    if (is_loaded_without_media())
-    {
-        set_loaded_without_media(false);
-        if(m_removable.load_first_image_cb) 
-        {
-            m_removable.load_first_image_cb();
-            m_removable.load_first_image_cb = nullptr;
-        }
-        loaded_new_media();
-    }
-    else if (!m_removable.prevent_removable || m_removable.ignore_prevent_removal)
+ if (!m_removable.prevent_removable || m_removable.ignore_prevent_removal)
         eject_media();
     else
         dbgmsg("Attempted to eject media but host has set drive to prevent removable");

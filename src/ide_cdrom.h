@@ -30,7 +30,6 @@
 #include "ide_atapi.h"
 #include <scp/SharedCUEParser.h>
 
-// Event Status Notification handling
 class IDECDROMDevice: public IDEATAPIDevice
 {
 public:
@@ -49,14 +48,19 @@ public:
     virtual void insert_media(IDEImage *image = nullptr) override;
 
     virtual void insert_next_media(IDEImage *image = nullptr) override;
-    
+
+    virtual void loaded_new_media() override;
+
+    virtual void set_loaded_without_media(bool no_media) override;
+
     // esn - event status notification
     enum class esn_event_t 
     {
         NoChange,
         MEjectRequest,
         MMediaRemoval,
-        MNewMedia
+        MNewMedia,
+        CycleRemovalToNewMedia,
     };
 
     enum esn_class_request_t 
