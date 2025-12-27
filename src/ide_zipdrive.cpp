@@ -106,13 +106,7 @@ void IDEZipDrive::eject_media()
 
 void IDEZipDrive::button_eject_media()
 {
-    if (m_removable.loaded_without_media)
-    {
-        m_removable.loaded_without_media = false;
-        if(m_removable.load_first_image_cb) m_removable.load_first_image_cb();
-        loaded_new_media();
-    }
-    else if (m_removable.prevent_removable)
+    if (m_removable.prevent_removable)
         m_zip_disk_info.button_pressed = true;
     else
         eject_media();
