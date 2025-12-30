@@ -65,7 +65,7 @@ static IDERemovable g_ide_removable;
 static IDERigidDevice g_ide_rigid;
 IDEImageFile g_ide_imagefile;
 static IDEDevice *g_ide_device;
-static bool loadedFirstImage = false;
+static bool g_loadedFirstImage = false;
 
 zuluide::status::StatusController g_StatusController;
 zuluide::pipe::ImageResponsePipe<zuluide::control::select_controller_source_t> g_ControllerImageResponsePipe;
@@ -596,7 +596,7 @@ void loadFirstImage() {
         if (!quiet) logmsg("-- Loading last used image: \"", image_name.c_str(), "\"");
         g_StatusController.LoadImage(imgIterator.Get());
         g_previous_controller_status = g_StatusController.GetStatus();
-        loadedFirstImage = true;
+        g_loadedFirstImage = true;
         load_image(imgIterator.Get(), false);
         success = true;
       }
@@ -616,7 +616,7 @@ void loadFirstImage() {
       logmsg("Loading first image ", imgIterator.Get().GetFilename().c_str());
       g_StatusController.LoadImage(imgIterator.Get());
       g_previous_controller_status = g_StatusController.GetStatus();
-      loadedFirstImage = true;
+      g_loadedFirstImage = true;
       load_image(imgIterator.Get(), false);
     } else {
       logmsg("No valid image files found");
@@ -624,7 +624,7 @@ void loadFirstImage() {
     }
   }
 
-  if (loadedFirstImage)
+  if (g_loadedFirstImage)
      g_ide_device->post_image_setup();
 
   imgIterator.Cleanup();
@@ -655,12 +655,12 @@ void status_observer(const zuluide::status::SystemStatus& current) {
 
     load_image(current.GetLoadedImage());
     g_ide_device->set_loaded_without_media(false);
-    loadedFirstImage = true;
+    g_loadedFirstImage = true;
     g_ide_device->loaded_new_media();
   }
-  else if ((loadedFirstImage && !current.LoadedImagesAreEqual(g_previous_controller_status))) {
+  else if ((g_loadedFirstImage && !current.LoadedImagesAreEqual(g_previous_controller_status))) {
     // The current image has changed.
-    if (current.HasLoadedImage()) 
+    if (current.HasLoadedImage())
     {
       load_image(current.GetLoadedImage());
       g_ide_device->loaded_new_media();
@@ -668,7 +668,7 @@ void status_observer(const zuluide::status::SystemStatus& current) {
     else
     {
       if (!g_ide_device->is_load_deferred())
-        clear_image();
+        g_ide_device->set_loaded_without_media(true);
     }
   }
   g_previous_controller_status = current;
@@ -677,7 +677,7 @@ void status_observer(const zuluide::status::SystemStatus& current) {
 void load_image(const zuluide::images::Image& toLoad, bool insert)
 {
 
-  if (loadedFirstImage && g_ide_device->set_load_deferred(toLoad.GetFilename().c_str()))
+  if (g_loadedFirstImage && g_ide_device->set_load_deferred(toLoad.GetFilename().c_str()))
     return blinkStatus(BLINK_DEFFERED_LOADING);
   
   clear_image();
@@ -799,6 +799,12 @@ void zuluide_init(void)
   // Setup the status controller.
   setupStatusController();
 
+  if (!g_ide_device->is_medium_present())
+  {
+    // Set to ejected state if there is no media present
+    g_ide_device->eject_media();
+  }
+
   blinkStatus(BLINK_STATUS_OK);
   logmsg("Initialization complete!");
 }
@@ -864,9 +870,12 @@ void zuluide_main_loop(void)
                     g_sdcard_present = false;
                     g_StatusController.SetIsCardPresent(false);
                     logmsg("SD card removed, trying to reinit");
-
-                    g_ide_device->set_image(NULL);
+                    if (g_ide_device->is_removable())
+                    {
+                        g_ide_device->eject_media();
+                    }
                     g_ide_imagefile.close();
+                    g_ide_device->set_image(nullptr);
                 }
             }
         }
@@ -886,17 +895,15 @@ void zuluide_main_loop(void)
             zuluide_reload_config();
             searchAndCreateImage((uint8_t*) g_ide_buffer, sizeof(g_ide_buffer));
 
-
             g_StatusController.SetIsCardPresent(true);
             if (g_ide_device->is_removable() && ini_getbool("IDE", "no_media_on_sd_insert", 0, CONFIGFILE))
             {
-              g_ide_device->set_image(nullptr);
-              g_ide_imagefile.close();
-              g_ide_device->set_loaded_without_media(true);
-              loadedFirstImage = false;
-              g_ide_device->set_load_first_image_cb(loadFirstImage);
+                g_ide_device->set_loaded_without_media(true);
+                g_loadedFirstImage = false;
+                g_ide_device->set_load_first_image_cb(loadFirstImage);
             }
-            else
+
+            if (!g_ide_device->is_loaded_without_media())
             {
               loadFirstImage();
               g_ide_device->sd_card_inserted();

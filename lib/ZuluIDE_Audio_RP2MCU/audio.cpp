@@ -678,7 +678,6 @@ void audio_set_cue_parser(char *cue_file_name, FsFile* file)
     audio_set_channel(AUDIO_CHANNEL_ENABLE_MASK);
     if (file != nullptr)
     {
-        logmsg("Cue sheet filename: ", cue_file_name);
         char filename[MAX_FILE_PATH + 1] = {0};
         if (file->isFile())
         {

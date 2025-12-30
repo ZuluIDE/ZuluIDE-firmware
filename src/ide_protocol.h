@@ -51,6 +51,8 @@ public:
     // polls eject buttons status
     virtual void eject_button_poll(bool immediate) = 0;
 
+    virtual void eject_media() {;}
+
     // device medium is present
     virtual bool is_medium_present() = 0;
 

@@ -89,7 +89,7 @@ public:
     virtual void loaded_new_media() override;
 
     virtual inline bool is_loaded_without_media() override {return m_removable.loaded_without_media;}
-    virtual inline void set_loaded_without_media(bool no_media) override {m_removable.loaded_without_media = no_media;}
+    virtual void set_loaded_without_media(bool no_media) override;
     virtual inline void set_load_first_image_cb(void (*load_image_cb)()) override {m_removable.load_first_image_cb = load_image_cb;}
 
 protected:
