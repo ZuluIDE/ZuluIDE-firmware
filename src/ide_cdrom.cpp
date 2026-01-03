@@ -301,8 +301,8 @@ void IDECDROMDevice::initialize(int devidx)
     set_esn_event(esn_event_t::NoChange);
 
     clear_cached_track_info();
-#if ENABLE_AUDIO_OUTPUT
-#endif // ENABLE_AUDIO_OUTPUT
+
+    m_eject_then_load_cycle = false;
 }
 
 void IDECDROMDevice::reset()
@@ -418,6 +418,11 @@ void IDECDROMDevice::set_image(IDEImage *image)
         m_devinfo.media_status_events = ATAPI_MEDIA_EVENT_NEW;
     }
 
+    if (valid)
+    {
+        set_esn_event(esn_event_t::MNewMedia);
+        IDEATAPIDevice::loaded_new_media();
+    }
 }
 
 bool IDECDROMDevice::handle_atapi_command(const uint8_t *cmd)
@@ -710,13 +715,25 @@ bool IDECDROMDevice::atapi_get_event_status_notification(const uint8_t *cmd)
 {
     m_removable.receiving_event_status_notifications = true;
     uint8_t *buf = m_buffer.bytes;
+
+
     if (!(cmd[1] & 1))
     {
         // Async. notification is not supported
         return atapi_cmd_error(ATAPI_SENSE_ILLEGAL_REQ, ATAPI_ASC_INVALID_FIELD);
     }
+
+    bool operation_change_bit_set = cmd[4] & 0x02;
+    bool media_event_bit_set = cmd[4] & 0x10;
+
+    // Skip operation event if change bit not set in ATAPI command
+    if (!operation_change_bit_set && m_esn.event != esn_event_t::NoChange && m_esn.request == esn_class_request_t::OperationChange )
+    {
+        esn_next_event();
+    }
+
     // Operation change class request
-    else if ((cmd[4] & 0x02) && (m_esn.event != esn_event_t::NoChange && m_esn.request == esn_class_request_t::OperationChange))
+    if (operation_change_bit_set && (m_esn.event != esn_event_t::NoChange && m_esn.request == esn_class_request_t::OperationChange))
     {
         buf[0] = 0;
         buf[1] = 6; // EventDataLength
@@ -730,22 +747,12 @@ bool IDECDROMDevice::atapi_get_event_status_notification(const uint8_t *cmd)
         dbgmsg("---- Event: Operational state has changed");
     }
     // Media class request
-    else if (cmd[4] & 0x10)
+    else if (media_event_bit_set && m_esn.request == esn_class_request_t::Media)
     {
-        if (m_esn.request == IDECDROMDevice::esn_class_request_t::Media &&
-            (
-                m_esn.event == esn_event_t::MNewMedia
-                || m_esn.event == esn_event_t::MEjectRequest
-                || m_esn.event == esn_event_t::MMediaRemoval
-                || m_esn.event == esn_event_t::CycleRemovalToNewMedia
-            ))
+        switch (m_esn.current_event)
         {
-            // If the Event Status Notification was Operational Change request
-            // was never issued, proceed to the next event
-            if (m_esn.current_event == esn_event_t::NoChange)
-                esn_next_event();
-
-            if (m_esn.current_event == esn_event_t::MNewMedia || m_esn.current_event == esn_event_t::MEjectRequest)
+            case esn_event_t::MNewMedia :
+            case esn_event_t::MEjectRequest :
             {
                 // Report media status events
                 buf[0] = 0;
@@ -774,8 +781,9 @@ bool IDECDROMDevice::atapi_get_event_status_notification(const uint8_t *cmd)
                 doStopAudio();
 
                 esn_next_event();
+                break;
             }
-            else if (m_esn.current_event == esn_event_t::MMediaRemoval)
+            case  esn_event_t::MMediaRemoval :
             {
                 // Report media status event Media Removal
                 dbgmsg("---- Event: MediaRemoval");
@@ -784,45 +792,51 @@ bool IDECDROMDevice::atapi_get_event_status_notification(const uint8_t *cmd)
                 buf[2] = m_esn.request; // Media status events
                 buf[3] = 0x12; // Supported events
                 buf[4] = 0x03; // Media Removal
-                buf[5] = 0x02; // Media Present
+                buf[5] = 0x01; // Media absent and tray open
                 buf[6] = 0; // Start slot
                 buf[7] = 0; // End slot
 
                 doStopAudio();
                 esn_next_event();
-            }
-        }
-        // output media no change
-        else
-        {
-            // Report media status events
-            buf[0] = 0;
-            buf[1] = 6; // EventDataLength
-            buf[2] = IDECDROMDevice::esn_class_request_t::Media; // Media status events
-            buf[3] = 0x12; // Supported events
-            buf[4] = 0x00; // No Change
-            if (is_medium_present())
-            {
-                dbgmsg("---- Event: no change (media present)");
-                buf[5] = 0x02; // Media Present
-            }
-            else
-            {
-                dbgmsg("---- Event: No change (media not present)");
-                buf[5] = 0x00;
-            }
-            buf[6] = 0; // Start slot
-            buf[7] = 0; // End slot
-            set_esn_event(esn_event_t::NoChange);
 
-            // Insert after eject and no change
-            if (m_devinfo.removable 
-                && m_removable.ejected 
-                && m_removable.reinsert_media_after_eject 
-                && m_removable.ignore_prevent_removal
-                && !is_loaded_without_media())
+                break;
+            }
+            case esn_event_t::NoChange:
+            default:
             {
-                insert_next_media(m_image);
+                // Report media status events
+                buf[0] = 0;
+                buf[1] = 6; // EventDataLength
+                buf[2] = IDECDROMDevice::esn_class_request_t::Media; // Media status events
+                buf[3] = 0x12; // Supported events
+                buf[4] = 0x00; // No Change
+                if (is_medium_present())
+                {
+                    dbgmsg("---- Event: no change (media present)");
+                    buf[5] = 0x02; // Media Present
+                }
+                else
+                {
+                    dbgmsg("---- Event: No change (media not present) and tray open");
+                    buf[5] = 0x01;
+                }
+                buf[6] = 0; // Start slot
+                buf[7] = 0; // End slot
+
+                // Insert after eject and no change
+                if (m_devinfo.removable 
+                    && m_removable.ejected 
+                    && m_removable.reinsert_media_after_eject 
+                    && (!m_removable.prevent_removable || m_removable.ignore_prevent_removal)
+                    && !is_loaded_without_media())
+                {
+                    insert_next_media(m_image);
+                }
+                else
+                {
+                    set_esn_event(esn_event_t::NoChange);
+                }
+                break;
             }
         }
     }
@@ -850,13 +864,40 @@ bool IDECDROMDevice::atapi_get_event_status_notification(const uint8_t *cmd)
 
 bool IDECDROMDevice::atapi_start_stop_unit(const uint8_t *cmd)
 {
+
 #ifdef ENABLE_AUDIO_OUTPUT
-    if ((cmd[ATAPI_START_STOP_EJT_OFFSET] & ATAPI_START_STOP_START) == 0)
-    {
-        doStopAudio();
-    }
+    doStopAudio();
 #endif
-    return IDEATAPIDevice::atapi_start_stop_unit(cmd);
+    uint8_t cmd_eject = *(cmd + ATAPI_START_STOP_EJT_OFFSET);
+    if ((ATAPI_START_STOP_PWR_CON_MASK & cmd_eject) == 0 &&
+        (ATAPI_START_STOP_LOEJ & cmd_eject) != 0)
+    {
+        // Eject condition
+        if ((ATAPI_START_STOP_START & cmd_eject) == 0)
+        {
+            if (m_removable.prevent_removable)
+            {
+                return atapi_cmd_error(ATAPI_SENSE_ILLEGAL_REQ, ATAPI_ASC_MEDIUM_REMOVAL_PREVENTED);
+            }
+            else if (m_eject_then_load_cycle)
+            {
+                set_esn_event(esn_event_t::CycleRemovalToNewMedia);
+                IDEATAPIDevice::loaded_new_media();
+                m_eject_then_load_cycle = false;
+            }
+            else
+            {
+
+                IDECDROMDevice::eject_media();
+            }
+        }
+        // Load condition
+        else
+        {
+            insert_next_media(m_image);
+        }
+    }
+    return atapi_cmd_ok();
 }
 
 bool IDECDROMDevice::atapi_play_audio_10(const uint8_t *cmd)
@@ -1666,10 +1707,7 @@ uint64_t IDECDROMDevice::capacity_lba()
 void IDECDROMDevice::eject_media()
 {
     doStopAudio();
-    if (!m_removable.ejected)
-    {
-        set_esn_event(esn_event_t::MMediaRemoval);
-    }
+    set_esn_event(esn_event_t::MMediaRemoval);
     IDEATAPIDevice::eject_media();
 }
 
@@ -1725,56 +1763,25 @@ void IDECDROMDevice::insert_media(IDEImage *image)
         if (g_ide_imagefile.open_file(img_iterator.Get().GetFilename().c_str(), true))
         {
             logmsg("-- Device loading media: \"", img_iterator.Get().GetFilename().c_str(), "\"");
-            m_removable.ejected = false;
             set_image(&g_ide_imagefile);
-            loaded_new_media();
+            if (m_removable.prevent_removable)
+            {
+                eject_then_load_new_media();
+            }
+            else
+            {
+                set_esn_event(esn_event_t::CycleRemovalToNewMedia);
+                IDEATAPIDevice::loaded_new_media();
+            }
         }
     }
     img_iterator.Cleanup();
 }
 
-void IDECDROMDevice::insert_next_media(IDEImage *image)
+bool IDECDROMDevice::insert_next_media(IDEImage *image)
 {
     doStopAudio();
-    zuluide::images::ImageIterator img_iterator;
-    if (m_devinfo.removable && m_removable.ejected)
-    {
-        img_iterator.Reset();
-        if (!img_iterator.IsEmpty())
-        {
-            if (image && image->get_image_name(m_filename, sizeof(m_filename)))
-            {
-                if (!img_iterator.MoveToFile(m_filename))
-                {
-                    img_iterator.MoveNext();
-                }
-            }
-            else
-            {
-                img_iterator.MoveNext();
-            }
-
-            if (img_iterator.IsLast())
-            {
-                img_iterator.MoveFirst();
-            }
-            else
-            {
-                img_iterator.MoveNext();
-            }
-
-            g_ide_imagefile.clear();
-            if (g_ide_imagefile.open_file(img_iterator.Get().GetFilename().c_str(), true))
-            {
-                m_removable.ejected = false;
-                g_previous_controller_status = g_StatusController.GetStatus();
-                g_StatusController.LoadImage(img_iterator.Get());
-                loaded_new_media();
-            }
-        }
-        img_iterator.Cleanup();
-    }
-
+    return IDEATAPIDevice::insert_next_media(image);
 }
 
 void IDECDROMDevice::loaded_new_media()
@@ -1783,12 +1790,24 @@ void IDECDROMDevice::loaded_new_media()
     {
         set_esn_event(esn_event_t::MNewMedia);
     }
+    IDEATAPIDevice::loaded_new_media();
+};
+
+
+void IDECDROMDevice::eject_then_load_new_media()
+{
+    if (m_removable.prevent_removable)
+    {
+        set_esn_event(esn_event_t::MEjectRequest);
+        m_eject_then_load_cycle = true;
+    }
     else
     {
         set_esn_event(esn_event_t::CycleRemovalToNewMedia);
+        IDEATAPIDevice::loaded_new_media();
     }
-    IDEATAPIDevice::loaded_new_media();
-};
+}
+
 
 void IDECDROMDevice::set_loaded_without_media(bool no_media)
 {
@@ -1814,7 +1833,7 @@ void IDECDROMDevice::set_esn_event(esn_event_t event)
     else
     {
         m_esn.event = esn_event_t::NoChange;
-        m_esn.request = esn_class_request_t::OperationChange;
+        m_esn.request = esn_class_request_t::Media;
         m_esn.current_event = esn_event_t::NoChange;
     }
 }
@@ -1824,17 +1843,20 @@ void IDECDROMDevice::esn_next_event()
     switch (m_esn.event)
     {
         case esn_event_t::MNewMedia :
-        case esn_event_t::MEjectRequest :
         case esn_event_t::MMediaRemoval :
-            if (m_esn.current_event == esn_event_t::NoChange)
+        case esn_event_t::MEjectRequest :
+            if (m_esn.current_event == esn_event_t::NoChange 
+                && m_esn.request == esn_class_request_t::OperationChange)
             {
                 m_esn.request = esn_class_request_t::Media;
                 m_esn.current_event = m_esn.event;
                 return;
             }
             break;
+
         case esn_event_t::CycleRemovalToNewMedia :
-            if (m_esn.current_event == esn_event_t::NoChange)
+            if (m_esn.current_event == esn_event_t::NoChange 
+                && m_esn.request == esn_class_request_t::OperationChange)
             {
                 m_esn.request = esn_class_request_t::Media;
                 m_esn.current_event = esn_event_t::MMediaRemoval;
@@ -1866,8 +1888,8 @@ void IDECDROMDevice::esn_next_event()
         default:
             break;
     }
-    m_esn.request = esn_class_request_t::OperationChange;
-    set_esn_event(esn_event_t::NoChange);
+    m_esn.request = esn_class_request_t::Media;
+    m_esn.current_event = esn_event_t::NoChange;
 }
 
 uint32_t IDECDROMDevice::getLeadOutLBA(const CUETrackInfo* lasttrack)

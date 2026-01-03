@@ -85,8 +85,8 @@ public:
     // For removable media devices - insert current
     virtual void insert_media(IDEImage *image = nullptr) = 0;
 
-    // For removable media devices - insert next
-    virtual void insert_next_media(IDEImage *image = nullptr) = 0;
+    // For removable media devices - insert next. Return true if media was loaded
+    virtual bool insert_next_media(IDEImage *image = nullptr) = 0;
 
     // Deferred loading status
     virtual bool set_load_deferred(const char* image_name) = 0;
@@ -100,6 +100,10 @@ public:
 
     // Run when new media is loaded
     virtual void loaded_new_media() = 0;
+
+    // Run when media first needs to be ejected and then loaded
+    // Does not require loaded_new_media()
+    virtual void eject_then_load_new_media() = 0;
 
     // This is the state of media for the device at init or SD insertion
     virtual bool is_loaded_without_media() = 0;

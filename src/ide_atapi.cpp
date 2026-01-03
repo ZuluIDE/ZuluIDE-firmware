@@ -54,7 +54,7 @@ void IDEATAPIDevice::initialize(int devidx)
     m_removable.reinsert_media_after_eject = ini_getbool("IDE", "reinsert_media_after_eject", true, CONFIGFILE);
     m_removable.reinsert_media_on_inquiry = ini_getbool("IDE", "reinsert_media_on_inquiry", true, CONFIGFILE);
     m_removable.reinsert_media_after_sd_insert = ini_getbool("IDE", "reinsert_media_on_sd_insert", true, CONFIGFILE);
-    m_removable.ignore_prevent_removal = ini_getbool("IDE", "ignore_prevent_removal", true, CONFIGFILE);
+    m_removable.ignore_prevent_removal = ini_getbool("IDE", "ignore_prevent_removal", false, CONFIGFILE);
     if (m_devinfo.removable && !m_removable.ignore_prevent_removal)
         logmsg("Respecting host preventing removal of media");
     memset(&m_atapi_state, 0, sizeof(m_atapi_state));
@@ -439,7 +439,13 @@ void IDEATAPIDevice::loaded_new_media()
 {
     m_atapi_state.unit_attention = true;
     m_atapi_state.sense_asc = ATAPI_ASC_MEDIUM_CHANGE;
+    m_removable.ejected = false;
     set_not_ready(true);
+}
+
+void IDEATAPIDevice::eject_then_load_new_media()
+{
+    loaded_new_media();
 }
 
 void IDEATAPIDevice::set_loaded_without_media(bool no_media)
@@ -898,16 +904,24 @@ bool IDEATAPIDevice::atapi_cmd_ok()
 
 bool IDEATAPIDevice::atapi_test_unit_ready(const uint8_t *cmd)
 {
-    if (!is_medium_present())
-    {
-        return atapi_cmd_not_ready_error();
-    }
     if (m_devinfo.removable 
         && m_removable.ejected 
         && m_removable.reinsert_media_after_eject 
         && !is_loaded_without_media())
     {
-        insert_next_media(m_image);
+        if (insert_next_media(m_image))
+        {
+            // insert_next_media will set m_atapi_state.unit_attention to true to error for the next ATAPI command
+            // But since insert_next_media was called in atapi_test_unit_ready, immediately send
+            // a unit attention error for media change and disabled unit_attention be called on the next command
+            m_atapi_state.unit_attention = false;
+            return atapi_cmd_error(ATAPI_SENSE_UNIT_ATTENTION, ATAPI_ASC_MEDIUM_CHANGE);
+        }
+    }
+
+    if (!is_medium_present())
+    {
+        return atapi_cmd_not_ready_error();
     }
 
     return atapi_cmd_ok();
@@ -984,7 +998,7 @@ bool IDEATAPIDevice::atapi_inquiry(const uint8_t *cmd)
     if (req_bytes < count) count = req_bytes;
     atapi_send_data(inquiry, count);
 
-    if (m_removable.reinsert_media_on_inquiry)
+    if (m_removable.reinsert_media_on_inquiry && !is_loaded_without_media())
     {
         insert_next_media(m_image);
     }
@@ -1516,7 +1530,6 @@ void IDEATAPIDevice::insert_media(IDEImage *image)
             if (g_ide_imagefile.open_file(img_iterator.Get().GetFilename().c_str()))
             {
                 logmsg("-- Device loading media: \"", img_iterator.Get().GetFilename().c_str(), "\"");
-                m_removable.ejected = false;
                 set_image(&g_ide_imagefile);
                 loaded_new_media();
             }
@@ -1525,18 +1538,18 @@ void IDEATAPIDevice::insert_media(IDEImage *image)
     }
 }
 
-void IDEATAPIDevice::insert_next_media(IDEImage *image)
+bool IDEATAPIDevice::insert_next_media(IDEImage *image)
 {
+    bool loaded_media = false;
     zuluide::images::ImageIterator img_iterator;
-    char filename[MAX_FILE_PATH+1];
     if (m_devinfo.removable && m_removable.ejected)
     {
         img_iterator.Reset();
         if (!img_iterator.IsEmpty())
         {
-            if (image && image->get_image_name(filename, sizeof(filename)))
+            if (image && image->get_image_name(m_filename, sizeof(m_filename)))
             {
-                if (!img_iterator.MoveToFile(filename))
+                if (!img_iterator.MoveToFile(m_filename))
                 {
                     img_iterator.MoveNext();
                 }
@@ -1556,16 +1569,17 @@ void IDEATAPIDevice::insert_next_media(IDEImage *image)
             }
 
             g_ide_imagefile.clear();
-            if (g_ide_imagefile.open_file(img_iterator.Get().GetFilename().c_str(), true))
+            if (g_ide_imagefile.open_file(img_iterator.Get().GetFilename().c_str(), !m_devinfo.writable))
             {
-                m_removable.ejected = false;
                 g_StatusController.LoadImage(img_iterator.Get());
                 g_previous_controller_status = g_StatusController.GetStatus();
                 loaded_new_media();
+                loaded_media = true;
             }
         }
         img_iterator.Cleanup();
     }
+    return loaded_media;
 }
 
 void IDEATAPIDevice::sd_card_inserted()
