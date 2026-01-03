@@ -82,6 +82,7 @@ public:
     virtual inline void set_loaded_without_media(bool no_media) override{;}
 
     virtual inline void loaded_new_media() override {;}
+    virtual inline void eject_then_load_new_media() override {;}
 
     virtual inline void set_load_first_image_cb(void (*load_image_cb)()) override {;}
 protected:

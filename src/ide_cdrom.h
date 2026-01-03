@@ -51,6 +51,8 @@ public:
 
     virtual void loaded_new_media() override;
 
+    virtual void eject_then_load_new_media() override;
+
     virtual void set_loaded_without_media(bool no_media) override;
 
     // esn - event status notification
@@ -170,4 +172,6 @@ protected:
 
     CUETrackInfo m_first_track;
     CUETrackInfo m_last_track;
+
+    bool m_eject_then_load_cycle;
 };
