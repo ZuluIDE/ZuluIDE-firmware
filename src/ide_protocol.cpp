@@ -526,7 +526,11 @@ void IDEDevice::initialize(int devidx)
     m_devconfig.ide_heads = ini_getl("IDE", "heads", 0, CONFIGFILE);
     m_devconfig.ide_cylinders = ini_getl("IDE", "cylinders", 0, CONFIGFILE);
     m_devconfig.access_delay = ini_getl("IDE", "access_delay", 0, CONFIGFILE);
+    m_devconfig.ide_identify_gencfg = ini_getl("IDE", "identify_gencfg", 0, CONFIGFILE);
 
+    if (m_devconfig.ide_identify_gencfg)
+        logmsg("-- ATA IDENTIFY General Configuration: ", (uint16_t) m_devconfig.ide_identify_gencfg);
+    
     g_ignore_cmd_interrupt = ini_getl("IDE", "ignore_command_interrupt", 1, CONFIGFILE);
     if (!g_ignore_cmd_interrupt)
     {
