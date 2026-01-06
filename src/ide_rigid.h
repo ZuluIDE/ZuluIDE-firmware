@@ -72,7 +72,7 @@ public:
 
     virtual void insert_media(IDEImage *image = nullptr) override;
 
-    virtual inline void insert_next_media(IDEImage *image = nullptr) override {;}
+    virtual inline bool insert_next_media(IDEImage *image = nullptr) override {return false;}
 
     virtual inline bool set_load_deferred(const char* image_name) override {return false;}
     virtual inline bool is_load_deferred() override {return false;}
@@ -82,6 +82,7 @@ public:
     virtual inline void set_loaded_without_media(bool no_media) override{;}
 
     virtual inline void loaded_new_media() override {;}
+    virtual inline void eject_then_load_new_media() override {;}
 
     virtual inline void set_load_first_image_cb(void (*load_image_cb)()) override {;}
 protected:

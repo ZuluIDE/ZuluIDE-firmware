@@ -73,7 +73,7 @@ public:
 
     virtual void insert_media(IDEImage *image = nullptr) override;
 
-    virtual void insert_next_media(IDEImage *image = nullptr) override;
+    virtual bool insert_next_media(IDEImage *image = nullptr) override;
 
     virtual inline bool set_load_deferred(const char* image_name) override {return false;}
     virtual inline bool is_load_deferred() override {return false;}
@@ -87,6 +87,8 @@ public:
     virtual inline bool is_removable() override {return m_devinfo.removable;}
 
     virtual void loaded_new_media() override;
+
+    virtual void eject_then_load_new_media() override;
 
     virtual inline bool is_loaded_without_media() override {return m_removable.loaded_without_media;}
     virtual void set_loaded_without_media(bool no_media) override;
@@ -239,5 +241,8 @@ protected:
 
     // Set not ready if enabled via config ini
     virtual void set_not_ready(bool not_ready);
+
+    // shared memory for when a temporary filename is need
+    char m_filename[MAX_FILE_PATH + 1];
 
 };

@@ -47,9 +47,11 @@ public:
 
     virtual void insert_media(IDEImage *image = nullptr) override;
 
-    virtual void insert_next_media(IDEImage *image = nullptr) override;
+    virtual bool insert_next_media(IDEImage *image = nullptr) override;
 
     virtual void loaded_new_media() override;
+
+    virtual void eject_then_load_new_media() override;
 
     virtual void set_loaded_without_media(bool no_media) override;
 
@@ -165,9 +167,8 @@ protected:
 
     bool doPlayAudio(uint32_t lba, uint32_t length);
 
-    // shared memory for when a temporary filename is need
-    char m_filename[MAX_FILE_PATH + 1];
-
     CUETrackInfo m_first_track;
     CUETrackInfo m_last_track;
+
+    bool m_eject_then_load_cycle;
 };
