@@ -574,6 +574,7 @@ void setupStatusController()
   }
   else
   {
+        g_ide_device->set_loaded_without_media(false);
         loadFirstImage();
   }
 }
@@ -663,11 +664,7 @@ void status_observer(const zuluide::status::SystemStatus& current) {
     {
       load_image(current.GetLoadedImage());
     } 
-    else
-    {
-      if (!g_ide_device->is_load_deferred())
-        g_ide_device->set_loaded_without_media(true);
-    }
+
   }
   g_previous_controller_status = current;
 }
