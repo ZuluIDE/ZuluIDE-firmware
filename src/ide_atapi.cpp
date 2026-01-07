@@ -1431,7 +1431,7 @@ size_t IDEATAPIDevice::atapi_get_configuration(uint8_t return_type, uint16_t fea
 
 bool IDEATAPIDevice::is_medium_present()
 {
-    return has_image() && (!m_devinfo.removable || (m_devinfo.removable && (!m_removable.ejected || is_loaded_without_media())));
+    return has_image() && !(m_devinfo.removable && (m_removable.ejected || is_loaded_without_media()));
 }
 
 void IDEATAPIDevice::eject_button_poll(bool immediate)
