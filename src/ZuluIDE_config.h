@@ -69,3 +69,6 @@
 
 // Prefix for command file to create new image (case-insensitive)
 #define CREATEFILE "create"
+
+// Name of startup sound file
+#define STARTUPSOUND "startup.wav"

@@ -30,6 +30,7 @@
 #include "ZuluIDE_config.h"
 #include "ZuluIDE_platform.h"
 #include "ZuluIDE_msc.h"
+#include "ZuluIDE_audio.h"
 #include "ZuluIDE_log.h"
 #include "ide_protocol.h"
 #include "ide_cdrom.h"
@@ -799,6 +800,14 @@ void zuluide_init(void)
     // Set to ejected state if there is no media present
     g_ide_device->eject_media();
   }
+
+#ifdef STARTUPSOUND
+  if (g_sdcard_present && SD.exists(STARTUPSOUND))
+  {
+    logmsg("Playing " STARTUPSOUND);
+    audio_play_wav(STARTUPSOUND);
+  }
+#endif
 
   blinkStatus(BLINK_STATUS_OK);
   logmsg("Initialization complete!");

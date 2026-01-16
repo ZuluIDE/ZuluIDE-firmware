@@ -82,6 +82,13 @@ bool audio_is_playing();
 bool audio_play(uint32_t start, uint32_t length, bool swap);
 
 /**
+ * Begin playback of a raw WAV file.
+ *
+ * Currently only stereo, 16-bit, 44100 Hz format is supported.
+ */
+bool audio_play_wav(const char *filename);
+
+/**
  * Pauses audio playback. This may be delayed slightly to allow sample buffers
  * to purge.
  *

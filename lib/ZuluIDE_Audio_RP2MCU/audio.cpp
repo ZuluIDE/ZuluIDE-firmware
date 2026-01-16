@@ -512,32 +512,8 @@ void audio_poll() {
     }
 }
 
-bool audio_play(uint32_t start, uint32_t length, bool swap) {
-    // stop any existing playback first
-    if (!audio_idle) audio_stop();
-
-    // dbgmsg("Request to play ('", file, "':", start, ":", end, ")");
-
-    // verify audio file is present and inputs are (somewhat) sane
-    platform_set_sd_callback(NULL, NULL);
-
-    if(!setup_playback(start, length, false))
-        return false;
-
-    if (length == 0)
-    {
-        audio_last_status = ASC_NO_STATUS;
-        audio_paused = false;
-        audio_playing = false;
-        audio_idle = true;
-        return true;
-    }
-
-    audio_last_status = ASC_PLAYING;
-    audio_paused = false;
-    audio_playing = true;
-    audio_idle = false;
-
+static void audio_start_dma()
+{
     // read in initial sample buffers
     if (within_gap)
     {
@@ -579,6 +555,100 @@ bool audio_play(uint32_t start, uint32_t length, bool swap) {
 
     // ready to go
     dma_channel_start(SOUND_DMA_CHA);
+}
+
+bool audio_play(uint32_t start, uint32_t length, bool swap) {
+    // stop any existing playback first
+    if (!audio_idle) audio_stop();
+
+    // dbgmsg("Request to play ('", file, "':", start, ":", end, ")");
+
+    // verify audio file is present and inputs are (somewhat) sane
+    platform_set_sd_callback(NULL, NULL);
+
+    if(!setup_playback(start, length, false))
+        return false;
+
+    if (length == 0)
+    {
+        audio_last_status = ASC_NO_STATUS;
+        audio_paused = false;
+        audio_playing = false;
+        audio_idle = true;
+        return true;
+    }
+
+    audio_last_status = ASC_PLAYING;
+    audio_paused = false;
+    audio_playing = true;
+    audio_idle = false;
+
+    audio_start_dma();
+    return true;
+}
+
+typedef struct {
+    uint8_t riff[4];
+    uint32_t filesize;
+    uint8_t wave[4];
+    uint8_t fmt[4];
+    uint32_t fmt_len;
+    uint16_t fmt_type;
+    uint16_t channelcount;
+    uint32_t samplerate;
+    uint32_t byterate;
+    uint16_t bytes_per_step;
+    uint16_t bits_per_sample;
+    uint8_t data[4];
+    uint32_t data_len;
+} wav_header_t;
+
+bool audio_play_wav(const char *filename)
+{
+    if (!audio_idle) audio_stop();
+
+    if (!audio_file.open(filename, O_RDONLY))
+    {
+        logmsg("Failed to open WAV: ", filename, " ", audio_file.getError());
+        return false;
+    }
+
+    // Read WAV file header and verify suitable format
+    wav_header_t hdr = {};
+    if (audio_file.read(&hdr, sizeof(hdr)) != sizeof(hdr) ||
+        memcmp(hdr.riff, "RIFF", 4) != 0 ||
+        memcmp(hdr.wave, "WAVE", 4) != 0 ||
+        memcmp(hdr.fmt, "fmt ", 4) != 0)
+    {
+        logmsg("Invalid WAV file header in ", filename, ": ",
+                bytearray((uint8_t*)&hdr, 16));
+        return false;
+    }
+
+    if (hdr.fmt_type != 1 ||
+        hdr.channelcount != 2 ||
+        hdr.samplerate != 44100 ||
+        hdr.bits_per_sample != 16)
+    {
+        logmsg("Only stereo 16-bit 44100 Hz PCM WAV is supported, file ", filename, " has"
+            " format ", (int)hdr.fmt_type,
+            " channelcount ", (int)hdr.channelcount,
+            " samplerate ", (int)hdr.samplerate,
+            " bits_per_sample ", (int)hdr.bits_per_sample);
+        return false;
+    }
+
+    audio_last_status = ASC_PLAYING;
+    audio_paused = false;
+    audio_playing = true;
+    audio_idle = false;
+
+    last_track_reached = true;
+    within_gap = false;
+    fleft = hdr.data_len;
+    fpos = sizeof(hdr);
+
+    audio_start_dma();
     return true;
 }
 
