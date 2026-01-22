@@ -63,14 +63,18 @@ namespace zuluide::status {
     bool IsDeferred() const;
     void SetIsDeferred(bool defer);
 
+    bool IsEject() const;
+    void SetIsEject(bool eject);
+
     std::string ToJson() const;
   private:
     std::unique_ptr<IDeviceStatus> primary;
     std::string firmwareVersion;
     std::unique_ptr<zuluide::images::Image> loadedImage;
-    bool isPrimary;
     bool isCardPresent;
+    bool isPrimary;
     bool isPreventRemovable;
     bool isDeferred;
+    bool isEject;
   };
 }
