@@ -894,6 +894,22 @@ void platform_poll(bool only_from_main)
 
 #ifdef PLATFORM_BOOTLOADER_SIZE
 
+static void __no_inline_not_in_flash_func(set_flash_clock)()
+{
+    // Ensure that high performance 4-bit flash mode is used for code fetches.
+    // This is normally the default but if coming through rom_chain_image() the
+    // flash may be in 1-bit mode after flash_do_cmd() call.
+    // See https://github.com/raspberrypi/pico-bootrom-rp2350/issues/10
+    //
+    // Flash clock divider 3 gives 50 MHz clock for 150 MHz, and 83 for 250 MHz.
+    // The W25Q16JV maximum is 133 MHz.
+    //
+    // In practice most of the code is in cache or RAM, so the performance effect
+    // of higher clocks is not huge.
+    rom_flash_exit_xip();
+    rom_flash_select_xip_read_mode(BOOTROM_XIP_MODE_EBH_QUAD, 3);
+}
+
 extern uint32_t __real_vectors_start;
 extern uint32_t __StackTop;
 
@@ -970,6 +986,7 @@ bool platform_rewrite_flash_page(uint32_t offset, uint8_t buffer[PLATFORM_FLASH_
 
     flash_range_erase(offset, PLATFORM_FLASH_PAGE_SIZE);
     flash_range_program(offset, buffer, PLATFORM_FLASH_PAGE_SIZE);
+    set_flash_clock();
 
     uint32_t *buf32 = (uint32_t*)buffer;
     uint32_t num_words = PLATFORM_FLASH_PAGE_SIZE / 4;
