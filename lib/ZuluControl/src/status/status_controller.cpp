@@ -45,6 +45,7 @@ void StatusController::AddObserver(std::function<void(const SystemStatus&)> call
 
 void StatusController::EjectImage() {
   status.SetLoadedImage(nullptr);
+  status.SetIsEject(true);
   notifyObservers();
 }
 
@@ -107,6 +108,7 @@ void StatusController::LoadImage(zuluide::images::Image i) {
 void StatusController::LoadImageSafe(zuluide::images::Image i) {
   UpdateAction* actionToExecute = new UpdateAction();
   actionToExecute->ToLoad = std::make_unique<zuluide::images::Image>(i);
+  actionToExecute->IsEject = false;
   if(!updateQueue.TryAdd(&actionToExecute)) {
     logmsg("Load image failed to enqueue.");
   }
@@ -114,6 +116,7 @@ void StatusController::LoadImageSafe(zuluide::images::Image i) {
 
 void StatusController::EjectImageSafe() {
   UpdateAction* actionToExecute = new UpdateAction();
+  actionToExecute->IsEject = true;
   if(!updateQueue.TryAdd(&actionToExecute)) {
     logmsg("Eject image failed to enqueue.");
   }
@@ -126,7 +129,9 @@ void StatusController::ProcessUpdates() {
     if (actionToExecute->ToLoad) {
       LoadImage(*actionToExecute->ToLoad);
     } else {
-      EjectImage();
+      if (actionToExecute->IsEject){
+        EjectImage();
+      }
     }
    
     delete(actionToExecute);

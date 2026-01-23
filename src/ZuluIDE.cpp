@@ -653,7 +653,11 @@ void clear_image() {
 
 void status_observer(const zuluide::status::SystemStatus& current) {
   // We need to check and see what changes have occurred.
-  if (g_ide_device->is_loaded_without_media() && current.HasLoadedImage()) {
+  if (!current.HasLoadedImage() && current.IsEject())
+  {
+    g_ide_device->button_eject_media();
+  }
+  else if (g_ide_device->is_loaded_without_media() && current.HasLoadedImage()) {
 
     load_image(current.GetLoadedImage());
     g_ide_device->set_loaded_without_media(false);

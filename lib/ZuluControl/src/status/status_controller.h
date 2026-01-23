@@ -91,6 +91,7 @@ namespace zuluide::status {
       /***
           If the value is null, this is an eject.
        **/
+      bool IsEject;
       std::unique_ptr<zuluide::images::Image> ToLoad;
     };
 

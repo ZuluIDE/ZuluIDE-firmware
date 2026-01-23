@@ -34,7 +34,7 @@ SystemStatus::SystemStatus()
 }
 
 SystemStatus::SystemStatus(const SystemStatus& src)
-  : firmwareVersion(src.firmwareVersion), isCardPresent(src.isCardPresent), isPrimary(src.isPrimary), isPreventRemovable(src.isPreventRemovable), isDeferred(src.isDeferred)
+  : firmwareVersion(src.firmwareVersion), isCardPresent(src.isCardPresent), isPrimary(src.isPrimary), isPreventRemovable(src.isPreventRemovable), isDeferred(src.isDeferred), isEject(src.isEject)
 {
   if (src.primary) {
     primary = std::move(src.primary->Clone());
@@ -54,6 +54,7 @@ SystemStatus::SystemStatus(SystemStatus&& src)
   isPrimary = src.isPrimary;
   isPreventRemovable = src.isPreventRemovable;
   isDeferred = src.isDeferred;
+  isEject = src.isEject;
 }
 
 SystemStatus& SystemStatus::operator= (SystemStatus&& src) {
@@ -64,6 +65,7 @@ SystemStatus& SystemStatus::operator= (SystemStatus&& src) {
   isPrimary = src.isPrimary;
   isPreventRemovable = src.isPreventRemovable;  
   isDeferred = src.isDeferred;
+  isEject = src.isEject;
   return *this;
 }
 
@@ -82,6 +84,7 @@ SystemStatus& SystemStatus::operator= (const SystemStatus& src) {
   isPrimary = src.isPrimary;
   isPreventRemovable = src.isPreventRemovable;
   isDeferred = src.isDeferred;
+  isEject = src.isEject;
 
   return *this;
 }
@@ -95,6 +98,8 @@ void SystemStatus::SetFirmwareVersion(std::string&& frmVer) {
 }
 
 void SystemStatus::SetLoadedImage(std::unique_ptr<zuluide::images::Image> image) {
+  if (image != nullptr)
+    isEject = false;
   loadedImage = std::move(image);
 }
 
@@ -155,6 +160,13 @@ bool SystemStatus::IsDeferred() const {
 }
 void SystemStatus::SetIsDeferred(bool defer){
   isDeferred = defer;
+}
+
+bool SystemStatus::IsEject() const {
+  return isEject;
+}
+void SystemStatus::SetIsEject(bool eject) {
+  isEject = eject;
 }
 
 static const char* toString(bool value) {

@@ -67,9 +67,9 @@ public:
 
     virtual void eject_button_poll(bool immediate);
 
-    virtual void button_eject_media();
+    virtual void button_eject_media() override;
 
-    virtual void eject_media();
+    virtual void eject_media() override;
 
     virtual void insert_media(IDEImage *image = nullptr) override;
 
