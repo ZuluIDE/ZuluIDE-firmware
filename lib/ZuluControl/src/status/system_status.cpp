@@ -79,6 +79,10 @@ SystemStatus& SystemStatus::operator= (const SystemStatus& src) {
   if (src.loadedImage) {
     loadedImage = std::make_unique<zuluide::images::Image>(*src.loadedImage);
   }
+  else
+  {
+    loadedImage = nullptr;
+  }
 
   isCardPresent = src.isCardPresent;
   isPrimary = src.isPrimary;
