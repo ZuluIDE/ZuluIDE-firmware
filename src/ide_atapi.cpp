@@ -55,6 +55,7 @@ void IDEATAPIDevice::initialize(int devidx)
     m_removable.reinsert_media_on_inquiry = ini_getbool("IDE", "reinsert_media_on_inquiry", true, CONFIGFILE);
     m_removable.reinsert_media_after_sd_insert = ini_getbool("IDE", "reinsert_media_on_sd_insert", true, CONFIGFILE);
     m_removable.ignore_prevent_removal = ini_getbool("IDE", "ignore_prevent_removal", false, CONFIGFILE);
+    m_removable.ejected = false;
     if (m_devinfo.removable && !m_removable.ignore_prevent_removal)
         logmsg("Respecting host preventing removal of media");
     memset(&m_atapi_state, 0, sizeof(m_atapi_state));
@@ -63,7 +64,6 @@ void IDEATAPIDevice::initialize(int devidx)
 
 void IDEATAPIDevice::reset()
 {
-    m_removable.ejected = false;
     m_removable.prevent_persistent = false;
     m_removable.prevent_removable = false;
 }
@@ -886,8 +886,13 @@ bool IDEATAPIDevice::atapi_cmd_ok()
     }
 
     dbgmsg("-- ATAPI success");
-    m_atapi_state.sense_key = 0;
-    m_atapi_state.sense_asc = 0;
+
+    if (!m_atapi_state.unit_attention)
+    {
+        m_atapi_state.sense_key = 0;
+        m_atapi_state.sense_asc = 0;
+    }
+
     m_atapi_state.data_state = ATAPI_DATA_IDLE;
 
     ide_registers_t regs = {};
