@@ -68,7 +68,7 @@ static bool g_ide_reset_after_init_done;
 
 bool g_ignore_cmd_interrupt;
 
-static void do_phy_reset()
+static void do_phy_config()
 {
     if (g_ide_devices[1] == NULL)
     {
@@ -103,7 +103,6 @@ static void do_phy_reset()
     g_ide_config.enable_packet_intrq = ini_getbool("IDE", "atapi_intrq", default_intrq, CONFIGFILE);
     g_ide_config.disable_iocs16 = ini_getbool("IDE", "disable_iocs16", false, CONFIGFILE);
 
-
     if (g_ide_config.enable_dev0 && g_ide_config.enable_dev1_zeros)
     {
         dbgmsg("-- IDE PHY reset, operating as primary drive without secondary drive");
@@ -121,7 +120,7 @@ static void do_phy_reset()
         dbgmsg("-- IDE PHY reset, operating as two drives");
     }
 
-    ide_phy_reset(&g_ide_config);
+    ide_phy_config(&g_ide_config);
 }
 
 const ide_phy_config_t *ide_protocol_get_config()
@@ -137,7 +136,7 @@ void ide_protocol_init(IDEDevice *primary, IDEDevice *secondary)
     if (primary) primary->initialize(0);
     if (secondary) secondary->initialize(1);
 
-    do_phy_reset();
+    do_phy_config();
     g_ide_reset_after_init_done = false;
 }
 
@@ -255,7 +254,7 @@ void ide_protocol_poll()
                 // \todo move to a reset or init function
                 g_exec_dev_diag_state = EXEC_DEV_DIAG_STATE_IDLE;
 
-                do_phy_reset();
+                ide_phy_reset();
 
                 if (g_ide_devices[1])
                 {
@@ -377,7 +376,7 @@ void ide_protocol_poll()
 
                         // Apply configuration based on whether drive1 was present
                         g_drive1_detected = detected;
-                        do_phy_reset();
+                        do_phy_config();
                     }
 
                     g_last_reset_event = IDE_EVENT_NONE;
