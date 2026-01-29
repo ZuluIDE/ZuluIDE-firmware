@@ -80,7 +80,7 @@ static ide_phy_capabilities_t g_ide_phy_capabilities = {
 };
 
 // Reset the IDE phy
-void ide_phy_reset(const ide_phy_config_t* config)
+void ide_phy_config(const ide_phy_config_t* config)
 {
     g_ide_phy.config = *config;
     g_ide_phy.watchdog_error = false;
@@ -94,6 +94,15 @@ void ide_phy_reset(const ide_phy_config_t* config)
     if (config->disable_iordy)       cfg |= 0x20;
     if (config->enable_packet_intrq) cfg |= 0x40;
     fpga_wrcmd(FPGA_CMD_SET_IDE_PHY_CFG, &cfg, 1);
+}
+
+// Reset the IDE phy
+void ide_phy_reset()
+{
+    ide_phy_stop_transfers();
+    uint8_t clear_all_mask = 0xFF;
+    fpga_wrcmd(FPGA_CMD_CLR_IRQ_FLAGS, &clear_all_mask, 1);
+    g_ide_phy.watchdog_error = false;
 }
 
 void ide_phy_reset_from_watchdog()
@@ -121,7 +130,7 @@ ide_event_t ide_phy_get_events()
 
     if (g_ide_phy.watchdog_error)
     {
-        ide_phy_reset(&g_ide_phy.config);
+        ide_phy_reset();
         return IDE_EVENT_HWRST;
     }
     else if (status & FPGA_STATUS_IDE_RST)
