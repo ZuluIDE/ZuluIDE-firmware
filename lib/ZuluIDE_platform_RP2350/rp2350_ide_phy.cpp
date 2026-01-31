@@ -198,7 +198,7 @@ ide_event_t ide_phy_get_events()
     if (flags & CORE1_EVT_HWRST)
     {
         ide_phy_clear_event(CORE1_EVT_HWRST);
-        sleep_us(100);
+        sleep_us(250);
         if (g_idecomm.events & CORE1_EVT_HWRST)
         {
             // Reset still continues, report when it ends
