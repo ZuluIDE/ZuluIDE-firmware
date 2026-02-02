@@ -32,6 +32,13 @@
 // it is busy handling previous requests.
 #define CORE1_REQ_BUSY              0x80000000
 
+// Amount of delay core 0 should wait before getting
+// or setting values for core 1
+#ifndef CORE1_RESPONSE_DELAY
+#define CORE1_RESPONSE_DELAY 100
+#endif
+
+
 typedef struct {
     ide_registers_t regs;
     int state_irqreq: 1; // Interrupt is being asserted to host
