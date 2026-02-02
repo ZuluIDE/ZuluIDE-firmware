@@ -79,7 +79,7 @@ void ide_phy_config(const ide_phy_config_t* config)
     if (g_rp2350_passive_sniffer) return;
 
     g_idecomm.enable_idephy = false;
-    sleep_us(100);
+    busy_wait_us_32(CORE1_RESPONSE_DELAY);
 
     // Only initialize registers once after boot, after that ide_protocol handles it.
     static bool regs_inited = false;
@@ -118,7 +118,7 @@ void ide_phy_config(const ide_phy_config_t* config)
 
     g_idecomm.enable_idephy = true;
 
-    sleep_us(100);
+    busy_wait_us_32(CORE1_RESPONSE_DELAY);
     core1_log_poll();
 
     if (g_idecomm.requests & CORE1_REQ_SET_REGS)
@@ -132,7 +132,7 @@ void ide_phy_reset()
     if (g_rp2350_passive_sniffer) return;
 
     g_idecomm.enable_idephy = false;
-    sleep_us(100);
+    busy_wait_us_32(CORE1_RESPONSE_DELAY);
     phy_ide_registers_t phyregs = g_idecomm.phyregs;
     __sync_synchronize();
 
@@ -146,7 +146,7 @@ void ide_phy_reset()
 
     g_idecomm.enable_idephy = true;
 
-    sleep_us(100);
+    busy_wait_us_32(CORE1_RESPONSE_DELAY);
     core1_log_poll();
 
     if (g_idecomm.requests & CORE1_REQ_SET_REGS)
@@ -198,7 +198,7 @@ ide_event_t ide_phy_get_events()
     if (flags & CORE1_EVT_HWRST)
     {
         ide_phy_clear_event(CORE1_EVT_HWRST);
-        sleep_us(100);
+        busy_wait_us_32(CORE1_RESPONSE_DELAY);
         if (g_idecomm.events & CORE1_EVT_HWRST)
         {
             // Reset still continues, report when it ends
@@ -211,7 +211,6 @@ ide_event_t ide_phy_get_events()
     }
     else if ((flags & CORE1_EVT_SWRST) || g_ide_phy.watchdog_error)
     {
-        return IDE_EVENT_HWRST;
         // Software reset
         ide_phy_clear_event(CORE1_EVT_SWRST);
         g_ide_phy.watchdog_error = false;
@@ -481,7 +480,7 @@ uint8_t ide_phy_get_signals()
     {
         last_poll = time_now;
         ide_phy_post_request(CORE1_REQ_GET_SIGNALS);
-        sleep_us(10);
+        busy_wait_us_32(CORE1_RESPONSE_DELAY);
     }
 
     return g_idecomm.get_signals;
