@@ -76,8 +76,8 @@ Programming & bootloader
 For RP2040-based boards, the USB programming uses `.uf2` format file that can be copied to the virtual USB drive that shows up in USB bootloader mode, which is enabled with DIP switch.
 
 - There is a custom SD-card bootloader that loads new firmware from SD card on boot.
-- The firmware file name must be e.g. `ZuluIDE.bin` or `ZuluIDEv1_0_2023-xxxxx.bin`.
-- Firmware update takes about 1 second, during which the LED will flash rapidly.
+- The firmware file name must not be changed/re-named when copying the .bin file to the SD card. Doing so will cause the bootloader to fail to detect the .bin file properly.
+- Firmware update takes about three seconds, during which the LED will flash rapidly.
 - When successful, the bootloader removes the update file and continues to main firmware.
 
 DIP switches
