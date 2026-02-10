@@ -1070,6 +1070,11 @@ mutex_t* platform_get_log_mutex() {
 
 bool platform_enable_sniffer(const char *filename, bool passive)
 {
+#ifdef ENABLE_AUDIO_OUTPUT
+    logmsg("-- Disabling audio to enable sniffer");
+    audio_disable();
+#endif
+
     if (passive)
     {
         // Stop IDE phy and configure pins for passive input
