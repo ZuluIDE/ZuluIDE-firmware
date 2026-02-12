@@ -217,6 +217,12 @@ void platform_init()
         gpio_conf(IDE_D0 + i, GPIO_FUNC_SIO, false, false, false, false, true);
     }
 
+    // Improve DIOR -> IORDY speed by maximizing IORDY drive strength and
+    // by minimizing DIOR input latency by disabling schmitt trigger.
+    gpio_set_drive_strength(IDE_IORDY_OUT, GPIO_DRIVE_STRENGTH_12MA);
+    gpio_set_drive_strength(IDE_IORDY_EN, GPIO_DRIVE_STRENGTH_12MA);
+    gpio_set_input_hysteresis_enabled(IDE_DIOR, false);
+
     // Status LED
     gpio_conf(STATUS_LED,     GPIO_FUNC_SIO, false,false, true,  false, false);
 }

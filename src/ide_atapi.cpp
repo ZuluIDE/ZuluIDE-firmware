@@ -139,11 +139,13 @@ bool IDEATAPIDevice::cmd_set_features(ide_registers_t *regs)
         {
             m_atapi_state.udma_mode = -1;
             logmsg("-- Set PIO default transfer mode");
+            ide_phy_set_pio_mode(0);
         }
         else if (mode_major == 1 && mode_minor <= m_phy_caps.max_pio_mode)
         {
             m_atapi_state.udma_mode = -1;
             logmsg("-- Set PIO transfer mode ", (int)mode_minor);
+            ide_phy_set_pio_mode(mode_minor);
         }
         else if (mode_major == 8 && mode_minor <= m_phy_caps.max_udma_mode)
         {
