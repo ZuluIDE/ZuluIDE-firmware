@@ -207,6 +207,11 @@ void ide_phy_set_regs(const ide_registers_t *regs)
     fpga_wrcmd(FPGA_CMD_WRITE_IDE_REGS, (const uint8_t*)regs, sizeof(*regs));
 }
 
+void ide_phy_set_pio_mode(int pio_mode)
+{
+    // No effect, FPGA response time is same in all PIO modes
+}
+
 // Data writes to IDE bus
 void ide_phy_start_write(uint32_t blocklen, int udma_mode)
 {

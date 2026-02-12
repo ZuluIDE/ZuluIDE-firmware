@@ -254,6 +254,18 @@ void ide_phy_set_regs(const ide_registers_t *regs)
     // dbgmsg("SET_REGS, status ", regs->status, " error ", regs->error, " lba_high ", regs->lba_high, " data_in ", (int)g_idecomm.phyregs.state_datain);
 }
 
+void ide_phy_set_pio_mode(int pio_mode)
+{
+    // Core1 uses different timing mode to support newer hosts with PIO mode >= 3.
+    // Both timings work for the vast majority of devices, but a slightly different
+    // handling of IORDY improves compatibility.
+    if (pio_mode != g_idecomm.pio_mode)
+    {
+        g_idecomm.pio_mode = pio_mode;
+        ide_phy_post_request(CORE1_REQ_CHANGE_PIO_MODE);
+    }
+}
+
 void ide_phy_start_write(uint32_t blocklen, int udma_mode)
 {
     if (blocklen & 1) blocklen++;

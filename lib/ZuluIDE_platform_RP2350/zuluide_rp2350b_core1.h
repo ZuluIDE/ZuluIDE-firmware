@@ -27,17 +27,18 @@
 #define CORE1_REQ_PRINT_DEBUG       0x0020
 #define CORE1_REQ_SET_SIGNALS       0x0040
 #define CORE1_REQ_GET_SIGNALS       0x0080
+#define CORE1_REQ_CHANGE_PIO_MODE   0x0100
 
 // This is set and cleared by core1 to indicate whether
 // it is busy handling previous requests.
 #define CORE1_REQ_BUSY              0x80000000
 
-// Amount of delay core 0 should wait before getting
-// or setting values for core 1
+// If the CORE1_REQ_BUSY mechanism is not appropriate,
+// CORE0 can instead wait for CORE1_RESPONSE_DELAY microseconds
+// after posting a CORE1 request.
 #ifndef CORE1_RESPONSE_DELAY
 #define CORE1_RESPONSE_DELAY 100
 #endif
-
 
 typedef struct {
     ide_registers_t regs;
@@ -100,6 +101,9 @@ extern struct idecomm_t {
     // Access with CORE1_REQ_SET_SIGNALS and CORE1_REQ_GET_SIGNALS
     uint8_t set_signals;
     uint8_t get_signals;
+
+    // Active PIO mode.
+    int pio_mode;
 } g_idecomm;
 
 #define IDE_PIO                pio0

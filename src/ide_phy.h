@@ -87,6 +87,9 @@ void ide_phy_get_regs(ide_registers_t *regs);
 // Set current state of IDE registers
 void ide_phy_set_regs(const ide_registers_t *regs);
 
+// Set current PIO mode, in case it affects hardware behavior.
+void ide_phy_set_pio_mode(int pio_mode);
+
 // IDE data transfer happens in DRQ blocks, the size of which can be negotiated
 // between host and device.
 //
