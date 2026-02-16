@@ -51,6 +51,8 @@
 #include "control/std_display_controller.h"
 #include "control/control_interface.h"
 #include "ZuluIDE_create_image.h"
+#include "USB.h"
+#include "SerialUSB.h"
 
 #include <zip_parser.h>
 bool g_sdcard_present;
@@ -797,6 +799,8 @@ void zuluide_init(void)
   platform_late_init();
   zuluide_setup_sd_card();
   zuluide_reload_config();
+  USB.begin();
+  Serial.begin(115200);
 
 #ifdef PLATFORM_MASS_STORAGE
   static bool check_mass_storage = true;
