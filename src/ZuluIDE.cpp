@@ -51,6 +51,8 @@
 #include "control/std_display_controller.h"
 #include "control/control_interface.h"
 #include "ZuluIDE_create_image.h"
+#include "USB.h"
+#include "SerialUSB.h"
 
 #include <zip_parser.h>
 bool g_sdcard_present;
@@ -591,11 +593,30 @@ void loadFirstImage() {
     FsFile last_saved = SD.open(LASTFILE, O_RDONLY);
     if (last_saved.isOpen())
     {
-      String image_name = last_saved.readStringUntil('\n');
-      last_saved.close();
-      if (imgIterator.MoveToFile(image_name.c_str()))
+      char last_used_filename[MAX_FILE_PATH + 1] = {0};
+      for (size_t pos = 0; pos < sizeof(last_used_filename); pos++)
       {
-        if (!quiet) logmsg("-- Loading last used image: \"", image_name.c_str(), "\"");
+        int character = last_saved.read();
+        if (character < 0 || character == '\n')
+        {
+          break;
+        }
+
+        if (pos >= sizeof(last_used_filename) - 1)
+        {
+          // Filename is too long
+          logmsg("Last used filename in ", LASTFILE, " is too long");
+          last_used_filename[0] = '\0';
+          break;
+        }
+        last_used_filename[pos] = (char)character;
+      }
+      last_saved.close();
+      bool last_filename_valid = last_used_filename[0] != '\0';
+
+      if (last_filename_valid && imgIterator.MoveToFile(last_used_filename))
+      {
+        if (!quiet) logmsg("-- Loading last used image: \"", last_used_filename, "\"");
         g_StatusController.LoadImage(imgIterator.Get());
         g_previous_controller_status = g_StatusController.GetStatus();
         g_loadedFirstImage = true;
@@ -604,7 +625,7 @@ void loadFirstImage() {
       }
       if (!success)
       {
-        if (!quiet) logmsg("-- Last used image \"", image_name.c_str(), "\" not found");
+        if (!quiet && last_filename_valid) logmsg("-- Last used image \"", last_used_filename, "\" not found");
       }
     }
     quiet = true;
@@ -778,6 +799,8 @@ void zuluide_init(void)
   platform_late_init();
   zuluide_setup_sd_card();
   zuluide_reload_config();
+  USB.begin();
+  Serial.begin(115200);
 
 #ifdef PLATFORM_MASS_STORAGE
   static bool check_mass_storage = true;
