@@ -1025,6 +1025,16 @@ void platform_boot_to_main_firmware()
     }
 #endif
 
+    // Disable any interrupts the platform code may have enabled
+    // during the bootloader. Because of secureboot, going through
+    // the reset handler would be slow. Instead jump directly, but
+    // we need to be careful to reset enough of the system state.
+    m33_hw->syst_csr = 0;
+    nvic_hw->icer[0] = 0xFFFFFFFF;
+    nvic_hw->icer[1] = 0xFFFFFFFF;
+    nvic_hw->icpr[0] = 0xFFFFFFFF;
+    nvic_hw->icpr[1] = 0xFFFFFFFF;
+
     // Jump directly to main firmware
     uint32_t *application_base = (uint32_t*)(XIP_BASE + MAINAPP_OFFSET);
     scb_hw->vtor = (uint32_t)application_base;
