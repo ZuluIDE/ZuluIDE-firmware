@@ -38,6 +38,7 @@
 #include "ide_removable.h"
 #include "ide_rigid.h"
 #include "ide_imagefile.h"
+#include <ZuluControl_platform.h>
 #include "status/status_controller.h"
 #include <zuluide/status/cdrom_status.h>
 #include <zuluide/status/removable_status.h>
@@ -416,12 +417,13 @@ void init_logfile()
     first_open_after_boot = false;
 }
 
+
+
 drive_type_t searchForDriveType() {
   zuluide::images::ImageIterator imgIter;
-  imgIter.Reset();
-  while (imgIter.MoveNext()) {
-    Image image = imgIter.Get();
-
+  Image image = imgIter.QuickGet();
+  if (!image.GetFilename().empty())
+  {
     if (image.GetImageType() == Image::ImageType::cdrom) {
       return DRIVE_TYPE_CDROM;
     }
@@ -433,7 +435,6 @@ drive_type_t searchForDriveType() {
       return Image::ToDriveType(imageType);
     }
   }
-
   imgIter.Cleanup();
 
   // If nothing is found, default to a CDROM.
@@ -565,20 +566,65 @@ void setupStatusController()
     g_StatusController.EndUpdate();
   }
 
-  if (isPrimary)
-    ide_protocol_init(g_ide_device, NULL); // Primary device
-  else
-    ide_protocol_init(NULL, g_ide_device); // Secondary device
   if (g_ide_device->is_removable() && ini_getbool("IDE", "no_media_on_init", 0, CONFIGFILE))
   {
+    // Start device without media
     g_ide_device->set_image(nullptr);
     g_ide_device->set_loaded_without_media(true);
     g_ide_device->set_load_first_image_cb(loadFirstImage);
   }
   else
   {
-        g_ide_device->set_loaded_without_media(false);
-        loadFirstImage();
+    // Load last image in constant time - avoid traversing all files
+    g_ide_device->set_loaded_without_media(false);
+    bool success = false;
+    if (ini_getbool("IDE", "init_with_last_used_image", 1, CONFIGFILE))
+    {
+      FsFile last_saved = SD.open(LASTFILE, O_RDONLY);
+      if (last_saved.isOpen())
+      {
+        char last_used_filename[MAX_FILE_PATH + 1] = {0};
+        for (size_t pos = 0; pos < sizeof(last_used_filename); pos++)
+        {
+          int character = last_saved.read();
+          if (character < 0 || character == '\n')
+          {
+            break;
+          }
+
+          if (pos >= sizeof(last_used_filename) - 1)
+          {
+            // Filename is too long
+            logmsg("Last used filename in ", LASTFILE, " is too long");
+            last_used_filename[0] = '\0';
+            break;
+          }
+          last_used_filename[pos] = (char)character;
+        }
+        last_saved.close();
+
+        bool last_filename_valid = last_used_filename[0] != '\0';
+        if (last_filename_valid)
+        {
+          ImageIterator imgItr;
+          Image img = imgItr.QuickGet(last_used_filename);
+          if (!img.GetFilename().empty())
+          {
+            logmsg("-- Loading last used image: \"", last_used_filename, "\"");
+            g_StatusController.LoadImage(img);
+            g_previous_controller_status = g_StatusController.GetStatus();
+            g_loadedFirstImage = true;
+            load_image(img, false);
+            g_loadedFirstImage = true;
+            success = true;
+          }
+        }
+      }
+    }
+    if (!success)
+    {
+      loadFirstImage();
+    }
   }
 }
 

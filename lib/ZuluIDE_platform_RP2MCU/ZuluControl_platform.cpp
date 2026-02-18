@@ -17,17 +17,18 @@
 #define CONTROLLER_TYPE_BOARD 1
 #define CONTROLLER_TYPE_WIFI  2
 
-static zuluide::control::RotaryControl g_rotary_input;
+zuluide::control::RotaryControl g_rotary_input;
 static TwoWire g_wire(GPIO_I2C_DEVICE, GPIO_I2C_SDA, GPIO_I2C_SCL);
-static zuluide::DisplaySSD1306 display;
+zuluide::DisplaySSD1306 display;
 
-static zuluide::pipe::ImageResponsePipe<zuluide::control::select_controller_source_t>* g_controllerImageResponsePipe;
-static zuluide::pipe::ImageResponsePipe<zuluide::i2c::i2c_server_source_t> g_I2CServerImageResponsePipe;
-static zuluide::pipe::ImageRequestPipe<zuluide::i2c::i2c_server_source_t> g_I2CServerImageRequestPipe;
-static zuluide::i2c::I2CServer g_I2cServer(&g_I2CServerImageRequestPipe, &g_I2CServerImageResponsePipe);
-static zuluide::ObserverTransfer<zuluide::status::SystemStatus> *uiStatusController;
+zuluide::pipe::ImageResponsePipe<zuluide::control::select_controller_source_t>* g_controllerImageResponsePipe;
+zuluide::pipe::ImageResponsePipe<zuluide::i2c::i2c_server_source_t> g_I2CServerImageResponsePipe;
+zuluide::pipe::ImageRequestPipe<zuluide::i2c::i2c_server_source_t> g_I2CServerImageRequestPipe;
+zuluide::i2c::I2CServer g_I2cServer(&g_I2CServerImageRequestPipe, &g_I2CServerImageResponsePipe);
+zuluide::ObserverTransfer<zuluide::status::SystemStatus> *uiStatusController;
 
-void processStatusUpdate(const zuluide::status::SystemStatus &currentStatus) {
+
+static void processStatusUpdate(const zuluide::status::SystemStatus &currentStatus) {
     // Notify the hardware UI of updates.
     display.HandleUpdate(currentStatus);
 
@@ -89,12 +90,38 @@ void platform_set_input_interface(zuluide::control::InputReceiver* inputReceiver
 void platform_set_device_control(zuluide::status::DeviceControlSafe* deviceControl) {
     logmsg("Initialized platform with device control.");
     char iniBuffer[100];
-    memset(&iniBuffer, 0, 100);
+    memset(&iniBuffer, 0, sizeof(iniBuffer));
     if (ini_gets("UI", "wifissid", "", iniBuffer, sizeof(iniBuffer), CONFIGFILE) > 0) {
         auto ssid = std::string(iniBuffer);
         g_I2cServer.SetSSID(ssid);
         logmsg("Set SSID from INI file to ", ssid.c_str());
         
+        if (ini_haskey("UI","wifi_static_ip", CONFIGFILE) && ini_haskey("UI", "wifi_static_gateway", CONFIGFILE))
+        {
+            logmsg("Using static IP settings:");
+            // prefix string with data types
+            memset(&iniBuffer, 0, sizeof(iniBuffer));
+            stpcpy(iniBuffer, "ip");
+            ini_gets("UI", "wifi_static_ip", "", &iniBuffer[2], sizeof(iniBuffer) - 2, CONFIGFILE);
+            auto ip = std::string(iniBuffer);
+            g_I2cServer.SetIPv4(ip);
+            logmsg("-- IP Address: ", &iniBuffer[2]);
+
+            memset(&iniBuffer, 0, sizeof(iniBuffer));
+            stpcpy(iniBuffer, "nm");
+            ini_gets("UI", "wifi_static_netmask", "255.255.255.0", &iniBuffer[2], sizeof(iniBuffer) - 2, CONFIGFILE);
+            auto netmask = std::string(iniBuffer);
+            g_I2cServer.SetNetmask(netmask);
+            logmsg("-- Netmask: ", &iniBuffer[2]);
+
+            memset(&iniBuffer, 0, sizeof(iniBuffer));
+            stpcpy(iniBuffer, "gw");
+            ini_gets("UI", "wifi_static_gateway", "", &iniBuffer[2], sizeof(iniBuffer) - 2, CONFIGFILE);
+            auto gateway = std::string(iniBuffer);
+            g_I2cServer.SetGateway(gateway);
+            logmsg("-- Gateway: ", &iniBuffer[2]);
+        }
+
         memset(&iniBuffer, 0, 100);
         if (ini_gets("UI", "wifipassword", "", iniBuffer, sizeof(iniBuffer), CONFIGFILE) > 0) {
             auto wifiPass = std::string(iniBuffer);
@@ -111,19 +138,4 @@ void platform_set_device_control(zuluide::status::DeviceControlSafe* deviceContr
     }
 }
 
-void platform_poll_input() {
-    g_rotary_input.Poll();
 
-    if (uiStatusController)
-    {
-        // Process status update, if any exist.
-        if (!uiStatusController->ProcessUpdate()) {
-            // If no updates happend, refresh the display (enables animation)
-            display.Refresh();
-        }
-
-        g_controllerImageResponsePipe->ProcessUpdates();
-        g_I2cServer.Poll();
-    }
-    g_I2CServerImageRequestPipe.ProcessUpdates();
-}

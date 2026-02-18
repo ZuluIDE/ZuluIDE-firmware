@@ -40,6 +40,10 @@ namespace zuluide::images {
   public:
     ImageIterator();
     Image Get();
+
+    // Find a valid image without needing a Reset, not in alphanumeric order nor is filecount set
+    // if filename is a string, find that image, if it is nullptr find the first valid image
+    Image QuickGet(const char *filename = nullptr);
     // Find the next image
     // return false if there is no image or there is no next image
     bool MoveNext();

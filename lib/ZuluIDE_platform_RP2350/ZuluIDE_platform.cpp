@@ -26,6 +26,7 @@
 #include "ZuluIDE_platform.h"
 #include "ZuluIDE_log.h"
 #include "ZuluIDE_config.h"
+#include <ZuluControl_platform.h>
 #include <ZuluIDE.h>
 #include "ide_phy.h"
 #include <SdFat.h>
@@ -843,6 +844,23 @@ void core1_log_poll()
             logmsg("CORE1: ", linebuf);
         }
     }
+}
+
+void platform_poll_input() {
+    g_rotary_input.Poll();
+
+    if (uiStatusController)
+    {
+        // Process status update, if any exist.
+        if (!uiStatusController->ProcessUpdate()) {
+            // If no updates happend, refresh the display (enables animation)
+            display.Refresh();
+        }
+
+        g_controllerImageResponsePipe->ProcessUpdates();
+        g_I2cServer.Poll();
+    }
+    g_I2CServerImageRequestPipe.ProcessUpdates();
 }
 
 // Poll function that is called every few milliseconds.

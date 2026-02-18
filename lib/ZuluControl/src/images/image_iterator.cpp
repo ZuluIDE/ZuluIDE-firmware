@@ -58,6 +58,55 @@ Image ImageIterator::Get() {
   return Image(std::string(candidate), candidateImageType, candidateSizeInBytes);
 }
 
+Image ImageIterator::QuickGet(const char *filename)
+{
+  bool found_file = false;
+  // Grab the filename of the current image or reset if the file is no longer valid
+  if (filename != nullptr && filename[0] && currentFile.open(filename, O_RDONLY))
+  {
+    found_file = true;
+  }
+  else
+  {
+    currentFile.close();
+    root.close();
+    root.open("/");
+  }
+  bool isValid = false;
+  while ((found_file || currentFile.openNext(&root, O_RDONLY))
+          && currentFile.getName(candidate, sizeof(candidate)) < sizeof(candidate) - 1) {
+
+      isValid = fileIsValidImage(currentFile, candidate);
+
+      if (isValid)
+          break;
+      else if (found_file)
+          break;
+      currentFile.close();
+  }
+  if (!isValid)
+  {
+    currentFile.close();
+    return Image("");
+  }
+
+  if ( currentFile.isOpen())
+  {
+    if (currentFile.isDirectory()) {
+      // Indicates probable multi-part bin/cue.
+      if(!FetchSizeFromCueFile()) {
+        logmsg("Failed to fetch bin/cue size.");
+      }
+    } else {
+      candidateSizeInBytes = currentFile.fileSize();
+    }
+  }
+  currentFile.close();
+  candidateImageType = Image::InferImageTypeFromFileName(candidate);
+  return Image(std::string(candidate), candidateImageType, candidateSizeInBytes);
+}
+
+
 bool ImageIterator::MoveNext()
 {
   return Move();
@@ -395,8 +444,8 @@ bool ImageIterator::is_valid_filename(const char *name, bool warning)
 
       for (int i = 0; ignore_exts[i]; i++) {
         if (strcasecmp(extension, ignore_exts[i]) == 0) {
-          // ignore these without log message
-          if (warning) logmsg("-- Ignoring \"", name, "\", file extension ",ignore_exts[i]," is in the reject list");
+          bool isCue = (i == 0); // Do not warn if file extension is .cue 
+          if (warning && !isCue) logmsg("-- Ignoring \"", name, "\", file extension ",ignore_exts[i]," is in the reject list");
           return false;
         }
       }

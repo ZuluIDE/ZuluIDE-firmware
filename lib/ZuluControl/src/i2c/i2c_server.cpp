@@ -44,7 +44,7 @@ I2CServer::I2CServer(ImageRequestPipe<i2c_server_source_t>* image_request_pipe, 
   imageRequestPipe(image_request_pipe), imageResponsePipe(image_response_pipe),
   filenameTransferState(FilenameTransferState::Idle), deviceControl(nullptr),
   isSubscribed(false), devControlSet(false), sendFilenames(false), sendFiles(false),
-  sendNextImage(false), updateFilenameCache(false), isIterating(false), isPresent(false), remoteMajorVersion(0)
+  sendNextImage(false), updateFilenameCache(false), isIterating(false), isPresent(false), ip(""), remoteMajorVersion(0)
 {
   imageResponsePipe->AddObserver([&](const ImageResponse<i2c_server_source_t>& t){HandleImageResponse(t);});
 }
@@ -496,6 +496,14 @@ void I2CServer::Poll() {
     }
     ExitLoggingSafe();
     writeLengthPrefacedString(wire, I2C_SERVER_SSID, ssid.length(), ssid.c_str());
+
+    if (!ip.empty())
+    {
+        writeLengthPrefacedString(wire, I2C_SERVER_STATIC_IP, ip.length(), ip.c_str());
+        writeLengthPrefacedString(wire, I2C_SERVER_STATIC_IP, gateway.length(), gateway.c_str());
+        writeLengthPrefacedString(wire, I2C_SERVER_STATIC_IP, netmask.length(), netmask.c_str());
+    }
+
     break;
   }
 
@@ -544,6 +552,8 @@ void I2CServer::Poll() {
       EnterLoggingSafe();
       logmsg("I2C Client IP address is: ", buffer);
       ExitLoggingSafe();
+      // Acknowledge IP received
+      writeLengthPrefacedString(wire, I2C_SERVER_IP_ADDRESS_ACK, 0, "");
     }
     break;
   }
@@ -574,6 +584,21 @@ void I2CServer::SetSSID(std::string& value) {
 
 void I2CServer::SetPassword(std::string &value) {
   password = value;
+}
+
+void I2CServer::SetIPv4(std::string &value)
+{
+  ip = value;
+}
+
+void I2CServer::SetNetmask(std::string &value)
+{
+  netmask = value;
+}
+
+void I2CServer::SetGateway(std::string &value)
+{
+  gateway = value;
 }
 
 bool I2CServer::WifiCredentialsSet() {

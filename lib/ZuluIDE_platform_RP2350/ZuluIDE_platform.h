@@ -117,41 +117,11 @@ typedef void (*sd_callback_t)(uint32_t bytes_complete);
 void platform_set_sd_callback(sd_callback_t func, const uint8_t *buffer);
 
 /**
-   Attempts to determine whether the hardware UI or the web service is attached to the device.
- */
-uint8_t platform_check_for_controller();
-
-/**
-   Sets the status controller connection used to process status events on the UI core.
- */
-void platform_set_status_controller(zuluide::ObserverTransfer<zuluide::status::SystemStatus> *statusController);
-
-/**
-   Sets the display controller, the component tracking the state of the user interface.
- */
-void platform_set_display_controller(zuluide::Observable<zuluide::control::DisplayState>& displayController);
-
-/**
-   Sets the controller that is used by the UI to change the system state.
- */
-void platform_set_device_control(zuluide::status::DeviceControlSafe* deviceControl);
-
-/**
-   Sets the filename request pipe that is used by controllers to request filenames from a different core safely.
- */
-void platform_set_controller_image_response_pipe(zuluide::pipe::ImageResponsePipe<zuluide::control::select_controller_source_t> *imageResponsePipe);
-
-/**
    This mutex is used to prevent saving the log file to the SD card while reading the file system.
    A more robust file access method is needed, but this is fixing the problem for now, even though
    it is rather ham-handed.
  */
 mutex_t* platform_get_log_mutex();
-
-/**
-   Sets the input receiver, which handles receiving input from the hardware UI and performs updates to the UI as appropriate.
- */
-void platform_set_input_interface(zuluide::control::InputReceiver* inputReceiver);
 
 /**
    Used to poll the input hardware.

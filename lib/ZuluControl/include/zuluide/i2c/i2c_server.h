@@ -33,7 +33,7 @@
 #include "i2c_server_src_type.h"
 #include <string>
 
-#define I2C_API_VERSION "3.0.1"
+#define I2C_API_VERSION "3.1.0"
 
 // Delay between reading the filenames off the SD card in milliseconds
 #ifndef I2C_FILENAME_TRANSFER_DELAY
@@ -49,6 +49,8 @@
 #define I2C_SERVER_SSID 0xD
 #define I2C_SERVER_SSID_PASS 0xE
 #define I2C_SERVER_RESET 0xF
+#define I2C_SERVER_STATIC_IP 0x10
+#define I2C_SERVER_IP_ADDRESS_ACK 0x11
 
 #define I2C_CLIENT_NOOP 0x0
 
@@ -112,6 +114,18 @@ namespace zuluide::i2c {
     */
     void SetPassword(std::string &value);
     /**
+       Stores the Wifi static IPv4 to be passed ot the I2C client.
+    */
+    void SetIPv4(std::string &value);
+    /**
+       Stores the Wifi static IP netmask to be passed ot the I2C client.
+    */
+    void SetNetmask(std::string &value);
+    /**
+       Stores the Wifi static IP gateway to be passed ot the I2C client.
+    */
+    void SetGateway(std::string &value);
+    /**
        Sends a reset command to the I2C client. Returns true if the send is
        succesful, otherwise false.
      */
@@ -168,6 +182,9 @@ namespace zuluide::i2c {
     std::string status;
     std::string ssid;
     std::string password;
+    std::string ip;
+    std::string netmask;
+    std::string gateway;
     unsigned long remoteMajorVersion;
     std::string remoteVersionString;
   };

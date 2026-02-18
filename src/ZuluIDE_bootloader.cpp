@@ -28,6 +28,7 @@
 #include <ZuluIDE_platform.h>
 #include "ZuluIDE_config.h"
 #include "ZuluIDE_log.h"
+#include <minIni.h>
 #include <SdFat.h>
 #include <string.h>
 
@@ -137,25 +138,31 @@ int bootloader_main(void)
 
     if (mountSDCard() || mountSDCard())
     {
-        FsFile fwfile;
-        char name[MAX_FILE_PATH + 1];
-        if (find_firmware_image(fwfile, name))
+        if (ini_getbool("IDE", "skip_firmware_update", 0, CONFIGFILE))
         {
-            if (program_firmware(fwfile))
+            logmsg("Skipping check for .bin firmware update file");
+        }
+        else
+        {
+            FsFile fwfile;
+            char name[MAX_FILE_PATH + 1];
+            if (find_firmware_image(fwfile, name))
             {
-                // logmsg("Firmware update successful!");
-                fwfile.close();
-                if (!SD.remove(name))
+                if (program_firmware(fwfile))
                 {
-                    logmsg("Failed to remove firmware file");
+                    // logmsg("Firmware update successful!");
+                    fwfile.close();
+                    if (!SD.remove(name))
+                    {
+                        logmsg("Failed to remove firmware file");
+                    }
+                }
+                else
+                {
+                    logmsg("Firmware update failed!");
+                    platform_emergency_log_save();
                 }
             }
-            else
-            {
-                logmsg("Firmware update failed!");
-                platform_emergency_log_save();
-            }
-            
         }
     }
 
