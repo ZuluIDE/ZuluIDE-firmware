@@ -913,6 +913,7 @@ bool IDERigidDevice::ata_recv_data(uint8_t *data, size_t blocksize, size_t num_b
 {
     // dbgmsg("---- Receive data blocks ", (int)num_blocks, " size ", (int)blocksize, " first: ", first_xfer, " last: ", last_xfer);
 
+    int udma_mode = (m_ata_state.dma_requested ? m_ata_state.udma_mode : -1);
     size_t max_blocksize = m_phy_caps.max_blocksize;
     if (blocksize > max_blocksize)
     {
@@ -922,9 +923,11 @@ bool IDERigidDevice::ata_recv_data(uint8_t *data, size_t blocksize, size_t num_b
         blocksize /= split;
         num_blocks *= split;
     }
-    else
+    else if (udma_mode >= 0)
     {
         // Combine blocks for better performance
+        // This is not possible for ATA in PIO mode because the PHY needs to give IRQ
+        // after each data block.
         while (blocksize * 2 <= max_blocksize && (num_blocks & 1) == 0)
         {
             blocksize *= 2;
@@ -933,7 +936,6 @@ bool IDERigidDevice::ata_recv_data(uint8_t *data, size_t blocksize, size_t num_b
     }
 
     // Start data transfer for first block
-    int udma_mode = (m_ata_state.dma_requested ? m_ata_state.udma_mode : -1);
     ide_phy_start_ata_read(blocksize, udma_mode);
 
     // Receive blocks
