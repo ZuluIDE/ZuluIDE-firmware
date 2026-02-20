@@ -170,9 +170,9 @@ bool IDERigidDevice::handle_command(ide_registers_t *regs)
 
     switch (regs->command)
     {
-        // Command need the device signature
+        // Device reset command is only for ATAPI devices, make
+        // sure we appear like non-ATAPI device.
         case IDE_CMD_DEVICE_RESET:
-//        case IDE_CMD_EXECUTE_DEVICE_DIAGNOSTIC:
             return set_device_signature(IDE_ERROR_ABORT, false);
 
         // Supported IDE commands
@@ -706,7 +706,7 @@ void IDERigidDevice::handle_event(ide_event_t evt)
     }
 }
 
-// Set the packet device signature values to PHY registers
+// Set non-packet device signature values to PHY registers
 // See T13/1410D revision 3a section 9.12 Signature and persistence
 bool IDERigidDevice::set_device_signature(uint8_t error, bool was_reset)
 {
@@ -719,20 +719,24 @@ bool IDERigidDevice::set_device_signature(uint8_t error, bool was_reset)
     if (was_reset)
     {
         regs.error = 1; // Diagnostics ok
-        regs.status = 0;
+        regs.status = IDE_STATUS_DEVRDY | IDE_STATUS_DSC;
     }
-    else
-    {
-        regs.status = IDE_STATUS_BSY;
-    }
+
     ide_phy_set_regs(&regs);
 
-    ide_phy_assert_irq(IDE_STATUS_DEVRDY | IDE_STATUS_DSC);
+    if (!was_reset)
+    {
+        // Command complete
+        if (error == IDE_ERROR_ABORT)
+            ide_phy_assert_irq(IDE_STATUS_DEVRDY | IDE_STATUS_DSC | IDE_STATUS_ERR);
+        else
+            ide_phy_assert_irq(IDE_STATUS_DEVRDY | IDE_STATUS_DSC);
+    }
 
     return true;
 }
 
-// Set the packet device signature values to PHY registers
+// Set non-packet device signature values to PHY registers
 // See T13/1410D revision 3a section 9.12 Signature and persistence
 void IDERigidDevice::fill_device_signature(ide_registers_t *regs)
 {
