@@ -85,7 +85,8 @@ bool ide_phy_is_command_interrupted();
 void ide_phy_get_regs(ide_registers_t *regs);
 
 // Set current state of IDE registers
-void ide_phy_set_regs(const ide_registers_t *regs);
+// Either to specified device index, or to the currently active device if -1
+void ide_phy_set_regs(const ide_registers_t *regs, int device = -1);
 
 // Set current PIO mode, in case it affects hardware behavior.
 void ide_phy_set_pio_mode(int pio_mode);

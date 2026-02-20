@@ -29,6 +29,8 @@
 #define CORE1_REQ_GET_SIGNALS           0x0080
 #define CORE1_REQ_CHANGE_PIO_MODE       0x0100
 #define CORE1_REQ_START_DATAOUT_NOIRQ   0x0200
+#define CORE1_REQ_SET_REGS_DEV0         0x0400
+#define CORE1_REQ_SET_REGS_DEV1         0x0800
 
 // This is set and cleared by core1 to indicate whether
 // it is busy handling previous requests.
@@ -53,6 +55,7 @@ static_assert(sizeof(phy_ide_registers_t) == 12);
 
 extern struct idecomm_t {
     phy_ide_registers_t phyregs; // Latest value of IDE registers from core1
+    ide_registers_t set_regs; // Values to set on SET_REGS request
 
     char core1_log[1024]; // Log messages from core1
     uint32_t logpos;

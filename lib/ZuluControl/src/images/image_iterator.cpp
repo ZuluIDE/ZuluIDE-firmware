@@ -375,6 +375,13 @@ bool ImageIterator::is_valid_filename(const char *name, bool warning)
     return false;
   }
 
+  if (strncasecmp(name, DUALDRIVE_IMAGE_PRIMARY, strlen(DUALDRIVE_IMAGE_PRIMARY)) == 0 ||
+      strncasecmp(name, DUALDRIVE_IMAGE_SECONDARY, strlen(DUALDRIVE_IMAGE_SECONDARY)) == 0 )
+  {
+    // Dual image is handled separately
+    return false;
+  }
+
   if (strncasecmp(name, "zulu", 4) == 0) {
     // Ignore all files that start with "zulu"
     return false;

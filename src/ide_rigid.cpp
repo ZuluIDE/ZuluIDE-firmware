@@ -155,6 +155,11 @@ void IDERigidDevice::reset()
 
 void IDERigidDevice::set_image(IDEImage *image)
 {
+    if (m_image && !image && !is_removable())
+    {
+        logmsg("-- WARNING: Unloading media for non-removable hard drive, expect host to report error");
+    }
+
     m_image = image;
 }
 
@@ -875,7 +880,9 @@ bool IDERigidDevice::set_device_signature(uint8_t error, bool was_reset)
         regs.status = IDE_STATUS_DEVRDY | IDE_STATUS_DSC;
     }
 
-    ide_phy_set_regs(&regs);
+    // We might not be the currently selected device, so specify index when
+    // setting the registers.
+    ide_phy_set_regs(&regs, m_devconfig.dev_index);
 
     if (!was_reset)
     {

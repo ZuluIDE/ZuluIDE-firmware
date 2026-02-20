@@ -119,6 +119,7 @@ void ide_phy_config(const ide_phy_config_t* config)
     phyregs.state_datain = 0;
     phyregs.state_dataout = 0;
     g_idecomm.phyregs = phyregs;
+    g_idecomm.set_regs = phyregs.regs;
     ide_phy_post_request(CORE1_REQ_SET_REGS | CORE1_REQ_STOP_TRANSFERS);
 
     g_idecomm.enable_idephy = true;
@@ -147,7 +148,15 @@ void ide_phy_reset()
     phyregs.state_datain = 0;
     phyregs.state_dataout = 0;
     g_idecomm.phyregs = phyregs;
+    g_idecomm.set_regs = phyregs.regs;
+    __sync_synchronize();
     ide_phy_post_request(CORE1_REQ_SET_REGS | CORE1_REQ_STOP_TRANSFERS);
+
+    // Drain FIFO
+    while (sio_hw->fifo_st & SIO_FIFO_ST_VLD_BITS)
+    {
+        (void)sio_hw->fifo_rd;
+    }
 
     g_idecomm.enable_idephy = true;
 
@@ -259,17 +268,38 @@ bool ide_phy_is_command_interrupted()
 
 void ide_phy_get_regs(ide_registers_t *regs)
 {
+    // Wait for any outstanding register update to complete before reading them back
+    uint32_t start = time_us_32();
+    uint32_t reqs = CORE1_REQ_BUSY | CORE1_REQ_SET_REGS | CORE1_REQ_SET_REGS_DEV0 | CORE1_REQ_SET_REGS_DEV1;
+    while (g_idecomm.requests & reqs)
+    {
+        if ((uint32_t)(time_us_32() - start) > 100)
+        {
+            logmsg("ERROR: Core1 is not responding");
+            ide_phy_print_debug();
+            break;
+        }
+    }
+
     *regs = g_idecomm.phyregs.regs;
     // dbgmsg("GET_REGS, status ", regs->status, " error ", regs->error, " lba_high ", regs->lba_high);
 }
 
-void ide_phy_set_regs(const ide_registers_t *regs)
+void ide_phy_set_regs(const ide_registers_t *regs, int device)
 {
-    g_idecomm.phyregs.regs = *regs;
+    g_idecomm.set_regs = *regs;
     __sync_synchronize();
 
-    ide_phy_post_request(CORE1_REQ_SET_REGS);
-    // dbgmsg("SET_REGS, status ", regs->status, " error ", regs->error, " lba_high ", regs->lba_high, " data_in ", (int)g_idecomm.phyregs.state_datain);
+    if (device < 0)
+        ide_phy_post_request(CORE1_REQ_SET_REGS); // Set for currently active device
+    else if (device == 0)
+        ide_phy_post_request(CORE1_REQ_SET_REGS_DEV0);
+    else if (device == 1)
+        ide_phy_post_request(CORE1_REQ_SET_REGS_DEV1);
+    else
+        logmsg("ide_phy_set_regs: Invalid device index ", device);
+    
+    // dbgmsg("SET_REGS dev ", device, ", status ", regs->status, " error ", regs->error, " lba_high ", regs->lba_high, " data_in ", (int)g_idecomm.phyregs.state_datain);
 }
 
 void ide_phy_set_pio_mode(int pio_mode)
@@ -502,7 +532,9 @@ void ide_phy_stop_transfers(int *crc_errors)
 
 void ide_phy_assert_irq(uint8_t ide_status)
 {
-    g_idecomm.phyregs.regs.status = ide_status;
+    g_idecomm.set_regs.status = ide_status;
+    __sync_synchronize();
+
     ide_phy_post_request(CORE1_REQ_ASSERT_IRQ);
     // dbgmsg("ASSERT_IRQ, status ", ide_status);
 }

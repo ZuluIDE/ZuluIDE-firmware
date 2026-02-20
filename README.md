@@ -58,6 +58,18 @@ All versions of ZuluIDE V2 and later revisions of ZuluSCSI Compact RP2040 have a
 
 You can also cycle through images by sending the eject command from within an operating system. This will load the next valid image file in alphabetic order.
 
+Dual device operation
+---------------------
+ZuluIDE V2 supports dual device operation, where a single ZuluIDE V2 presents as both primary and secondary drive on the IDE bus. Currently the dual drive has to be a harddrive, while the main device can be any type, such as CD-ROM or ZIP drive. Any eject button actions and DIP switch configuration apply to the main device.
+
+To configure a typical setup with a harddrive as primary and a CD-ROM as secondary device, do the following:
+
+1. Create harddrive image and save it as `HD0.bin`. You can also create a text file with a name `"Create_2048MB_HD0.txt"` and ZuluIDE V2 will create an empty image on the first boot.
+2. Add CD-ROM images as normal, for example `AnyFilename.iso`.
+
+You can optionally name the file `HD1.bin` to make the harddrive secondary and CD drive primary.
+DIP switch primary / secondary / cable selection setting is ignored when in dual drive mode.
+
 USB Mass Storage
 ----------------
 Non-simultaneous access to the contents of an inserted SD card can be enabled via the ```enable_usb_mass_storage``` ini file directive. 

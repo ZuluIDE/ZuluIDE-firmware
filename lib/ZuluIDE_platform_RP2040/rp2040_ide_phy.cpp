@@ -207,8 +207,9 @@ void ide_phy_get_regs(ide_registers_t *regs)
 }
 
 // Set current state of IDE registers
-void ide_phy_set_regs(const ide_registers_t *regs)
+void ide_phy_set_regs(const ide_registers_t *regs, int device)
 {
+    // Note: device is ignored because the FPGA code only supports one register set
     fpga_wrcmd(FPGA_CMD_WRITE_IDE_REGS, (const uint8_t*)regs, sizeof(*regs));
 }
 

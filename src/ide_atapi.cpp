@@ -438,7 +438,9 @@ bool IDEATAPIDevice::set_device_signature(uint8_t error, bool was_reset)
         regs.status = 0;
     }
 
-    ide_phy_set_regs(&regs);
+    // We might not be the currently selected device, so specify index when
+    // setting the registers.
+    ide_phy_set_regs(&regs, m_devconfig.dev_index);
 
     if (!was_reset)
     {

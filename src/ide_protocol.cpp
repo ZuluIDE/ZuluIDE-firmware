@@ -168,12 +168,26 @@ void ide_protocol_poll()
                 ide_phy_set_regs(&regs);
                 g_last_event_time = millis();
                 g_last_event = IDE_EVENT_CMD_EXE_DEV_DIAG;
-                // Drive 0 is the current drive and drive 1 is detected
-                if (g_ide_config.enable_dev0 && (g_ide_config.enable_dev1 || g_drive1_detected))
+
+                if (g_ide_config.enable_dev0)
+                {
+                    // If we are drive 0 and there is external drive 1, we must sample PDIAG.
+                    // Otherwise we can complete the command.
+                    if (g_drive1_detected && !g_ide_config.enable_dev1)
+                    {
                         g_exec_dev_diag_state = EXEC_DEV_DIAG_STATE_WAIT;
-                // Drive 0 the is current drive and no drive 1 is detected
-                else if (g_ide_config.enable_dev0 && !(g_ide_config.enable_dev1 || g_drive1_detected))
+                    }
+                    else
+                    {
                         g_exec_dev_diag_state = EXEC_DEV_DIAG_STATE_SET_STATUS;
+                    }
+                }
+                else
+                {
+                    // Assert PDIAG to indicate to drive 0 that we passed diagnostics
+                    // This is cleared after first command.
+                    ide_phy_set_signals(g_ide_signals | IDE_SIGNAL_PDIAG);
+                }
 
                 dbgmsg("IDE Command: ", cmd, " ", get_ide_command_name(cmd),
                     " (device ", regs.device,
@@ -260,6 +274,7 @@ void ide_protocol_poll()
                 {
                      // Clear DEV bit in device reg within 1ms if secondary device
                     ide_phy_get_regs(&regs);
+                    regs.status = IDE_STATUS_BSY;
                     regs.device &= ~IDE_DEVICE_DEV;
                     ide_phy_set_regs(&regs);
                 }
@@ -273,8 +288,15 @@ void ide_protocol_poll()
                 if (g_ide_devices[1]) g_ide_devices[1]->reset();
             }
 
-            if (g_ide_devices[0]) g_ide_devices[0]->handle_event(evt);
-            if (g_ide_devices[1]) g_ide_devices[1]->handle_event(evt);
+            // If we have two devices, let primary device handle the event last
+            // because it is the selected device after reset. Generally
+            // this shouldn't matter if the device drivers set signature using the
+            // dev_index parameter.
+            if (g_ide_devices[1])
+                g_ide_devices[1]->handle_event(evt);
+            
+            if (g_ide_devices[0])
+                g_ide_devices[0]->handle_event(evt);
         }
 
         LED_OFF();
@@ -329,11 +351,13 @@ void ide_protocol_poll()
             {
                 ide_phy_get_regs(&regs);
                 g_ide_devices[1]->fill_device_signature(&regs);
-                regs.status &= ~(IDE_STATUS_ERR | IDE_STATUS_CORR | IDE_STATUS_DATAREQ);
+                regs.status &= ~(IDE_STATUS_ERR | IDE_STATUS_CORR | IDE_STATUS_DATAREQ | IDE_STATUS_BSY);
                 if (g_ide_devices[1]->is_packet_device())
-                    regs.status &= ~(IDE_STATUS_SERVICE | IDE_STATUS_DEVFAULT | IDE_STATUS_DEVRDY | IDE_STATUS_BSY);
+                    regs.status &= ~(IDE_STATUS_SERVICE | IDE_STATUS_DEVFAULT | IDE_STATUS_DEVRDY);
+                else
+                    regs.status |= (IDE_STATUS_DEVRDY | IDE_STATUS_DSC);
                 regs.device_control = 0; // Should just reset IDE_DEVCTRL_SRST, but IDE_CMD_PACKET fails if it isn't cleared
-                ide_phy_set_regs(&regs);
+                ide_phy_set_regs(&regs, 1);
 
                 // Assert PDIAG to indicate passed diagnostics
                 g_ide_signals = IDE_SIGNAL_DASP | IDE_SIGNAL_PDIAG;
@@ -392,7 +416,9 @@ void ide_protocol_poll()
         uint32_t time_passed = millis() - g_last_event_time;
 
         if (EXEC_DEV_DIAG_STATE_WAIT == g_exec_dev_diag_state && time_passed > 1)
+        {
             g_exec_dev_diag_state = EXEC_DEV_DIAG_STATE_SAMPLE;
+        }
         else if (EXEC_DEV_DIAG_STATE_SAMPLE == g_exec_dev_diag_state)
         {
             sample_state_happened = true;
@@ -436,10 +462,8 @@ void ide_protocol_poll()
             g_exec_dev_diag_state = EXEC_DEV_DIAG_STATE_IDLE;
             g_last_event = IDE_EVENT_NONE;
 
-            ide_phy_set_regs(&regs);
-
+            ide_phy_set_regs(&regs, 0);
             regs.status &= ~IDE_STATUS_BSY;
-            ide_phy_set_regs(&regs);
             ide_phy_assert_irq(IDE_STATUS_DEVRDY | IDE_STATUS_DSC | regs.status);
         }
     }
