@@ -1,8 +1,18 @@
 ZuluIDE™ Firmware
 =================
 
-ZuluIDE™ is a hardware interface between IDE bus and SD cards.
-Currently it supports emulating ATAPI CD-ROM drives, Zip Drive 100, and a generic removable drive by providing access to image files stored on SD card.
+ZuluIDE™ is a hardware interface between IDE bus and SD cards. There are two generations of ZuluIDE:
+* ZuluIDE V2, powered by the RP2350B microcontroller
+* The oiriginal ZuluIDE RP2040, powered by the RP2040 mirocontroller and a small ICE40-family Field-programmable gate array. This first-generation ZuluIDE is still supported, but ZuluIDE V2 has succeeded it, as it is faster and costs less to produce.
+
+ZuluIDE supports emulating:
+
+* ATAPI CD-ROM drives
+* Rigid hard disks
+* ATAPI Zip Drive
+* Generic ATAPI removable drive
+
+All images files reside on a FAT32 or exFAT-formatted SD card.
 
 Drive Types
 -----------
@@ -12,10 +22,11 @@ There are three ways to specify drive type
     - `Zip100` - Iomega Zip Drive 100
     - `Removable` - Generic removable device
 2) Use a image filename prefix of:
-    - cdrm - for a CD-ROM drive
-    - zipd - for a Zip Drive 100
-    - remv - for a generic removable file
-    - hddr - for a hard drive images
+    - `CDRM` - for a CD-ROM drive
+    - `HDDR` - for a hard drive images
+    - `ZIPD` - for a Zip Drive 100
+    - `REMV` - for a generic ATAPI removable device
+    
 3) If no prefix or `Device = [type]` used the drive will default to CD-ROM
 
 Image files
@@ -24,6 +35,7 @@ Image files
 - For Zip drives and removable drives the extension is optional but also any extension is valid, except for `.iso`, `.bin/.cue`, and any extension on the [ignored list](#ignored-list). The images are used in alphabetic order.
 - If a prefix to specify the drive is used, all other files that wish to be inserted and ejected into the drive must have the same prefix. The files are used alphabetically.
  - If ZuluIDE has defaulted to a CD-ROM drive, the first image that it finds on the SD card will be used as a CD. This filename is logged to zululog.txt
+ - For rigid hard disk emulation, any raw file format (regardless of file suffix, `.img`, `.ima`, `.hda`, `.hfs`) will work. In addition, later ZuluIDE firmware versions support Virtual Hard Disk Version 1 (only, V2 not supported) image files 
 
 Any file on the [ignored list](#ignored-list) will not be used as an device image.
 
@@ -38,7 +50,7 @@ The name of the folder is used as the name when switching images in alphabetical
 
 Red Book CD audio playback emulation
 -------------------------
-CD Audio playback emulation is fully functional. The RP2350 microcontroller generates digital i2s audio which is sent to an optional DAC "hat" plug-in board, which uses a [PCM5100A DAC](https://www.ti.com/product/PCM5100A), which converts the digital audio signal to stereo line-level audio via a standard MPC-2 CD-ROM audio connector (LGGR).
+CD Audio playback emulation is fully functional for both ZuluIDE V1 and V2. The RP2350 microcontroller generates digital i2s audio which is sent to an on-board (for ZuluIDE V2 2.5" Hybrid) or optional DAC "hat" plug-in board, which uses a [PCM5100A DAC](https://www.ti.com/product/PCM5100A), which converts the digital audio signal to stereo line-level audio via a standard MPC-2 CD-ROM audio connector (LGGR).
 
 Cycling Images
 --------------
