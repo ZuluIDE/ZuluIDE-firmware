@@ -416,28 +416,47 @@ void init_logfile()
     first_open_after_boot = false;
 }
 
+/**
+ * Prefixes (hddr, zipd, etc) take priority over inferring (.iso extension) and normal files
+ */
 drive_type_t searchForDriveType() {
+  Image::ImageType matching_type = Image::ImageType::unknown;
+  Image::ImageType image_type =  Image::ImageType::unknown;
   zuluide::images::ImageIterator imgIter;
   imgIter.Reset();
   while (imgIter.MoveNext()) {
     Image image = imgIter.Get();
+    const char *filename = image.GetFilename().c_str();
 
-    if (image.GetImageType() == Image::ImageType::cdrom) {
-      return DRIVE_TYPE_CDROM;
+    if (strnlen(filename, MAX_FILE_PATH) >= 4) {
+      // Check prefix to see if this uses the ZuluIDE file-prefix format.
+      image_type = Image::InferImageTypeFromImagePrefix(filename);
+      if ( image_type != Image::ImageType::unknown)
+      {
+        g_ide_imagefile.set_prefix(Image::GetImagePrefix(image_type));
+        matching_type = image_type;
+        break;
+      }
     }
 
-    auto imageType = Image::InferImageTypeFromFileName(image.GetFilename().c_str());
-    if (imageType != Image::ImageType::unknown) {
-      imgIter.Cleanup();
-      g_ide_imagefile.set_prefix(Image::GetImagePrefix(imageType));
-      return Image::ToDriveType(imageType);
+    if (image.GetImageType() == Image::ImageType::cdrom) {
+      matching_type = Image::ImageType::cdrom;
+    }
+
+    image_type = Image::InferImageTypeFromExtension(filename);
+    if (image_type != Image::ImageType::unknown) {
+      matching_type = image_type;
     }
   }
 
   imgIter.Cleanup();
 
   // If nothing is found, default to a CDROM.
-  return DRIVE_TYPE_CDROM;
+  if (matching_type == Image::ImageType::unknown) {
+    matching_type = Image::ImageType::cdrom;
+  }
+
+  return Image::ToDriveType(matching_type);
 }
 
 /***
@@ -586,6 +605,8 @@ void loadFirstImage() {
   bool quiet = ini_getbool("IDE", "quiet_image_parsing", 0, CONFIGFILE);
   if (!quiet) logmsg("Parsing images on the SD card");
   zuluide::images::ImageIterator imgIterator;
+  bool matching_type = false;
+  bool found_file = false;
   bool success = false;
   if (ini_getbool("IDE", "init_with_last_used_image", 1, CONFIGFILE))
   {
@@ -616,16 +637,55 @@ void loadFirstImage() {
 
       if (last_filename_valid && imgIterator.MoveToFile(last_used_filename))
       {
-        if (!quiet) logmsg("-- Loading last used image: \"", last_used_filename, "\"");
-        g_StatusController.LoadImage(imgIterator.Get());
-        g_previous_controller_status = g_StatusController.GetStatus();
-        g_loadedFirstImage = true;
-        load_image(imgIterator.Get(), false);
-        success = true;
+        found_file = true;
+        Image::ImageType image_type = imgIterator.Get().GetImageType();
+        // Match media image type with drive type
+        switch (image_type)
+        {
+          case Image::ImageType::unknown:
+            // unknown treat as CD-ROM media
+            [[fallthrough]];
+          case Image::ImageType::cdrom:
+            matching_type = g_ide_device == &g_ide_cdrom;
+            break;
+          case Image::ImageType::harddrive:
+            matching_type = g_ide_device == &g_ide_rigid;
+            break;
+          case Image::ImageType::removable:
+            matching_type = g_ide_device == &g_ide_removable;
+            break;
+          case Image::ImageType::zip100:
+            [[fallthrough]];
+          case Image::ImageType::zip250:
+            [[fallthrough]];
+          case Image::ImageType::zip750:
+            matching_type = g_ide_device == &g_ide_zipdrive;
+            break;
+          // Leave off default so we get a warning for unhandled cases
+        }
+
+        if (matching_type)
+        {
+          if (!quiet) logmsg("-- Loading last used image: \"", last_used_filename, "\"");
+
+          g_StatusController.LoadImage(imgIterator.Get());
+          g_previous_controller_status = g_StatusController.GetStatus();
+          g_loadedFirstImage = true;
+          load_image(imgIterator.Get(), false);
+          success = true;
+        }
       }
-      if (!success)
+
+      if (!success && !quiet)
       {
-        if (!quiet && last_filename_valid) logmsg("-- Last used image \"", last_used_filename, "\" not found");
+        if (found_file && !matching_type)
+        {
+          logmsg("-- Last used image \"", last_used_filename, "\" incorrect media type");
+        }
+        else
+        {
+            logmsg("-- Last used image \"", last_used_filename, "\" not found");
+        }
       }
     }
     quiet = true;
@@ -635,15 +695,31 @@ void loadFirstImage() {
   {
 
     imgIterator.Reset(!quiet);
-    if (!imgIterator.IsEmpty() && imgIterator.MoveNext()) {
-      logmsg("Loading first image ", imgIterator.Get().GetFilename().c_str());
-      g_StatusController.LoadImage(imgIterator.Get());
-      g_previous_controller_status = g_StatusController.GetStatus();
-      g_loadedFirstImage = true;
-      load_image(imgIterator.Get(), false);
-    } else {
-      logmsg("No valid image files found");
-      blinkStatus(BLINK_ERROR_NO_IMAGES);
+    const char *prefix = g_ide_imagefile.get_prefix();
+    if (!imgIterator.IsEmpty())
+    {
+      while(imgIterator.MoveNext())
+      {
+        // If a prefix is used to define the drive type, only load prefix images for the first image
+        if (prefix[0] != '\0'
+          && imgIterator.Get().GetImageType() != Image::InferImageTypeFromImagePrefix(prefix)
+        )
+        {
+          continue;
+        }
+        logmsg("Loading first image ", imgIterator.Get().GetFilename().c_str());
+        g_StatusController.LoadImage(imgIterator.Get());
+        g_previous_controller_status = g_StatusController.GetStatus();
+        g_loadedFirstImage = true;
+        load_image(imgIterator.Get(), false);
+        break;
+      }
+
+      if (!g_loadedFirstImage)
+      {
+        logmsg("No valid image files found");
+        blinkStatus(BLINK_ERROR_NO_IMAGES);
+      }
     }
   }
 

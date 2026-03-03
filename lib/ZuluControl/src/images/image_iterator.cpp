@@ -178,6 +178,7 @@ bool ImageIterator::MoveFirst()
     } else {
       candidateSizeInBytes = currentFile.fileSize();
     }
+    candidateImageType = Image::InferImageTypeFromFileName(candidate);
     curIdx = currentFile.dirIndex();
     currentIsLast = (lastIdx == firstIdx);
     currentIsFirst = true;
@@ -201,7 +202,7 @@ bool ImageIterator::MoveLast()
     } else {
       candidateSizeInBytes = currentFile.fileSize();
     }
-    
+    candidateImageType = Image::InferImageTypeFromFileName(candidate);
     curIdx = currentFile.dirIndex();
     currentIsLast = lastIdx;
     currentIsFirst = (lastIdx == firstIdx);
@@ -224,7 +225,7 @@ bool ImageIterator::MoveToFile(const char *filename)
     } else {
       candidateSizeInBytes = currentFile.fileSize();
     }
-    
+    candidateImageType = Image::InferImageTypeFromFileName(candidate);
     curIdx = currentFile.dirIndex();
     currentIsLast = (curIdx == lastIdx);
     currentIsFirst = (curIdx == firstIdx);
@@ -395,8 +396,8 @@ bool ImageIterator::is_valid_filename(const char *name, bool warning)
 
       for (int i = 0; ignore_exts[i]; i++) {
         if (strcasecmp(extension, ignore_exts[i]) == 0) {
-          // ignore these without log message
-          if (warning) logmsg("-- Ignoring \"", name, "\", file extension ",ignore_exts[i]," is in the reject list");
+          // don't warn about cue files (i == 0)
+          if (warning && i != 0) logmsg("-- Ignoring \"", name, "\", file extension ",ignore_exts[i]," is in the reject list");
           return false;
         }
       }
