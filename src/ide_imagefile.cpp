@@ -226,10 +226,11 @@ drive_type_t IDEImageFile::get_drive_type()
 
 void IDEImageFile::set_prefix(const char *prefix)
 {
-    strcpy(m_prefix, prefix);
+    strncpy(m_prefix, prefix, 4);
+    m_prefix[4] = '\0';
 }
 
-const char* const IDEImageFile::get_prefix()
+const char *const IDEImageFile::get_prefix()
 {
     return m_prefix;
 }

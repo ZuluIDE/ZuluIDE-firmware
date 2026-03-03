@@ -184,21 +184,33 @@ const char* Image::GetImagePrefix(const ImageType toConvert) {
 }
 
 Image::ImageType Image::InferImageTypeFromImagePrefix(const char* prefix) {
-  if (strncasecmp(prefix, "cdrm", sizeof("cdrm")) == 0) {
+  if (       strncasecmp(prefix, "cdrm", 4) == 0) {
     return Image::ImageType::cdrom;
-  } else if (strncasecmp(prefix, "zipd", sizeof("zipd")) == 0) {
+  } else if (strncasecmp(prefix, "zipd", 4) == 0) {
     return Image::ImageType::zip100;
-  } else if (strncasecmp(prefix, "z100", sizeof("z100")) == 0) {
+  } else if (strncasecmp(prefix, "z100", 4) == 0) {
     return Image::ImageType::zip100;
-  } else if (strncasecmp(prefix, "z250", sizeof("z250")) == 0) {
+  } else if (strncasecmp(prefix, "z250", 4) == 0) {
     return Image::ImageType::zip250;
-  } else if (strncasecmp(prefix, "remv", sizeof("remv")) == 0) {
+  } else if (strncasecmp(prefix, "remv", 4) == 0) {
     return Image::ImageType::removable;
-  } else if (strncasecmp(prefix, "hddr", sizeof("hddr")) == 0) {
+  } else if (strncasecmp(prefix, "hddr", 4) == 0) {
     return Image::ImageType::harddrive;
   } else {
     return Image::ImageType::unknown;
   }
+}
+
+Image::ImageType Image::InferImageTypeFromExtension(const char * filename)
+{
+  auto len = strnlen(filename, MAX_FILE_PATH);
+  if (len > 3) {
+      // Check the suffix to see if this is a cd-rom image type extension.
+      if (strncasecmp(filename + len - 4, ".iso", sizeof(".iso")) == 0) {
+        return Image::ImageType::cdrom;
+      }
+  }
+  return Image::ImageType::unknown;
 }
 
 Image::ImageType Image::InferImageTypeFromFileName(const char *filename) {
@@ -206,19 +218,13 @@ Image::ImageType Image::InferImageTypeFromFileName(const char *filename) {
   auto len = strnlen(filename, MAX_FILE_PATH);
 
   if (len > 3) {
-    // Check the suffix to see if this is a cd-rom image type extension.
-    if (strncasecmp(filename + len - 4, ".iso", sizeof(".iso")) == 0) {
-      returnValue = Image::ImageType::cdrom;
-    } else {
-      // Check  prefix to see if this uses the ZuluIDE file-prefix format.
-      char *prefix = (char *)calloc(4, sizeof(char));
-      if (prefix) {
-        strncpy(prefix, filename, 4);
-        returnValue = Image::InferImageTypeFromImagePrefix(prefix);
-      }
+    // Check  prefix to see if this uses the ZuluIDE file-prefix format.
+    returnValue = Image::InferImageTypeFromImagePrefix(filename);
+
+    if (returnValue == ImageType::unknown) {
+      returnValue = InferImageTypeFromExtension(filename);
     }
   }
-
   return returnValue;
 }
 
