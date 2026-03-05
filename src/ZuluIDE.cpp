@@ -176,8 +176,8 @@ static bool mountSDCard()
     if (static_cast<FsVolume*>(&SD)->begin(SD.card(), true, 0))
         return true;
 
-    // Failed to mount FAT filesystem, but card can still be accessed as raw image
-    return true;
+    // Failed to mount FAT filesystem
+    return false;
 }
 
 // Checks if SD card is still present
