@@ -88,7 +88,15 @@ enum sniffer_mode_t {
   SNIFFER_ACTIVE = 1,
   SNIFFER_PASSIVE = 2
 };
+
 static sniffer_mode_t g_sniffer_mode;
+
+enum class sd_card_state_t {
+  NotPresent,
+  Formatted,
+  NoFileSystem
+};
+
 
 /************************************/
 /* Status reporting by blinking led */
@@ -157,6 +165,7 @@ void blinkStatus(uint8_t times, uint32_t delay = 500, uint32_t end_delay = 1250)
 
 static bool mountSDCard()
 {
+    static sd_card_state_t s_card_state = sd_card_state_t::NotPresent;
     // Verify that all existing files have been closed
     g_logfile.close();
     g_ide_cdrom.set_image(nullptr);
@@ -166,17 +175,22 @@ static bool mountSDCard()
 
     // Check for the common case, FAT filesystem as first partition
     if (SD.begin(SD_CONFIG))
-        return true;
-
+    {
+      s_card_state = sd_card_state_t::Formatted;
+      return true;
+    }
     // Do we have any kind of card?
     if (!SD.card() || SD.sdErrorCode() != 0)
-        return false;
+    {
+      s_card_state = sd_card_state_t::NotPresent;
+      return false;
+    }
 
-    // Try to mount the whole card as FAT (without partition table)
-    if (static_cast<FsVolume*>(&SD)->begin(SD.card(), true, 0))
-        return true;
-
-    // Failed to mount FAT filesystem
+    if (s_card_state != sd_card_state_t::Formatted)
+    {
+      logmsg("No file system detected on the SD card");
+      s_card_state = sd_card_state_t::Formatted;
+    }
     return false;
 }
 
