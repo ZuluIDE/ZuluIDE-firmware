@@ -33,7 +33,7 @@
 #include "i2c_server_src_type.h"
 #include <string>
 
-#define I2C_API_VERSION "3.0.1"
+#define I2C_API_VERSION "3.1.0"
 
 // Delay between reading the filenames off the SD card in milliseconds
 #ifndef I2C_FILENAME_TRANSFER_DELAY
@@ -62,9 +62,35 @@
 #define I2C_CLIENT_FETCH_SSID_PASS 0xF
 #define I2C_CLIENT_FETCH_ITR_IMAGE 0x10
 #define I2C_CLIENT_IP_ADDRESS 0x11
-#define I2C_CLIENT_NET_DOWN 0x12
+#define I2C_CLIENT_LOG_MSG 0x12
 
 #define CLIENT_ADDR 0x45
+
+enum class State { 
+                   WaitForAPIVersion,
+                   WaitingForSSID,
+                   WaitingForPassword,
+                   WIFIInit,
+                   WIFIDown,
+                   Normal };
+
+
+
+
+namespace ClientMessage {
+  namespace Prefix
+  {
+    constexpr char Normal  = 'n';
+    constexpr char Debug   = 'd';
+    constexpr char Unknown = 'u';
+  }
+
+  enum class Type {
+                    Normal,
+                     Debug
+};
+}
+
 
 using namespace zuluide::status;
 using namespace zuluide::pipe;
@@ -72,7 +98,7 @@ using namespace zuluide::pipe;
 namespace zuluide::i2c {
   
   /**
-     Manages communication with an I2C client sending it status and alloweing it
+     Manages communication with an I2C client sending it status and allowing it
      to request operations.
 
      Data is sent to the I2C client from this server by writing length prefaced
