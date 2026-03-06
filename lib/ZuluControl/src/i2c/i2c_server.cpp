@@ -528,7 +528,7 @@ void I2CServer::Poll() {
       memset(buffer, 0, length + 1);
 
       for (int pos = 0; pos < length;) {        
-        int toRecv = pos + BUFFER_LENGTH < length ? BUFFER_LENGTH : length - pos;
+        int toRecv = ((BUFFER_LENGTH < length - pos) ? BUFFER_LENGTH : length - pos);
 
         wire->requestFrom(CLIENT_ADDR, toRecv);
         while (toRecv > 0) {
@@ -544,18 +544,53 @@ void I2CServer::Poll() {
       EnterLoggingSafe();
       logmsg("I2C Client IP address is: ", buffer);
       ExitLoggingSafe();
+      delete[] buffer;
     }
     break;
   }
 
-  case I2C_CLIENT_NET_DOWN: {
+  case I2C_CLIENT_LOG_MSG: {
     wire->requestFrom(CLIENT_ADDR, 2);
+    uint16_t payload_length = ReadInLength(wire); 
     EnterLoggingSafe();
-    if (ReadInLength(wire) != 0) {
-      logmsg("Length was not 0 for NET_DOWN request/notification.");
-    }
+    if ( payload_length > 0) {
+      // Client is sending some data.
+      char* buffer = new char[payload_length+1];
+      memset(buffer, '\0', payload_length+1);
 
-    logmsg("I2C Client network is down.");
+      for (int pos = 0; pos < payload_length;) {        
+        int toRecv = (BUFFER_LENGTH < payload_length - pos) ? BUFFER_LENGTH : payload_length - pos;
+
+        wire->requestFrom(CLIENT_ADDR, toRecv);
+        while (toRecv > 0) {
+          while (wire->available() == 0) {
+#ifndef CONTROL_CROSS_CORE_QUEUE
+            ide_protocol_poll();
+#endif
+          }
+          buffer[pos] = wire->read();
+          pos++;
+          toRecv--;
+        }
+      }
+      switch (buffer[0])
+      {
+        case ClientMessage::Prefix::Normal:
+          logmsg("[I2C]: ", &buffer[1]);
+          break;
+        case ClientMessage::Prefix::Debug:
+          dbgmsg("[I2C]: ", &buffer[1]);
+          break;
+        default:
+          logmsg("[I2C]: ", buffer);
+      }
+      delete[] buffer;
+    }
+    else
+    {
+      // Legacy behaviour for I2C_CLIENT_NET_DOWN
+      logmsg("I2C Client network is down.");
+    }
     ExitLoggingSafe();
     break;
   }
