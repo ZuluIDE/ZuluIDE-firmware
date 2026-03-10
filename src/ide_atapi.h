@@ -130,6 +130,7 @@ protected:
         uint16_t bytes_req; // Host requested bytes per transfer
         uint8_t sense_key; // Latest error class
         uint16_t sense_asc; // Latest error details
+        uint16_t unit_attention_sense_asc; // Keep unit attention asc separate, when not_ready is true, it would overwrite unit attention's asc
         uint16_t blocksize; // Block size for data transfers
         atapi_data_state_t data_state;
         int udma_mode;  // Negotiated udma mode, or negative if not enabled
