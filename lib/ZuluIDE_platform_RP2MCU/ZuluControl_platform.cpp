@@ -159,7 +159,7 @@ void platform_wifi_controller_connect()
         }
 
         memset(&iniBuffer, 0, 100);
-        std::string wifiPass;
+        std::string wifiPass = "";
         if (ini_gets("UI", "wifipassword", "", iniBuffer, sizeof(iniBuffer), CONFIGFILE) > 0) {
             wifiPass = std::string(iniBuffer);
             logmsg("-- Set password from ", CONFIGFILE," file, using WiFi authentication.");

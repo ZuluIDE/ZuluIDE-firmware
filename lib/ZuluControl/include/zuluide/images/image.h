@@ -57,6 +57,7 @@ namespace zuluide::images {
     static drive_type_t ToDriveType(const ImageType toConvert);
     static const char* GetImagePrefix(const ImageType toConvert);
     static ImageType InferImageTypeFromImagePrefix(const char* prefix);
+    static ImageType InferImageTypeFromExtension(const char *filename);
     static ImageType InferImageTypeFromFileName(const char *filename);
 
   private:
