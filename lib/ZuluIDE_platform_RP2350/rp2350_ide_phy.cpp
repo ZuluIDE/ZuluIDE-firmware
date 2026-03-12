@@ -77,6 +77,13 @@ static void ide_phy_clear_event(uint32_t event)
     __atomic_fetch_and(&g_idecomm.events, ~event, __ATOMIC_ACQ_REL);
 }
 
+static bool ide_phy_check_pending_request(uint32_t request)
+{
+    // Use atomic_load_n() to make sure compiler doesn't optimize away
+    // repeated reads.
+    return __atomic_load_n(&g_idecomm.requests, __ATOMIC_ACQUIRE) & request;
+}
+
 void core1_log_poll();
 
 void ide_phy_config(const ide_phy_config_t* config)
@@ -127,9 +134,10 @@ void ide_phy_config(const ide_phy_config_t* config)
     busy_wait_us_32(CORE1_RESPONSE_DELAY);
     core1_log_poll();
 
-    if (g_idecomm.requests & CORE1_REQ_SET_REGS)
+    if (ide_phy_check_pending_request(CORE1_REQ_SET_REGS))
     {
-        logmsg("ERROR: Core1 is not responding.");
+        logmsg("ide_phy_config: Core1 is not responding.");
+        ide_phy_print_debug();
     }
 }
 
@@ -163,9 +171,10 @@ void ide_phy_reset()
     busy_wait_us_32(CORE1_RESPONSE_DELAY);
     core1_log_poll();
 
-    if (g_idecomm.requests & CORE1_REQ_SET_REGS)
+    if (ide_phy_check_pending_request(CORE1_REQ_SET_REGS))
     {
-        logmsg("ERROR: Core1 is not responding.");
+        logmsg("ide_phy_reset: Core1 is not responding.");
+        ide_phy_print_debug();
     }
 
 }
@@ -271,11 +280,11 @@ void ide_phy_get_regs(ide_registers_t *regs)
     // Wait for any outstanding register update to complete before reading them back
     uint32_t start = time_us_32();
     uint32_t reqs = CORE1_REQ_BUSY | CORE1_REQ_SET_REGS | CORE1_REQ_SET_REGS_DEV0 | CORE1_REQ_SET_REGS_DEV1;
-    while (g_idecomm.requests & reqs)
+    while (ide_phy_check_pending_request(reqs))
     {
-        if ((uint32_t)(time_us_32() - start) > 100)
+        if ((uint32_t)(time_us_32() - start) > CORE1_RESPONSE_DELAY)
         {
-            logmsg("ERROR: Core1 is not responding");
+            logmsg("ide_phy_get_regs: Core1 is not responding");
             ide_phy_print_debug();
             break;
         }
