@@ -75,6 +75,7 @@ X(IDE_CMD_READ_NATIVE_MAX_ADDRESS_EXT               , 0x27) \
 X(IDE_CMD_READ_MULTIPLE_EXT                         , 0x29) \
 X(IDE_CMD_READ_LOG_EXT                              , 0x2F) \
 X(IDE_CMD_WRITE_SECTORS                             , 0x30) \
+X(IDE_CMD_WRITE_SECTORS_WOUT_RETRIES                , 0x31) \
 X(IDE_CMD_WRITE_SECTORS_EXT                         , 0x34) \
 X(IDE_CMD_WRITE_DMA_EXT                             , 0x35) \
 X(IDE_CMD_WRITE_DMA_QUEUED_EXT                      , 0x36) \
