@@ -178,6 +178,7 @@ bool IDERigidDevice::handle_command(ide_registers_t *regs)
         // Device reset command is only for ATAPI devices, make
         // sure we appear like non-ATAPI device.
         case IDE_CMD_DEVICE_RESET:
+        case IDE_CMD_IDENTIFY_PACKET_DEVICE:
             return set_device_signature(IDE_ERROR_ABORT, false);
 
         // Supported IDE commands

@@ -227,7 +227,7 @@ void ide_protocol_poll()
 
             if (!status)
             {
-                logmsg("-- Command handler failed for ", get_ide_command_name(cmd));
+                logmsg("-- Command handler failed for ", get_ide_command_name(cmd), " (DEV", selected_device, ")");
                 regs.error = IDE_ERROR_ABORT;
                 ide_phy_set_regs(&regs);
                 ide_phy_assert_irq(IDE_STATUS_DEVRDY | IDE_STATUS_DSC | IDE_STATUS_ERR);
