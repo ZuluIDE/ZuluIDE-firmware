@@ -109,7 +109,7 @@ void IDEATAPIDevice::handle_event(ide_event_t evt)
         }
 
         m_atapi_state.unit_attention = true;
-        m_atapi_state.sense_asc = ATAPI_ASC_RESET_OCCURRED;
+        m_atapi_state.unit_attention_sense_asc = ATAPI_ASC_RESET_OCCURRED;
         set_device_signature(0, true);
     }
 }
@@ -440,7 +440,7 @@ void IDEATAPIDevice::fill_device_signature(ide_registers_t *regs)
 void IDEATAPIDevice::loaded_new_media()
 {
     m_atapi_state.unit_attention = true;
-    m_atapi_state.sense_asc = ATAPI_ASC_MEDIUM_CHANGE;
+    m_atapi_state.unit_attention_sense_asc = ATAPI_ASC_MEDIUM_CHANGE;
     m_removable.ejected = false;
     set_not_ready(true);
 }
@@ -777,8 +777,7 @@ bool IDEATAPIDevice::handle_atapi_command_wrapper(const uint8_t *cmd)
 
     if (m_atapi_state.unit_attention)
     {
-        m_atapi_state.unit_attention = false;
-        return atapi_cmd_error(ATAPI_SENSE_UNIT_ATTENTION, m_atapi_state.sense_asc);
+        return atapi_cmd_error(ATAPI_SENSE_UNIT_ATTENTION, m_atapi_state.unit_attention_sense_asc);
     }
 
     return handle_atapi_command(cmd);
@@ -891,8 +890,8 @@ bool IDEATAPIDevice::atapi_cmd_ok()
 
     if (!m_atapi_state.unit_attention)
     {
-        m_atapi_state.sense_key = 0;
-        m_atapi_state.sense_asc = 0;
+        m_atapi_state.sense_key = ATAPI_SENSE_NO_SENSE;
+        m_atapi_state.sense_asc = ATAPI_ASC_NO_ASC;
     }
 
     m_atapi_state.data_state = ATAPI_DATA_IDLE;
@@ -921,8 +920,17 @@ bool IDEATAPIDevice::atapi_test_unit_ready(const uint8_t *cmd)
             // insert_next_media will set m_atapi_state.unit_attention to true to error for the next ATAPI command
             // But since insert_next_media was called in atapi_test_unit_ready, immediately send
             // a unit attention error for media change and disabled unit_attention be called on the next command
-            m_atapi_state.unit_attention = false;
-            return atapi_cmd_error(ATAPI_SENSE_UNIT_ATTENTION, ATAPI_ASC_MEDIUM_CHANGE);
+            if (m_atapi_state.not_ready)
+            {
+                m_atapi_state.unit_attention = true;
+                m_atapi_state.unit_attention_sense_asc = ATAPI_ASC_MEDIUM_CHANGE;
+                return atapi_cmd_not_ready_error();
+            }
+            else
+            {
+                m_atapi_state.unit_attention = false;
+                return atapi_cmd_error(ATAPI_SENSE_UNIT_ATTENTION, ATAPI_ASC_MEDIUM_CHANGE);
+            }
         }
     }
 
@@ -1120,7 +1128,7 @@ bool IDEATAPIDevice::atapi_request_sense(const uint8_t *cmd)
 {
 
     uint8_t sense_key =  m_atapi_state.not_ready ? ATAPI_SENSE_NOT_READY : m_atapi_state.sense_key;
-    uint16_t sense_asc =  m_atapi_state.not_ready ? ATAPI_ASC_NO_MEDIUM : m_atapi_state.sense_asc;
+    uint16_t sense_asc =  m_atapi_state.not_ready ? ATAPI_ASC_NO_MEDIUM : m_atapi_state.unit_attention ? m_atapi_state.unit_attention_sense_asc : m_atapi_state.sense_asc;
     uint8_t req_bytes = cmd[4];
 
     uint8_t *resp = m_buffer.bytes;
@@ -1134,12 +1142,51 @@ bool IDEATAPIDevice::atapi_request_sense(const uint8_t *cmd)
     if (req_bytes < sense_length) sense_length = req_bytes;
     atapi_send_data(m_buffer.bytes, sense_length);
 
-    if (m_atapi_state.not_ready)
-        m_atapi_state.not_ready = false;
-    else
-        m_atapi_state.unit_attention = false;
+    if (ide_phy_is_command_interrupted())
+    {
+        // Avoid messing up state related to new command
+        return true;
+    }
 
-    return atapi_cmd_ok();
+    if (m_atapi_state.crc_errors > 0)
+    {
+        logmsg("-- Detected ", m_atapi_state.crc_errors, " CRC errors during transfer, reporting error to host");
+        return atapi_cmd_error(ATAPI_SENSE_HARDWARE_ERROR, ATAPI_ASC_CRC_ERROR);
+    }
+
+    dbgmsg("-- ATAPI success");
+
+    if (!m_atapi_state.unit_attention)
+    {
+        m_atapi_state.sense_key = ATAPI_SENSE_NO_SENSE;
+        m_atapi_state.sense_asc = ATAPI_ASC_NO_ASC;
+    }
+
+    if (!m_atapi_state.not_ready && m_atapi_state.unit_attention)
+    {
+        m_atapi_state.unit_attention = false;
+        m_atapi_state.unit_attention_sense_asc = ATAPI_ASC_NO_ASC;
+        m_atapi_state.sense_key = ATAPI_SENSE_NO_SENSE;
+        m_atapi_state.sense_asc = ATAPI_ASC_NO_ASC;
+    }
+
+    if (m_atapi_state.not_ready)
+    {
+        m_atapi_state.not_ready = false;
+    }
+
+    m_atapi_state.data_state = ATAPI_DATA_IDLE;
+
+    ide_registers_t regs = {};
+    ide_phy_get_regs(&regs);
+    regs.error = 0;
+    regs.sector_count = ATAPI_SCOUNT_IS_CMD | ATAPI_SCOUNT_TO_HOST;
+    regs.lba_mid = 0xFE;
+    regs.lba_high = 0xFF;
+    ide_phy_set_regs(&regs);
+    ide_phy_assert_irq(IDE_STATUS_DEVRDY | IDE_STATUS_DSC);
+
+    return true;
 }
 
 bool IDEATAPIDevice::atapi_get_configuration(const uint8_t *cmd)
