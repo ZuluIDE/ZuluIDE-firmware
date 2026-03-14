@@ -178,13 +178,16 @@ bool IDERigidDevice::handle_command(ide_registers_t *regs)
         // Supported IDE commands
         case IDE_CMD_NOP: return cmd_nop(regs);
         case IDE_CMD_SET_FEATURES: return cmd_set_features(regs);
+        case IDE_CMD_SET_MULTIPLE_MODE: return cmd_set_multiple_mode(regs);
         case IDE_CMD_SEEK: return cmd_seek(regs);
-        case IDE_CMD_READ_DMA: return cmd_read(regs, true, false);
-        case IDE_CMD_WRITE_DMA: return cmd_write(regs, true);
+        case IDE_CMD_READ_DMA: return cmd_read(regs, true, false, false);
+        case IDE_CMD_WRITE_DMA: return cmd_write(regs, true, false);
         case IDE_CMD_READ_SECTORS_WOUT_RETRIES:
-        case IDE_CMD_READ_SECTORS: return cmd_read(regs, false, false);
-        case IDE_CMD_READ_VERIFY_SECTORS: return cmd_read(regs, false, true);
-        case IDE_CMD_WRITE_SECTORS: return cmd_write(regs, false);
+        case IDE_CMD_READ_SECTORS: return cmd_read(regs, false, false, false);
+        case IDE_CMD_READ_MULTIPLE: return cmd_read(regs, false, false, true);
+        case IDE_CMD_READ_VERIFY_SECTORS: return cmd_read(regs, false, true, false);
+        case IDE_CMD_WRITE_SECTORS: return cmd_write(regs, false, false);
+        case IDE_CMD_WRITE_MULTIPLE: return cmd_write(regs, false, true);
         case IDE_CMD_READ_BUFFER: return cmd_read_buffer(regs);
         case IDE_CMD_WRITE_BUFFER: return cmd_write_buffer(regs);
         case IDE_CMD_INIT_DEV_PARAMS: return cmd_init_dev_params(regs);
@@ -306,7 +309,7 @@ static void copy_id_string(uint16_t *dst, size_t maxwords, const char *src)
     }
 }
 
-bool IDERigidDevice::cmd_read(ide_registers_t *regs, bool dma_transfer, bool verify_only)
+bool IDERigidDevice::cmd_read(ide_registers_t *regs, bool dma_transfer, bool verify_only, bool is_multiple)
 {
     if (dma_transfer && m_phy_caps.max_udma_mode < 0)
         return false;
@@ -361,7 +364,21 @@ bool IDERigidDevice::cmd_read(ide_registers_t *regs, bool dma_transfer, bool ver
     }
     else
     {
-        bool status = m_image->read((uint64_t)lba * m_devinfo.bytes_per_sector, m_devinfo.bytes_per_sector, sector_count, this);
+        size_t block_size = m_devinfo.bytes_per_sector;
+        size_t block_count = sector_count;
+        if (is_multiple) {
+            block_size *= m_ata_state.multiple_mode_sectors;
+            // Sector count must be a multiple of multiple mode sectors
+            if ((sector_count % m_ata_state.multiple_mode_sectors) != 0) {
+                regs->error = IDE_ERROR_ABORT;
+                ide_phy_set_regs(regs);
+                ide_phy_assert_irq(IDE_STATUS_DEVRDY | IDE_STATUS_DSC | IDE_STATUS_ERR);
+                return false;
+            }
+            block_count /= m_ata_state.multiple_mode_sectors;
+        }
+        
+        bool status = m_image->read((uint64_t)lba * m_devinfo.bytes_per_sector, block_size, block_count, this);
         status = status && ata_send_wait_finish();
         m_ata_state.data_state = ATA_DATA_IDLE;
         if (status)
@@ -378,7 +395,7 @@ bool IDERigidDevice::cmd_read(ide_registers_t *regs, bool dma_transfer, bool ver
     return true;
 }
 
-bool IDERigidDevice::cmd_write(ide_registers_t *regs, bool dma_transfer)
+bool IDERigidDevice::cmd_write(ide_registers_t *regs, bool dma_transfer, bool is_multiple)
 {
     if (dma_transfer && m_phy_caps.max_udma_mode < 0)
         return false;
@@ -411,8 +428,21 @@ bool IDERigidDevice::cmd_write(ide_registers_t *regs, bool dma_transfer)
 
     if (m_image && m_image->writable())
     {
+        size_t block_size = m_devinfo.bytes_per_sector;
+        size_t block_count = sector_count;
+        if (is_multiple) {
+            block_size *= m_ata_state.multiple_mode_sectors;
+            // Sector count must be a multiple of multiple mode sectors
+            if ((sector_count % m_ata_state.multiple_mode_sectors) != 0) {
+                regs->error = IDE_ERROR_ABORT;
+                ide_phy_set_regs(regs);
+                ide_phy_assert_irq(IDE_STATUS_DEVRDY | IDE_STATUS_DSC | IDE_STATUS_ERR);
+                return false;
+            }
+            block_count /= m_ata_state.multiple_mode_sectors;
+        }
         status = m_image->write((uint64_t)lba * m_devinfo.bytes_per_sector,
-                            m_devinfo.bytes_per_sector, sector_count,
+                            block_size, block_count,
                             this);
     }
 
@@ -559,7 +589,7 @@ bool IDERigidDevice::cmd_identify_device(ide_registers_t *regs)
     copy_id_string(&idf[IDE_IDENTIFY_OFFSET_SERIAL_NUMBER], 10, m_devconfig.ata_serial);
     copy_id_string(&idf[IDE_IDENTIFY_OFFSET_FIRMWARE_REV], 4, m_devconfig.ata_revision);
     copy_id_string(&idf[IDE_IDENTIFY_OFFSET_MODEL_NUMBER], 20, m_devconfig.ata_model);
-    idf[IDE_IDENTIFY_OFFSET_MAX_SECTORS] = 0x8000;// 0x8020;
+    idf[IDE_IDENTIFY_OFFSET_MAX_SECTORS] = 0x8000 | (m_phy_caps.max_blocksize / m_devinfo.bytes_per_sector);
 
     idf[IDE_IDENTIFY_OFFSET_CAPABILITIES_1] = (m_phy_caps.supports_iordy ? 1 << 11 : 0) |
                                              (1 << 10) | // iordy may be disabled
@@ -645,6 +675,28 @@ bool IDERigidDevice::cmd_identify_device(ide_registers_t *regs)
             ide_phy_stop_transfers();
             return false;
         }
+    }
+    regs->error = 0;
+    regs->status = IDE_STATUS_DEVRDY | IDE_STATUS_DSC;
+    ide_phy_set_regs(regs);
+    return true;
+}
+
+bool IDERigidDevice::cmd_set_multiple_mode(ide_registers_t *regs)
+{
+    dbgmsg("Setting multiple sector mode = ", (int) regs->sector_count, " sectors");
+    if (regs->sector_count == 0)
+    {
+        m_ata_state.multiple_mode_sectors = 0;
+    }
+    else if (regs->sector_count > (m_phy_caps.max_blocksize / m_devinfo.bytes_per_sector))
+    {
+        m_ata_state.multiple_mode_sectors = 0;
+        return false;
+    }
+    else
+    {
+        m_ata_state.multiple_mode_sectors = regs->sector_count;
     }
     regs->error = 0;
     regs->status = IDE_STATUS_DEVRDY | IDE_STATUS_DSC;
