@@ -186,6 +186,7 @@ bool IDERigidDevice::handle_command(ide_registers_t *regs)
         case IDE_CMD_READ_SECTORS: return cmd_read(regs, false, false, false);
         case IDE_CMD_READ_MULTIPLE: return cmd_read(regs, false, false, true);
         case IDE_CMD_READ_VERIFY_SECTORS: return cmd_read(regs, false, true, false);
+        case IDE_CMD_WRITE_SECTORS_WOUT_RETRIES:
         case IDE_CMD_WRITE_SECTORS: return cmd_write(regs, false, false);
         case IDE_CMD_WRITE_MULTIPLE: return cmd_write(regs, false, true);
         case IDE_CMD_READ_BUFFER: return cmd_read_buffer(regs);

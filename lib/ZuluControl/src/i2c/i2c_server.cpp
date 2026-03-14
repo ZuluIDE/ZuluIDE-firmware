@@ -28,6 +28,7 @@
 #include <cctype>
 #include "ZuluIDE_log.h"
 #include "ZuluIDE_platform.h"
+#include <ZuluControl_platform.h>
 #include <ide_protocol.h>
 #include "zuluide/i2c/i2c_server.h"
 #include "zuluide/i2c/i2c_server_src_type.h"
@@ -44,7 +45,7 @@ I2CServer::I2CServer(ImageRequestPipe<i2c_server_source_t>* image_request_pipe, 
   imageRequestPipe(image_request_pipe), imageResponsePipe(image_response_pipe),
   filenameTransferState(FilenameTransferState::Idle), deviceControl(nullptr),
   isSubscribed(false), devControlSet(false), sendFilenames(false), sendFiles(false),
-  sendNextImage(false), updateFilenameCache(false), isIterating(false), isPresent(false), remoteMajorVersion(0)
+  sendNextImage(false), updateFilenameCache(false), isIterating(false), isPresent(false), password(""), ip(""), netmask(""), gateway(""), remoteMajorVersion(0)
 {
   imageResponsePipe->AddObserver([&](const ImageResponse<i2c_server_source_t>& t){HandleImageResponse(t);});
 }
@@ -91,6 +92,7 @@ bool I2CServer::CheckForDevice() {
   isPresent = writeLengthPrefacedString(wire, I2C_SERVER_RESET, 0, buf);
   return isPresent;
 }
+
 void I2CServer::HandleUpdate(const SystemStatus& current) {
   static bool lastCardPresentStatus = false;
   bool card_present = current.IsCardPresent();
@@ -100,6 +102,10 @@ void I2CServer::HandleUpdate(const SystemStatus& current) {
     if (!card_present)
     {
       RequestCleanup(i2c_server_source_t::None);
+    }
+    else
+    {
+      platform_wifi_controller_connect();
     }
   }
 
@@ -125,6 +131,9 @@ void I2CServer::HandleImageResponse(const ImageResponse<i2c_server_source_t>& re
       break;
     case i2c_server_source_t::SetToCurrent:
       HandleSetToCurrent(std::move(image_response));
+      break;
+    case i2c_server_source_t::None:
+      // do nothing
       break;
   }
 }
@@ -490,12 +499,22 @@ void I2CServer::Poll() {
     if (ReadInLength(wire) != 0) {
       logmsg("Length was not 0 for fetch ssid request.");
     }
-
-    if (ssid.length() == 0) {
-      logmsg("I2C Client requested the WiFi SSID, but the SSID is not configured.");
-    }
     ExitLoggingSafe();
     writeLengthPrefacedString(wire, I2C_SERVER_SSID, ssid.length(), ssid.c_str());
+
+    // static IP strings have a two letter prefix or empty if never they have never been set
+    if (ip.length() > 2 && netmask.length() > 2 && gateway.length() > 2)
+    {
+        writeLengthPrefacedString(wire, I2C_SERVER_STATIC_IP, ip.length(), ip.c_str());
+        writeLengthPrefacedString(wire, I2C_SERVER_STATIC_IP, gateway.length(), gateway.c_str());
+        writeLengthPrefacedString(wire, I2C_SERVER_STATIC_IP, netmask.length(), netmask.c_str());
+    }
+    else
+    {
+        // clear static IP values on client and use DHCP
+        writeLengthPrefacedString(wire, I2C_SERVER_STATIC_IP, 0, nullptr);
+    }
+
     break;
   }
 
@@ -505,12 +524,9 @@ void I2CServer::Poll() {
     if (ReadInLength(wire) != 0) {
       logmsg("Length was not 0 for fetch ssid pass request.");
     }
-
-    if (password.length() == 0) {
-      logmsg("I2C Client requested SSID password, but the SSID password is not configured.");
-    }
     ExitLoggingSafe();
     writeLengthPrefacedString(wire, I2C_SERVER_SSID_PASS, password.length(), password.c_str());
+    WiFiConnect();
     break;
   }
 
@@ -544,7 +560,10 @@ void I2CServer::Poll() {
       EnterLoggingSafe();
       logmsg("I2C Client IP address is: ", buffer);
       ExitLoggingSafe();
+
       delete[] buffer;
+      // Acknowledge IP received
+      writeLengthPrefacedString(wire, I2C_SERVER_IP_ADDRESS_ACK, 0, "");
     }
     break;
   }
@@ -603,16 +622,41 @@ void I2CServer::Poll() {
   imageResponsePipe->ProcessUpdates();
 }
 
-void I2CServer::SetSSID(std::string& value) {
+void I2CServer::SetSSID(const std::string& value) {
   ssid = value;
 }
 
-void I2CServer::SetPassword(std::string &value) {
+void I2CServer::SetPassword(const std::string &value) {
   password = value;
 }
 
-bool I2CServer::WifiCredentialsSet() {
-  return !ssid.empty() && !password.empty();
+void I2CServer::SetIPv4(const std::string &value)
+{
+  ip = value;
+}
+
+void I2CServer::SetNetmask(const std::string &value)
+{
+  netmask = value;
+}
+
+void I2CServer::SetGateway(const std::string &value)
+{
+  gateway = value;
+}
+
+bool I2CServer::WiFiSSIDSet() {
+  return !ssid.empty();
+}
+
+bool I2CServer::WiFiPasswordSet() {
+  return !password.empty();
+}
+
+bool I2CServer::WiFiConnect()
+{
+  auto buf = "";
+  return writeLengthPrefacedString(wire, I2C_SERVER_WIFI_CONNECT, 0, buf);
 }
 
 void I2CServer::UpdateFilenames() {

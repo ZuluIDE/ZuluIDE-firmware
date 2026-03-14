@@ -38,6 +38,7 @@
 #include "ide_removable.h"
 #include "ide_rigid.h"
 #include "ide_imagefile.h"
+#include <ZuluControl_platform.h>
 #include "status/status_controller.h"
 #include <zuluide/status/cdrom_status.h>
 #include <zuluide/status/removable_status.h>
