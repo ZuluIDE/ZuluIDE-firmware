@@ -116,6 +116,7 @@ protected:
         int udma_mode;  // Negotiated udma mode, or negative if not enabled
         bool dma_requested; // Host requests to use DMA transfer for current command
         int crc_errors; // CRC errors in latest transfer
+        unsigned char multiple_mode_sectors;  // Number of sectors configured, or 0 for disabled
     } m_ata_state;
 
     struct
@@ -137,12 +138,13 @@ protected:
     virtual bool cmd_nop(ide_registers_t *regs);
     virtual bool cmd_set_features(ide_registers_t *regs);
     virtual bool cmd_seek(ide_registers_t *regs);
-    virtual bool cmd_read(ide_registers_t *regs, bool dma_transfer, bool verify_only);
-    virtual bool cmd_write(ide_registers_t *regs, bool dma_transfer);
+    virtual bool cmd_read(ide_registers_t *regs, bool dma_transfer, bool verify_only, bool is_multiple);
+    virtual bool cmd_write(ide_registers_t *regs, bool dma_transfer, bool is_multiple);
     virtual bool cmd_read_buffer(ide_registers_t *regs);
     virtual bool cmd_write_buffer(ide_registers_t *regs);
     virtual bool cmd_init_dev_params(ide_registers_t *regs);
     virtual bool cmd_identify_device(ide_registers_t *regs);
+    virtual bool cmd_set_multiple_mode(ide_registers_t *regs);
     virtual bool cmd_recalibrate(ide_registers_t *regs);
     virtual bool cmd_standby(ide_registers_t *regs);
     virtual bool cmd_idle(ide_registers_t *regs);
