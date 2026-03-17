@@ -207,6 +207,11 @@ static void LBA2MSFBCD(int32_t LBA, uint8_t* MSF, bool relative)
     MSF[2] = ((MSF[2] / 10) << 4) | (MSF[2] % 10);
 }
 
+static uint8_t BYTE2BCD(uint8_t b)
+{
+    return ((b / 10) << 4) | (b % 10);
+}
+
 // Convert CD-ROM time to logical block address
 static int32_t MSF2LBA(uint8_t m, uint8_t s, uint8_t f, bool relative)
 {
@@ -1336,6 +1341,8 @@ bool IDECDROMDevice::doReadCD(uint32_t lba, uint32_t length, uint8_t sector_type
             }
         }
 
+        m_cd_read_format.trackinfo = trackinfo;
+
         dbgmsg("---- Read CD: ", (int)length, " sectors starting at ", (int)lba,
             ", track number ", trackinfo.track_number, ", sector size ", (int)trackinfo.sector_length,
             ", main channel ", main_channel, ", sub channel ", sub_channel,
@@ -1559,12 +1566,12 @@ ssize_t IDECDROMDevice::read_callback(const uint8_t *data, size_t blocksize, siz
             // Refer to table 354 in T10/1545-D MMC-4 Revision 5a
             // and ECMA-130 22.3.3
             *buf++ = (m_cd_read_format.trackinfo.track_mode == CUETrack_AUDIO ? 0x10 : 0x14); // Control & ADR
-            *buf++ = m_cd_read_format.trackinfo.track_number;
+            *buf++ = BYTE2BCD(m_cd_read_format.trackinfo.track_number);
             *buf++ = (current_lba >= m_cd_read_format.trackinfo.data_start) ? 1 : 0; // Index number (0 = pregap)
             int32_t rel = (int32_t)(current_lba) - (int32_t)m_cd_read_format.trackinfo.data_start;
-            LBA2MSF(rel, buf, true); buf += 3;
+            LBA2MSFBCD(rel, buf, true); buf += 3;
             *buf++ = 0;
-            LBA2MSF(current_lba, buf, false); buf += 3;
+            LBA2MSFBCD(current_lba, buf, false); buf += 3;
             *buf++ = 0; *buf++ = 0; // CRC (optional)
             *buf++ = 0; *buf++ = 0; *buf++ = 0; // (pad)
             *buf++ = 0; // No P subchannel
