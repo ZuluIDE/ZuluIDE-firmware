@@ -1113,7 +1113,7 @@ bool IDECDROMDevice::doReadSessionInfo(bool MSF, uint16_t allocationLength)
     const CUETrackInfo *trackinfo = m_cueparser.next_track();
     if (trackinfo)
     {
-        formatTrackInfo(trackinfo, &buf[4], false);
+        formatTrackInfo(trackinfo, &buf[4], MSF);
     }
 
     atapi_send_data(buf, std::min<uint32_t>(allocationLength, len));
