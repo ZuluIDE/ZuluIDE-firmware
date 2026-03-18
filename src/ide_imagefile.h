@@ -87,6 +87,12 @@ public:
     //      and on next call return the number of blocks handled.
     virtual bool read(uint64_t startpos, size_t blocksize, size_t num_blocks, Callback *callback) = 0;
 
+    // Read zeros using a callback interface
+    // The data buffer is filled with zeros in place of SD card data and the callback is used to send
+    // the zeros to the host. The callback should return the number of blocks that were
+    // queued to send.
+    virtual bool read_zeros(size_t blocksize, size_t num_blocks, Callback *callback);
+
     // Write data to image file using a callback interface.
     // The callback function is passed data pointer and number of blocks requested.
     // It will return the number of blocks available at data.
@@ -116,20 +122,21 @@ public:
     bool open_file(const char* filename, bool read_only = false);
     void close();
 
-    virtual bool get_filename(char *buf, size_t buflen);
-    virtual bool get_image_name(char *buf, size_t buflen);
-    virtual uint64_t capacity();
+    virtual bool get_filename(char *buf, size_t buflen) override;
+    virtual bool get_image_name(char *buf, size_t buflen) override;
+    virtual uint64_t capacity() override;
     virtual uint64_t file_position();
     virtual bool is_open();
-    virtual bool writable();
-    virtual bool read(uint64_t startpos, size_t blocksize, size_t num_blocks, Callback *callback);
-    virtual bool write(uint64_t startpos, size_t blocksize, size_t num_blocks, Callback *callback);
+    virtual bool writable() override;
+    virtual bool read(uint64_t startpos, size_t blocksize, size_t num_blocks, Callback *callback) override;
+    virtual bool read_zeros(size_t blocksize, size_t num_blocks, Callback *callback) override;
+    virtual bool write(uint64_t startpos, size_t blocksize, size_t num_blocks, Callback *callback) override;
 
     // Support for opening a folder for images that consist of multiple files.
     // Currently used for .cue / .bin sets.
-    virtual bool is_folder();
-    virtual bool get_foldername(char *buf, size_t buflen);
-    virtual bool select_image(const char *filename);
+    virtual bool is_folder() override;
+    virtual bool get_foldername(char *buf, size_t buflen) override;
+    virtual bool select_image(const char *filename) override;
 
     // Raw access to SdFat file types (used for loading .cue sheets)
     // get_folder() is valid even if is_folder() is false (it will return the root folder)
@@ -137,8 +144,8 @@ public:
     FsFile *get_file() { return &m_file; }
 
     // Set drive type for filtering purposes
-    virtual void set_drive_type(drive_type_t type);
-    virtual drive_type_t get_drive_type();
+    virtual void set_drive_type(drive_type_t type) override;
+    virtual drive_type_t get_drive_type() override;
 
     // Set the prefix string of the filename, to match next file to insert after ejection
     virtual void set_prefix(const char* prefix);
