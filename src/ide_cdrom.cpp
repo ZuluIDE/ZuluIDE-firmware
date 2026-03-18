@@ -1904,7 +1904,9 @@ uint32_t IDECDROMDevice::getLeadOutLBA(const CUETrackInfo* lasttrack)
     if (lasttrack != nullptr && lasttrack->track_number != 0 && m_image != nullptr)
     {
         selectBinFileForTrack(lasttrack);
-        uint32_t lastTrackBlocks = (m_image->capacity() - lasttrack->file_offset) / lasttrack->sector_length;
+        // Subtracting into int64_t avoids the uint32_t lastTrackBlocks from becoming negative due to casting
+        int64_t track_length = m_image->capacity() - lasttrack->file_offset;
+        uint32_t lastTrackBlocks = (track_length > 0) ? (uint32_t)(track_length / lasttrack->sector_length) : 0;
         return lasttrack->data_start + lastTrackBlocks;
     }
     else
