@@ -31,7 +31,9 @@
 #include <hardware/gpio.h>
 #include <hardware/dma.h>
 #include <SdFat.h>
+#include <minIni.h>
 #include "ZuluIDE.h"
+#include "ZuluIDE_config.h"
 #include "rp2350_sniffer.pio.h"
 
 /* These settings can be overridden in platformio.ini */
@@ -61,9 +63,18 @@
 #define SNIFFER_PIO pio2
 #endif
 
-// PIO state machine used
+// PIO state machine used for main sniffer code
 #ifndef SNIFFER_PIO_SM
 #define SNIFFER_PIO_SM 3
+#endif
+
+// PIO state machines for triggering
+#ifndef SNIFFER_PIO_SM_TRIGGER_MIN
+#define SNIFFER_PIO_SM_TRIGGER_MIN 0
+#endif
+
+#ifndef SNIFFER_PIO_SM_TRIGGER_MAX
+#define SNIFFER_PIO_SM_TRIGGER_MAX 2
 #endif
 
 // Millisecond interval to report data and to sync to SD card
@@ -83,6 +94,7 @@ bool g_rp2350_passive_sniffer;
 static struct {
     bool channels_claimed;
     uint32_t offset_sniffer;
+    uint32_t offset_trigger;
     FsFile file;
     uint32_t sync_time;
 
@@ -94,6 +106,9 @@ static struct {
 
     uint32_t total_bytes;
     uint32_t overruns;
+
+    // Last log position written
+    uint32_t logpos;
 
     // Number of blocks written, used by sd write callback
     uint32_t sd_blocks_complete;
@@ -107,6 +122,120 @@ static struct {
 __attribute__((aligned(sizeof(uint32_t*) * DMA_BLOCKPTR_COUNT)))
 uint32_t *g_sniffer_dma_dest_blocks[DMA_BLOCKPTR_COUNT];
 
+// Sniffer has 27 inputs, lowest is DIOW and highest IORDY
+#define SNIFFER_PINCOUNT 27
+#define SNIFFER_PINS_ALL ((~(uint32_t)0) >> (32 - SNIFFER_PINCOUNT))
+
+// Default trigger set: DIOW, DIOR, CS0, CS1, DMACK, D0-D15, DATA_SEL, DATA_DIR, IORDY
+#define SNIFFER_DEFAULT_TRIGPINS 0x07FFFFE3
+
+// Setup trigger state machines based on pin mask.
+// Up to three contiguous pin ranges are supported.
+void rp2350_sniffer_setup_triggers(uint32_t trigpins)
+{
+    trigpins &= SNIFFER_PINS_ALL;
+    logmsg("Sniffer trigger configuration: ", trigpins);
+
+    // Find continuous pin ranges and configure state machines
+    for (int sm = SNIFFER_PIO_SM_TRIGGER_MIN; sm <= SNIFFER_PIO_SM_TRIGGER_MAX; sm++)
+    {
+        if (!trigpins) break; // No more pins
+
+        int lowpin = -1;
+        for (int i = 0; i < SNIFFER_PINCOUNT; i++)
+        {
+            if (trigpins & (1 << i))
+            {
+                lowpin = i;
+                break;
+            }
+        }
+
+        int highpin = lowpin;
+        for (int i = lowpin; i < SNIFFER_PINCOUNT; i++)
+        {
+            if (!(trigpins & (1 << i)))
+            {
+                break;
+            }
+            else
+            {
+                // Clear the pins are part of this range
+                highpin = i;
+                trigpins &= ~(1 << i);
+            }
+        }
+
+        logmsg("Sniffer SM", sm, " triggers on pin range ", lowpin, " - ", highpin);
+
+        pio_sm_config cfg = rp2350_sniffer_trigger_program_get_default_config(g_sniffer.offset_trigger);
+        sm_config_set_in_pins(&cfg, IDE_DIOW + lowpin);
+        sm_config_set_in_pin_count(&cfg, highpin - lowpin + 1);
+        pio_sm_init(SNIFFER_PIO, sm, g_sniffer.offset_trigger, &cfg);
+        pio_sm_set_enabled(SNIFFER_PIO, sm, true);
+    }
+
+    // Check if we were able to setup all pins
+    if (trigpins)
+    {
+        logmsg("Sniffer trigger has too many pin ranges, remaining pins ignored: ", trigpins);
+    }
+}
+
+// Write any new log data to sniffer output file
+void rp2350_sniffer_write_logblock(bool first_block = false)
+{
+    if (first_block || log_get_buffer_len() > g_sniffer.logpos)
+    {
+        uint32_t tmpbuf[512 / sizeof(uint32_t)]; // Write in full SD card sectors
+        int wrpos = 0;
+
+        if (first_block)
+        {
+            // Identify sniffer format version and CPU frequency in first word of file
+            uint8_t MHz = clock_get_hz(clk_sys) / 1000000;
+            tmpbuf[0] = 0xFF000000 | (MHz << 8) | 2;
+
+            // Set system timestamp at start of file
+            tmpbuf[1] = 0xFC000000 | (millis() & 0xFFFFFF);
+
+            wrpos = 2;
+        }
+
+        // Set the log data length to the remaining length of
+        // the block. Unused bytes are set to 0x00.
+        wrpos += 1;
+        uint32_t logmaxlen = sizeof(tmpbuf) - wrpos * sizeof(uint32_t);
+        tmpbuf[wrpos - 1] = 0xFF010000 | logmaxlen;
+
+        // Check how much log data is available
+        uint32_t available = 0;
+        const char *log = log_get_buffer(&g_sniffer.logpos, &available);
+        if (available > logmaxlen)
+        {
+            // Write only as much log data as fits in one SD card sector
+            g_sniffer.logpos -= available - logmaxlen;
+            available = logmaxlen;
+        }
+
+        memcpy(&tmpbuf[wrpos], log, available);
+
+        if (available < logmaxlen)
+        {
+            // Zero out rest of the bytes in the block
+            memset((char*)&tmpbuf[wrpos] + available, 0, logmaxlen - available);
+        }
+
+        if (g_sniffer.file.write(tmpbuf, sizeof(tmpbuf)) != sizeof(tmpbuf))
+        {
+            logmsg("Sniffer write failed");
+            g_sniffer.file.close();
+        }
+
+        g_sniffer.total_bytes += sizeof(tmpbuf);
+    }
+}
+
 bool rp2350_sniffer_init(const char *filename, bool passive)
 {
     g_rp2350_passive_sniffer = passive;
@@ -114,13 +243,28 @@ bool rp2350_sniffer_init(const char *filename, bool passive)
     if (!g_sniffer.channels_claimed)
     {
         pio_sm_claim(SNIFFER_PIO, SNIFFER_PIO_SM);
+
+        for (int i = SNIFFER_PIO_SM_TRIGGER_MIN; i <= SNIFFER_PIO_SM_TRIGGER_MAX; i++)
+        {
+            pio_sm_claim(SNIFFER_PIO, i);
+        }
+
+        pio_clear_instruction_memory(SNIFFER_PIO);
+        g_sniffer.offset_sniffer = pio_add_program(SNIFFER_PIO, &rp2350_sniffer_program);
+        g_sniffer.offset_trigger = pio_add_program(SNIFFER_PIO, &rp2350_sniffer_trigger_program);
+
         dma_channel_claim(SNIFFER_DMACH);
         dma_channel_claim(SNIFFER_DMACH_B);
-        g_sniffer.offset_sniffer = pio_add_program(SNIFFER_PIO, &rp2350_sniffer_program);
         g_sniffer.channels_claimed = true;
     }
 
     pio_sm_set_enabled(SNIFFER_PIO, SNIFFER_PIO_SM, false);
+
+    for (int i = SNIFFER_PIO_SM_TRIGGER_MIN; i <= SNIFFER_PIO_SM_TRIGGER_MAX; i++)
+    {
+        pio_sm_set_enabled(SNIFFER_PIO, i, false);
+    }
+
     dma_channel_abort(SNIFFER_DMACH);
     g_sniffer.file.close();
     g_sniffer.total_blocks = 0;
@@ -130,6 +274,7 @@ bool rp2350_sniffer_init(const char *filename, bool passive)
     g_sniffer.total_blocks = 0;
     g_sniffer.sd_blocks_complete = 0;
     g_sniffer.sync_time = 0;
+    g_sniffer.logpos = 0;
 
     g_sniffer.file = SD.open(filename, O_WRONLY | O_CREAT | O_TRUNC);
     if (!g_sniffer.file.isOpen())
@@ -138,11 +283,18 @@ bool rp2350_sniffer_init(const char *filename, bool passive)
         return false;
     }
 
+    // Write version and beginning of the log
+    rp2350_sniffer_write_logblock(true);
+
     {
         pio_sm_config cfg = rp2350_sniffer_program_get_default_config(g_sniffer.offset_sniffer);
         sm_config_set_in_pins(&cfg, IDE_DIOW);
-        pio_sm_init(SNIFFER_PIO, SNIFFER_PIO_SM, g_sniffer.offset_sniffer, &cfg);
+        sm_config_set_mov_status(&cfg, STATUS_IRQ_SET, SNIFFER_TRIGGER_IRQ);
+        pio_sm_init(SNIFFER_PIO, SNIFFER_PIO_SM, g_sniffer.offset_sniffer + rp2350_sniffer_offset_init, &cfg);
     }
+
+    uint32_t trigpins = ini_getl("IDE", "sniffer_trigpins", SNIFFER_DEFAULT_TRIGPINS, CONFIGFILE);
+    rp2350_sniffer_setup_triggers(trigpins);
 
     // First DMA channel for data transfer
     {
@@ -181,9 +333,6 @@ bool rp2350_sniffer_init(const char *filename, bool passive)
     }
 
     // Start encoding with the initial states of the pins
-    pio_sm_exec(SNIFFER_PIO, SNIFFER_PIO_SM, pio_encode_set(pio_osr, 30));
-    pio_sm_exec(SNIFFER_PIO, SNIFFER_PIO_SM, pio_encode_mov(pio_x, pio_pins));
-    pio_sm_exec(SNIFFER_PIO, SNIFFER_PIO_SM, pio_encode_jmp(g_sniffer.offset_sniffer + rp2350_sniffer_offset_change));
     pio_sm_set_enabled(SNIFFER_PIO, SNIFFER_PIO_SM, true);
 
     return true;
@@ -266,8 +415,15 @@ void rp2350_sniffer_poll()
             g_sniffer.sd_blocks_complete = 0;
             size_t to_write = available * SNIFFER_BLOCKSIZE;
             platform_set_sd_callback(sniffer_sd_callback, readptr);
-            g_sniffer.file.write(readptr, to_write);
+            size_t wrote = g_sniffer.file.write(readptr, to_write);
             platform_set_sd_callback(nullptr, nullptr);
+
+            if (wrote != to_write)
+            {
+                logmsg("Sniffer write failed");
+                g_sniffer.file.close();
+                break;
+            }
 
             // Finish the write operation and release blocks to DMA
             sniffer_sd_callback(to_write);
@@ -284,6 +440,9 @@ void rp2350_sniffer_poll()
         // Synchronize file size
         if (g_sniffer.should_sync)
         {
+            // Write any log data
+            rp2350_sniffer_write_logblock();
+
             if (g_sniffer.writes_since_sync == 0)
             {
                 // Write the partially finished block and seek backwards so it will be rewritten once full.
@@ -303,6 +462,13 @@ void rp2350_sniffer_poll()
             g_sniffer.writes_since_sync = 0;
             g_sniffer.sync_time = millis();
         }
+    }
+
+    if (g_sniffer.writes_since_sync > 0)
+    {
+        // Only write log data if there has been sniffer data written.
+        // Otherwise it ends up overwriting the partial block.
+        rp2350_sniffer_write_logblock();
     }
 
     if (!g_sniffer.should_sync && (uint32_t)(millis() - g_sniffer.sync_time) > SNIFFER_SYNC_INTERVAL)
