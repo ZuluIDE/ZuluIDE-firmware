@@ -78,9 +78,9 @@ class SniffDecoder:
          (26, 1, 'IORDY', 'i')
     )
 
-    cpu_freq = 150e6      # CPU frequency for timestamps
+    cpu_freq = 200e6      # CPU frequency for timestamps
     divider = 5           # Divider used for VCD timestamps
-    timescale = '33333ps' # VCD timescale (divider / cpu_freq)
+    timescale = '25ns' # VCD timescale (divider / cpu_freq)
 
     def __init__(self):
         self.reset()
@@ -92,6 +92,8 @@ class SniffDecoder:
         self.systime_ref = 0
         self.last_vcd_timestamp = 0
         self.pin_states = 0
+        self.version = 1
+        self.logtxt = b''
 
     def get_systime(self):
         '''Interpolate system time from sample timestamps.'''
@@ -103,24 +105,53 @@ class SniffDecoder:
         '''
 
         result = []
+        logdatalen = 0
+
         for word, in struct.iter_unpack("<I", data):
             d = word >> 27
             p = word & 0x07FFFFFF
             max_timedelta = 0x03FFFFFF
 
-            if d != 31:
-                self.timestamp += 5 * (31 - d)
-                self.pin_states = p
-            elif p <= max_timedelta:
-                self.timestamp += 5 * (max_timedelta - p + 3)
+            if logdatalen > 0:
+                self.logtxt += struct.pack("<I", word).replace(b'\x00', b'')
+                logdatalen -= 4
             elif (word >> 24) == 0xFC:
                 # System millisecond timestamp for correlating with logs
                 self.systime = word & 0xFFFFFF
                 self.systime_ref = self.timestamp
-            elif word == 0xFFFFFFFF:
-                self.timestamp += 5 * (max_timedelta + 3)
+            elif (word >> 16) == 0xFF00:
+                self.version = word & 0xFF
+                self.cpu_freq = ((word >> 8) & 0xFF) * 1e6
 
-            result.append((self.timestamp, self.pin_states, self.get_systime()))
+                print("Sniffer version %d, CPU frequency %d MHz" % (self.version, self.cpu_freq // 1e6))
+
+                if self.version >= 2:
+                    self.divider = 3
+
+                self.timescale = '%dps' % (1e12 * self.divider / self.cpu_freq)
+
+            elif (word >> 16) == 0xFF01:
+                logdatalen = (word & 0xFFFF)
+                assert logdatalen % 4 == 0
+            else:
+                if self.version >= 2:
+                    if d != 31:
+                        self.timestamp += 3 * (33 - d)
+                        self.pin_states = p
+                    elif p <= max_timedelta:
+                        self.timestamp += 3 * (max_timedelta - p - 1)
+                    elif word == 0xFFFFFFFF:
+                        self.timestamp += 3 * (max_timedelta + 3)
+                else:
+                    if d != 31:
+                        self.timestamp += 5 * (31 - d)
+                        self.pin_states = p
+                    elif p <= max_timedelta:
+                        self.timestamp += 5 * (max_timedelta - p + 3)
+                    elif word == 0xFFFFFFFF:
+                        self.timestamp += 5 * (max_timedelta + 3)
+
+                result.append((self.timestamp, self.pin_states, self.get_systime()))
 
         return result
 
@@ -162,14 +193,18 @@ class SniffDecoder:
         '''
         self.reset()
 
-        outfile.write('\n'.join(self.format_vcd_header()) + '\n\n')
-
         tcount = 0
         while True:
             data = infile.read(blocksize)
             if not data: break
 
             trans = self.decode(data)
+
+            if len(trans) and tcount == 0:
+                # Write header after we have decoded the first block, which
+                # includes format version information.
+                outfile.write('\n'.join(self.format_vcd_header()) + '\n\n')
+
             lines = self.format_vcd(trans)
             outfile.write('\n'.join(lines) + '\n')
 
@@ -183,6 +218,7 @@ if __name__ == '__main__':
 
     infilename = sys.argv[1]
     outfilename = os.path.splitext(infilename)[0] + os.path.extsep + 'vcd'
+    logfilename = os.path.splitext(infilename)[0] + os.path.extsep + 'txt'
 
     print("Writing to %s" % outfilename)
 
@@ -197,6 +233,10 @@ if __name__ == '__main__':
 
     print("Done, total %d transitions, length %0.1f s,                        " %
           (tcount, decoder.last_vcd_timestamp * decoder.divider / decoder.cpu_freq))
+
+    if decoder.logtxt:
+        open(logfilename, 'wb').write(decoder.logtxt)
+        print("Saved %d bytes of log text to %s" % (len(decoder.logtxt), logfilename))
 
     if decoder.last_vcd_timestamp > 1e9:
         print("WARNING: Result file has a large time range, PulseView may take a lot of memory when loading")
