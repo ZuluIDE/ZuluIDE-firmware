@@ -234,13 +234,11 @@ bool IDERigidDevice::cmd_set_features(ide_registers_t *regs)
 
         if (mode_major == 0)
         {
-            m_ata_state.udma_mode = -1;
             dbgmsg("-- Set PIO default transfer mode");
             ide_phy_set_pio_mode(0);
         }
         else if (mode_major == 1 && mode_minor <= m_phy_caps.max_pio_mode)
         {
-            m_ata_state.udma_mode = -1;
             dbgmsg("-- Set PIO transfer mode ", (int)mode_minor);
             ide_phy_set_pio_mode(mode_minor);
         }
@@ -312,8 +310,11 @@ static void copy_id_string(uint16_t *dst, size_t maxwords, const char *src)
 
 bool IDERigidDevice::cmd_read(ide_registers_t *regs, bool dma_transfer, bool verify_only, bool is_multiple)
 {
-    if (dma_transfer && m_phy_caps.max_udma_mode < 0)
+    if (dma_transfer && m_ata_state.udma_mode < 0)
+    {
+        dbgmsg("READ DMA when DMA mode is not set");
         return false;
+    }
 
     if (is_multiple && m_ata_state.multiple_mode_sectors == 0)
         return false;
