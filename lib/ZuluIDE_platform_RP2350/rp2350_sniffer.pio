@@ -38,19 +38,21 @@
  *    Bits 26..0:  P (Pin states or long time delta)
  *
  * If D != 31, then P is the new state of the 27 IO pins.
- * Clock cycles since previous sample is 5 * (31 - D)
+ * Clock cycles since previous sample is 3 * (33 - D)
  *
  * If D == 31 and P <= 0x03FFFFFF, then P is a long time delta.
- * Pin states have not changed and clock cycles is 5 * (0x03FFFFFF - P + 3)
+ * Pin states have not changed and clock cycles is 3 * (0x03FFFFFF - P - 1)
  *
- * If D == 31 and 0x03FFFFFF < P <= 0x07FFFFFE, these are used for system timestamp
- * reporting by CPU.
+ * If D == 31 and 0x03FFFFFF < P <= 0x07FFFFFE, these are used by CPU as follows:
+ *     - 0xFCtttttt  indicates system timestamp
+ *     - 0xFF00ffnn  indicates sniffer format version and CPU frequency (MHz)
+ *     - 0xFF01nnnn  n bytes of system log data follows
  *
  * If D == 31 and P == 0x07FFFFFF (whole word is all ones), then maximum time delta
- * has passed. Clock cycles is 5 * (0x03FFFFFF + 3) (approx 2.2 seconds @ 150 MHz)
- *
+ * has passed. Clock cycles is 3 * (0x03FFFFFF + 3) (approx 1 second @ 200 MHz)
  */
 
+.define PUBLIC SNIFFER_TRIGGER_IRQ 0
 .program rp2350_sniffer
 .pio_version 1
 .fifo rx
@@ -60,20 +62,20 @@
 lg_change:
     mov y, ~null     ; Set Y to all ones
     in y, 5          ; Load the top 5 bits to value 31 to indicate long time delta
-    in osr, 27       ; Load the 27 bit time delta and autopush
-    mov osr, null    ; Set time delta to 0 for the pin state push below
+    in x, 27         ; Load the 27 bit time delta and autopush
 
-PUBLIC change:
-    in osr, 5        ; Load 5-bit time delta (value 0..30)
-    in x, 27         ; Load pin states and autopush
-    mov y, x         ; Set the next pin states to compare against
+PUBLIC init:
+    mov x, null      ; Set time delta for the pin state push below
+
+change:
+    in x, 5          ; Load 5-bit time delta (value 0..30)
+    in pins, 27      ; Load pin states and autopush
+    irq clear SNIFFER_TRIGGER_IRQ
     set x, 30        ; Initialize next time delta counter
 
 loop:
-    mov osr, x       ; Keep time delta counter in osr temporarily
-    mov x, pins      ; Load pin states for comparison
-    jmp x != y, change  ; If pin values have changed, push new state
-    mov x, osr       ; Load time delta counter back
+    mov y, status    ; Check trigger interrupt status
+    jmp y--, change  ; If triggered, push new state
     jmp x--, loop    ; Loop until time delta overflows
 
     ; Time delta exceeded 30 cycles, encode as long gap
@@ -81,16 +83,30 @@ loop:
     .wrap_target
 long_gap:
     mov osr, ~null   ; Set OSR to all ones
-    out null, 6      ; Modify OSR to 0x03FFFFFF
-    mov x, osr       ; Load the new time delta counter to x
+    out x, 26        ; Set X to 0x03FFFFFF
 
 loop_lg:
-    mov osr, x       ; Keep time delta counter in osr temporarily
-    mov x, pins      ; Load pin states for comparison
-    jmp x != y, lg_change  ; If pin values have changed, push new state
-    mov x, osr       ; Load time delta counter back
+    mov y, status    ; Check trigger interrupt status
+    jmp y--, lg_change  ; If triggered, push long timestamp and new state
     jmp x--, loop_lg ; Loop until time delta overflows
 
     ; Timestamp has wrapped, X is now 0xFFFFFFFF
     in x, 32         ; Push the word that indicates long gap at maximum time delta
     .wrap
+
+; Auxiliary state machines that monitor pins for changes to trigger the
+; sniffer. There can be up to three of these trigger machines, and each
+; can handle a continuous range of 1-27 trigger pins.
+
+.program rp2350_sniffer_trigger
+.pio_version 1
+
+change:
+    irq set SNIFFER_TRIGGER_IRQ     ; Trigger sniffer to store the pin states
+    mov y, x            ; Update Y for comparing
+
+.wrap_target
+wait_change:
+    mov x, pins         ; Read new pin states
+    jmp x != y, change  ; Detect change
+.wrap

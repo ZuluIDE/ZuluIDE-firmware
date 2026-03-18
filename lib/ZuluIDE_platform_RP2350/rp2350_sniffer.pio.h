@@ -8,47 +8,44 @@
 #include "hardware/pio.h"
 #endif
 
+#define SNIFFER_TRIGGER_IRQ 0
+
 // -------------- //
 // rp2350_sniffer //
 // -------------- //
 
-#define rp2350_sniffer_wrap_target 13
-#define rp2350_sniffer_wrap 21
+#define rp2350_sniffer_wrap_target 11
+#define rp2350_sniffer_wrap 16
 #define rp2350_sniffer_pio_version 1
 
-#define rp2350_sniffer_offset_change 4u
+#define rp2350_sniffer_offset_init 3u
 
 static const uint16_t rp2350_sniffer_program_instructions[] = {
     0xa04b, //  0: mov    y, !null
     0x4045, //  1: in     y, 5
-    0x40fb, //  2: in     osr, 27
-    0xa0e3, //  3: mov    osr, null
-    0x40e5, //  4: in     osr, 5
-    0x403b, //  5: in     x, 27
-    0xa041, //  6: mov    y, x
+    0x403b, //  2: in     x, 27
+    0xa023, //  3: mov    x, null
+    0x4025, //  4: in     x, 5
+    0x401b, //  5: in     pins, 27
+    0xc040, //  6: irq    clear 0
     0xe03e, //  7: set    x, 30
-    0xa0e1, //  8: mov    osr, x
-    0xa020, //  9: mov    x, pins
-    0x00a4, // 10: jmp    x != y, 4
-    0xa027, // 11: mov    x, osr
-    0x0048, // 12: jmp    x--, 8
+    0xa045, //  8: mov    y, status
+    0x0084, //  9: jmp    y--, 4
+    0x0048, // 10: jmp    x--, 8
             //     .wrap_target
-    0xa0eb, // 13: mov    osr, !null
-    0x6066, // 14: out    null, 6
-    0xa027, // 15: mov    x, osr
-    0xa0e1, // 16: mov    osr, x
-    0xa020, // 17: mov    x, pins
-    0x00a0, // 18: jmp    x != y, 0
-    0xa027, // 19: mov    x, osr
-    0x0050, // 20: jmp    x--, 16
-    0x4020, // 21: in     x, 32
+    0xa0eb, // 11: mov    osr, !null
+    0x603a, // 12: out    x, 26
+    0xa045, // 13: mov    y, status
+    0x0080, // 14: jmp    y--, 0
+    0x004d, // 15: jmp    x--, 13
+    0x4020, // 16: in     x, 32
             //     .wrap
 };
 
 #if !PICO_NO_HARDWARE
 static const struct pio_program rp2350_sniffer_program = {
     .instructions = rp2350_sniffer_program_instructions,
-    .length = 22,
+    .length = 17,
     .origin = -1,
     .pio_version = rp2350_sniffer_pio_version,
 #if PICO_PIO_VERSION > 0
@@ -64,6 +61,41 @@ static inline pio_sm_config rp2350_sniffer_program_get_default_config(uint offse
     sm_config_set_out_pin_count(&c, 0);
     sm_config_set_out_shift(&c, 1, 0, 32);
     sm_config_set_fifo_join(&c, PIO_FIFO_JOIN_RX);
+    return c;
+}
+#endif
+
+// ---------------------- //
+// rp2350_sniffer_trigger //
+// ---------------------- //
+
+#define rp2350_sniffer_trigger_wrap_target 2
+#define rp2350_sniffer_trigger_wrap 3
+#define rp2350_sniffer_trigger_pio_version 1
+
+static const uint16_t rp2350_sniffer_trigger_program_instructions[] = {
+    0xc000, //  0: irq    nowait 0
+    0xa041, //  1: mov    y, x
+            //     .wrap_target
+    0xa020, //  2: mov    x, pins
+    0x00a0, //  3: jmp    x != y, 0
+            //     .wrap
+};
+
+#if !PICO_NO_HARDWARE
+static const struct pio_program rp2350_sniffer_trigger_program = {
+    .instructions = rp2350_sniffer_trigger_program_instructions,
+    .length = 4,
+    .origin = -1,
+    .pio_version = rp2350_sniffer_trigger_pio_version,
+#if PICO_PIO_VERSION > 0
+    .used_gpio_ranges = 0x0
+#endif
+};
+
+static inline pio_sm_config rp2350_sniffer_trigger_program_get_default_config(uint offset) {
+    pio_sm_config c = pio_get_default_sm_config();
+    sm_config_set_wrap(&c, offset + rp2350_sniffer_trigger_wrap_target, offset + rp2350_sniffer_trigger_wrap);
     return c;
 }
 #endif

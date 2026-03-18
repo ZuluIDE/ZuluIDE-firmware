@@ -42,6 +42,7 @@
 #include "ZuluIDE.h"
 #include <string.h>
 #include <strings.h>
+#include <algorithm>
 #include <minIni.h>
 #include <zuluide/images/image_iterator.h>
 #include <status/status_controller.h>
@@ -205,6 +206,11 @@ static void LBA2MSFBCD(int32_t LBA, uint8_t* MSF, bool relative)
     MSF[0] = ((MSF[0] / 10) << 4) | (MSF[0] % 10);
     MSF[1] = ((MSF[1] / 10) << 4) | (MSF[1] % 10);
     MSF[2] = ((MSF[2] / 10) << 4) | (MSF[2] % 10);
+}
+
+static uint8_t BYTE2BCD(uint8_t b)
+{
+    return ((b / 10) << 4) | (b % 10);
 }
 
 // Convert CD-ROM time to logical block address
@@ -1108,7 +1114,7 @@ bool IDECDROMDevice::doReadSessionInfo(bool MSF, uint16_t allocationLength)
     const CUETrackInfo *trackinfo = m_cueparser.next_track();
     if (trackinfo)
     {
-        formatTrackInfo(trackinfo, &buf[4], false);
+        formatTrackInfo(trackinfo, &buf[4], MSF);
     }
 
     atapi_send_data(buf, std::min<uint32_t>(allocationLength, len));
@@ -1298,15 +1304,29 @@ bool IDECDROMDevice::doReadCD(uint32_t lba, uint32_t length, uint8_t sector_type
     // We may need to loop if the request spans multiple .bin files
     uint32_t total_length = length;
     uint32_t length_done = 0;
+
+    bool write_unfilled_pregap = false;
     while (length_done < total_length)
     {
         length = total_length - length_done;
 
         CUETrackInfo trackinfo = getTrackFromLBA(lba);
 
+        const CUETrackInfo* trackinfo_read = m_cueparser.next_track();
+        CUETrackInfo trackinfo_next = trackinfo_read ? *trackinfo_read : CUETrackInfo{0};
+
         if (!m_image || !selectBinFileForTrack(&trackinfo))
         {
             return atapi_cmd_error(ATAPI_SENSE_NOT_READY, ATAPI_ASC_NO_MEDIUM);
+        }
+
+        if (trackinfo_next.unstored_pregap_length > 0
+            && trackinfo_next.track_number > trackinfo.track_number
+            && lba + length > trackinfo_next.track_start
+        )
+        {
+            // Request spans multiple tracks, truncate to end of current track if the next track has unstored pregap
+            length = trackinfo_next.track_start - lba;
         }
 
         // Figure out the data offset in the file
@@ -1314,13 +1334,28 @@ bool IDECDROMDevice::doReadCD(uint32_t lba, uint32_t length, uint8_t sector_type
         if (lba >= trackinfo.data_start)
         {
             offset += (uint64_t)(lba - trackinfo.data_start) * trackinfo.sector_length;
+            write_unfilled_pregap = false;
         }
-        else if (lba >= trackinfo.data_start - trackinfo.unstored_pregap_length)
+        else if (trackinfo.unstored_pregap_length > 0 && trackinfo.stored_pregap_length == 0)
         {
-            // It doesn't really matter what data we give for the unstored pregap
+            // If the current lba is within an unstored pregap section,
+            // truncate length to the end of the pregap or keep length if it is shorter
+            length = std::min(length, (lba - trackinfo.track_start) + 1);
+            write_unfilled_pregap = true;
+        }
+        else if ( trackinfo.unstored_pregap_length > 0
+                    && trackinfo.stored_pregap_length > 0
+                    && lba < trackinfo.track_start
+        )
+        {
+            // mixed stored and unstored pregap, which is a bit weird but some .cue files do it
+            // It is assumed pregap comes before index 00 in the CUE file. If this is not the case, the CUEParser will have to keep track of the order
+            length = std::min(length, trackinfo.track_start - lba);
+            write_unfilled_pregap = true;
         }
         else
         {
+            write_unfilled_pregap = false;
             // Get data from stored pregap, which is in the file before trackinfo.file_offset.
             uint32_t seek_back = (trackinfo.data_start - lba) * trackinfo.sector_length;
             if (seek_back > offset)
@@ -1474,6 +1509,15 @@ bool IDECDROMDevice::doReadCD(uint32_t lba, uint32_t length, uint8_t sector_type
             // No actual data needed, just send headers
             read_callback(nullptr, 0, length);
         }
+        else if (write_unfilled_pregap)
+        {
+            // Send zeros for unstored pregap
+            if (!m_image->read_zeros(m_cd_read_format.sector_length_out, length, this))
+            {
+                dbgmsg("-- CD reading unfilled gap as zeros failed");
+                atapi_cmd_error(ATAPI_SENSE_MEDIUM_ERROR, ATAPI_ASC_NO_ASC);
+            }
+        }
         else if (m_image->read(offset, m_cd_read_format.sector_length_file, length, this))
         {
             // Read callback does the work
@@ -1481,7 +1525,7 @@ bool IDECDROMDevice::doReadCD(uint32_t lba, uint32_t length, uint8_t sector_type
         else
         {
             dbgmsg("-- CD read failed, starting offset ", (int64_t)offset, " length ", (int64_t)length);
-            return atapi_cmd_error(ATAPI_SENSE_MEDIUM_ERROR, 0);
+            return atapi_cmd_error(ATAPI_SENSE_MEDIUM_ERROR, ATAPI_ASC_NO_ASC);
         }
 
         length_done += length;
@@ -1559,12 +1603,12 @@ ssize_t IDECDROMDevice::read_callback(const uint8_t *data, size_t blocksize, siz
             // Refer to table 354 in T10/1545-D MMC-4 Revision 5a
             // and ECMA-130 22.3.3
             *buf++ = (m_cd_read_format.trackinfo.track_mode == CUETrack_AUDIO ? 0x10 : 0x14); // Control & ADR
-            *buf++ = m_cd_read_format.trackinfo.track_number;
+            *buf++ = BYTE2BCD(m_cd_read_format.trackinfo.track_number);
             *buf++ = (current_lba >= m_cd_read_format.trackinfo.data_start) ? 1 : 0; // Index number (0 = pregap)
             int32_t rel = (int32_t)(current_lba) - (int32_t)m_cd_read_format.trackinfo.data_start;
-            LBA2MSF(rel, buf, true); buf += 3;
+            LBA2MSFBCD(rel, buf, true); buf += 3;
             *buf++ = 0;
-            LBA2MSF(current_lba, buf, false); buf += 3;
+            LBA2MSFBCD(current_lba, buf, false); buf += 3;
             *buf++ = 0; *buf++ = 0; // CRC (optional)
             *buf++ = 0; *buf++ = 0; *buf++ = 0; // (pad)
             *buf++ = 0; // No P subchannel
@@ -1897,7 +1941,9 @@ uint32_t IDECDROMDevice::getLeadOutLBA(const CUETrackInfo* lasttrack)
     if (lasttrack != nullptr && lasttrack->track_number != 0 && m_image != nullptr)
     {
         selectBinFileForTrack(lasttrack);
-        uint32_t lastTrackBlocks = (m_image->capacity() - lasttrack->file_offset) / lasttrack->sector_length;
+        // Subtracting into int64_t avoids the uint32_t lastTrackBlocks from becoming negative due to casting
+        int64_t track_length = m_image->capacity() - lasttrack->file_offset;
+        uint32_t lastTrackBlocks = (track_length > 0) ? (uint32_t)(track_length / lasttrack->sector_length) : 0;
         return lasttrack->data_start + lastTrackBlocks;
     }
     else
