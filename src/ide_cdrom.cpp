@@ -1215,7 +1215,7 @@ bool IDECDROMDevice::doReadSubChannel(bool time, bool subq, uint8_t parameter, u
         uint8_t audiostatus;
         uint32_t lba;
         cdromGetAudioPlaybackStatus(&audiostatus, &lba, false);
-        dbgmsg("------ Get audio playback position: status ", (int)audiostatus, " lba ", (uint64_t)lba);
+        dbgmsg("------ Get audio playback position: status ", (int)audiostatus, " lba ", (int64_t)lba);
 
         // Fetch current track info
         CUETrackInfo trackinfo = getTrackFromLBA(lba);
@@ -1325,8 +1325,8 @@ bool IDECDROMDevice::doReadCD(uint32_t lba, uint32_t length, uint8_t sector_type
             uint32_t seek_back = (trackinfo.data_start - lba) * trackinfo.sector_length;
             if (seek_back > offset)
             {
-                logmsg("WARNING: Host attempted CD read at sector ", lba, "+", length,
-                       " pregap request ", (int)seek_back, " exceeded available ", (uint64_t)offset, " for track ", trackinfo.track_number,
+                logmsg("WARNING: Host attempted CD read at sector ", (int64_t)lba, "+", (int64_t)length,
+                       " pregap request ", (int)seek_back, " exceeded available ", (int64_t)offset, " for track ", trackinfo.track_number,
                        " (possible .cue file issue)");
                 offset = 0;
             }
@@ -1336,10 +1336,10 @@ bool IDECDROMDevice::doReadCD(uint32_t lba, uint32_t length, uint8_t sector_type
             }
         }
 
-        dbgmsg("---- Read CD: ", (uint64_t)length, " sectors starting at ", (uint64_t)lba,
+        dbgmsg("---- Read CD: ", (int64_t)length, " sectors starting at ", (int64_t)lba,
             ", track number ", trackinfo.track_number, ", sector size ", (int)trackinfo.sector_length,
             ", main channel ", main_channel, ", sub channel ", sub_channel,
-            ", data offset in file ", (uint64_t)offset);
+            ", data offset in file ", (int64_t)offset);
 
         // Ensure read is not out of range of the image
         // If it is, we may be able to get more from the next .bin file.
@@ -1350,8 +1350,8 @@ bool IDECDROMDevice::doReadCD(uint32_t lba, uint32_t length, uint8_t sector_type
             if (sectors_available == 0 || !m_image->is_folder())
             {
                 // This is really past the end of the CD
-                logmsg("WARNING: Host attempted CD read at sector ", lba, "+", length,
-                    ", exceeding image size ", capacity);
+                logmsg("WARNING: Host attempted CD read at sector ", (int64_t)lba, "+", (int64_t)length,
+                    ", exceeding image size ", (int64_t)capacity);
                 return atapi_cmd_error(ATAPI_SENSE_ILLEGAL_REQ, ATAPI_ASC_LBA_OUT_OF_RANGE);
             }
             else
@@ -1480,7 +1480,7 @@ bool IDECDROMDevice::doReadCD(uint32_t lba, uint32_t length, uint8_t sector_type
         }
         else
         {
-            dbgmsg("-- CD read failed, starting offset ", (uint64_t)offset, " length ", (uint64_t)length);
+            dbgmsg("-- CD read failed, starting offset ", (int64_t)offset, " length ", (int64_t)length);
             return atapi_cmd_error(ATAPI_SENSE_MEDIUM_ERROR, 0);
         }
 
@@ -2137,7 +2137,7 @@ void IDECDROMDevice::atapi_set_mode_page(uint8_t page_ctrl, uint8_t page_idx, co
 bool IDECDROMDevice::doPlayAudio(uint32_t lba, uint32_t length)
 {
 #ifdef ENABLE_AUDIO_OUTPUT
-    dbgmsg("------ CD-ROM Play Audio request at ", (uint64_t) lba, " for ",  (uint64_t)length, " sectors");
+    dbgmsg("------ CD-ROM Play Audio request at ", (int64_t) lba, " for ",  (int64_t)length, " sectors");
 
     // Per Annex C terminate playback immediately if already in progress on
     // the current target. Non-current targets may also get their audio
@@ -2160,8 +2160,8 @@ bool IDECDROMDevice::doPlayAudio(uint32_t lba, uint32_t length)
 
         uint64_t offset = m_cd_read_format.trackinfo.file_offset
                 + trackinfo.sector_length * (lba - trackinfo.track_start);
-        dbgmsg("------ Play audio CD: ", (uint64_t)length, " sectors starting at ", (uint64_t)lba,
-           ", track number ", trackinfo.track_number, ", data offset in file ", (uint64_t)offset);
+        dbgmsg("------ Play audio CD: ", (int64_t)length, " sectors starting at ", (int64_t)lba,
+           ", track number ", trackinfo.track_number, ", data offset in file ", (int64_t)offset);
 
         if (trackinfo.track_mode != CUETrack_AUDIO)
         {

@@ -132,13 +132,13 @@ void IDERigidDevice::post_image_setup()
     m_devinfo.current_cylinders = m_devinfo.cylinders;
     m_devinfo.current_heads = m_devinfo.heads;
     m_devinfo.current_sectors = m_devinfo.sectors_per_track;
-    logmsg("Selected Cylinders/Heads/Sectors settings from ", method, " with size ", (uint64_t) (capacity() / 1000000), "MB (total sectors = ", (uint64_t)lba,") as C: ", (int) m_devinfo.cylinders,
+    logmsg("Selected Cylinders/Heads/Sectors settings from ", method, " with size ", (int) (capacity() / 1000000), "MB (total sectors = ", (int64_t)lba,") as C: ", (int) m_devinfo.cylinders,
         " H: ",(int) m_devinfo.heads,
         " S: ", (int) m_devinfo.sectors_per_track);
     if (!found_chs)
     {
         uint32_t difference = lba - (m_devinfo.cylinders * m_devinfo.heads * m_devinfo.sectors_per_track);
-        logmsg("Reported CHS has ", (uint64_t) difference, " less blocks than the image's LBA capacity which does not exactly fit in any CHS combination");
+        logmsg("Reported CHS has ", (int64_t) difference, " less blocks than the image's LBA capacity which does not exactly fit in any CHS combination");
     }
     m_devinfo.writable = true;
 
@@ -342,7 +342,7 @@ bool IDERigidDevice::cmd_read(ide_registers_t *regs, bool dma_transfer, bool ver
     // access out of bounds
     if (lba >= capacity_lba())
     {
-        logmsg("Read access out of bounds, lba = ", (uint64_t)lba, ", capacity ", (uint64_t)capacity_lba());
+        logmsg("Read access out of bounds, lba = ", (int64_t)lba, ", capacity ", (int64_t)capacity_lba());
         lba = capacity_lba();
         regs->device = 0xF & (lba << 24);
         regs->lba_high = lba << 16;

@@ -307,7 +307,7 @@ void rp2350_sniffer_poll()
 
     if (!g_sniffer.should_sync && (uint32_t)(millis() - g_sniffer.sync_time) > SNIFFER_SYNC_INTERVAL)
     {
-        logmsg("-- Bus sniffer status: total ", (int)((g_sniffer.total_bytes + 1023) / 1024), " kB, ",
+        logmsg("-- Bus sniffer status: total ", (int64_t)((g_sniffer.total_bytes + 1023) / 1024), " kB, ",
                 (int)g_sniffer.overruns, " buffer overruns");
 
         g_sniffer.should_sync = true;
