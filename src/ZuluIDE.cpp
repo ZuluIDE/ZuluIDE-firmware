@@ -60,7 +60,7 @@ bool g_sdcard_present;
 extern SdFs SD;
 static FsFile g_logfile;
 
-uint32_t g_ide_buffer[IDE_BUFFER_SIZE / 4];
+static uint32_t g_ide_buffer[IDE_BUFFER_SIZE / 4];
 
 // Currently supports one IDE device
 static IDECDROMDevice g_ide_cdrom;

@@ -319,6 +319,27 @@ bool IDEImageFile::read(uint64_t startpos, size_t blocksize, size_t num_blocks, 
     return !sd_cb_state.error;
 }
 
+bool IDEImageFile::read_zeros(size_t blocksize, size_t num_blocks, Callback *callback)
+{
+    assert(blocksize <= m_buffer_size);
+    uint8_t *buf = m_buffer;
+
+    uint32_t num_blocks_adjusted = std::min<uint32_t>(num_blocks, IDE_BUFFER_SIZE / blocksize);
+    memset(buf, 0, num_blocks_adjusted * blocksize);
+    ssize_t block = 0;
+    while (block < num_blocks)
+    {
+        platform_poll();
+        block += callback->read_callback(buf, blocksize, num_blocks_adjusted);
+        if (block < 0)
+        {
+            return false;
+        }
+        num_blocks_adjusted = std::min<uint32_t>(num_blocks - block, IDE_BUFFER_SIZE / blocksize);
+    }
+    return true;
+}
+
 void IDEImageFile::sd_read_callback(uint32_t bytes_complete)
 {
     // Update number of blocks available by the latest callback status.

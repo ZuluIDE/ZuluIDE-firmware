@@ -52,8 +52,6 @@
 
 extern zuluide::status::StatusController g_StatusController;
 extern zuluide::status::SystemStatus g_previous_controller_status;
-extern uint32_t g_ide_buffer[IDE_BUFFER_SIZE / 4];
-static uint8_t *g_ide_buffer_bytes = (uint8_t*)g_ide_buffer;
 
 static const uint8_t DiscInformation[] =
 {
@@ -1516,18 +1514,10 @@ bool IDECDROMDevice::doReadCD(uint32_t lba, uint32_t length, uint8_t sector_type
         else if (write_unfilled_pregap)
         {
             // Send zeros for unstored pregap
-            uint32_t block_count = std::min<uint32_t>(length, IDE_BUFFER_SIZE / m_cd_read_format.sector_length_out);
-            memset(g_ide_buffer_bytes, 0, block_count * m_cd_read_format.sector_length_out);
-            ssize_t block = 0;
-            while (block < length)
+            if (!m_image->read_zeros(m_cd_read_format.sector_length_out, length, this))
             {
-                block += read_callback(g_ide_buffer_bytes, m_cd_read_format.sector_length_out, block_count);
-                if (block < 0)
-                {
-                    dbgmsg("-- CD reading unfilled gap as zeros failed");
-                    return atapi_cmd_error(ATAPI_SENSE_MEDIUM_ERROR, ATAPI_ASC_NO_ASC);
-                }
-                block_count = std::min<uint32_t>(length - block, IDE_BUFFER_SIZE / m_cd_read_format.sector_length_out);
+                dbgmsg("-- CD reading unfilled gap as zeros failed");
+                atapi_cmd_error(ATAPI_SENSE_MEDIUM_ERROR, ATAPI_ASC_NO_ASC);
             }
         }
         else if (m_image->read(offset, m_cd_read_format.sector_length_file, length, this))
