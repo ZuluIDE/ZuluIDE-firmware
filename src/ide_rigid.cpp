@@ -315,6 +315,9 @@ bool IDERigidDevice::cmd_read(ide_registers_t *regs, bool dma_transfer, bool ver
     if (dma_transfer && m_phy_caps.max_udma_mode < 0)
         return false;
 
+    if (is_multiple && m_ata_state.multiple_mode_sectors == 0)
+        return false;
+
     uint32_t lba = 0;
     uint16_t sector_count = regs->sector_count == 0 ? 256 : regs->sector_count;
     uint8_t head = 0;
@@ -365,22 +368,40 @@ bool IDERigidDevice::cmd_read(ide_registers_t *regs, bool dma_transfer, bool ver
     }
     else
     {
-        size_t block_size = m_devinfo.bytes_per_sector;
-        size_t block_count = sector_count;
-        if (is_multiple) {
-            block_size *= m_ata_state.multiple_mode_sectors;
-            // Sector count must be a multiple of multiple mode sectors
-            if ((sector_count % m_ata_state.multiple_mode_sectors) != 0) {
-                regs->error = IDE_ERROR_ABORT;
-                ide_phy_set_regs(regs);
-                ide_phy_assert_irq(IDE_STATUS_DEVRDY | IDE_STATUS_DSC | IDE_STATUS_ERR);
-                return false;
+        uint32_t sector_size = m_devinfo.bytes_per_sector;
+        bool status = true;
+
+        if (is_multiple)
+        {
+            uint32_t multi_mode = m_ata_state.multiple_mode_sectors;
+            uint32_t block_size = sector_size * multi_mode;
+            uint32_t block_count = sector_count / multi_mode;
+
+            if (block_count > 0)
+            {
+                status = m_image->read((uint64_t)lba * sector_size, block_size, block_count, this);
+                lba += block_count * multi_mode;
             }
-            block_count /= m_ata_state.multiple_mode_sectors;
+
+            // "If the number of requested sectors is not evenly divisible by the block count,
+            // as many full blocks as possible are transferred, followed by a final, partial
+            // block transfer."
+            if (status && sector_count > block_count * multi_mode)
+            {
+                block_size = (sector_count - block_count * multi_mode) * sector_size;
+                status = m_image->read((uint64_t)lba * sector_size, block_size, 1, this);
+            }
         }
-        
-        bool status = m_image->read((uint64_t)lba * m_devinfo.bytes_per_sector, block_size, block_count, this);
-        status = status && ata_send_wait_finish();
+        else
+        {
+            status = m_image->read((uint64_t)lba * sector_size, sector_size, sector_count, this);
+        }
+
+        if (status)
+        {
+            status = ata_send_wait_finish();
+        }
+
         m_ata_state.data_state = ATA_DATA_IDLE;
         if (status)
         {
@@ -401,12 +422,15 @@ bool IDERigidDevice::cmd_write(ide_registers_t *regs, bool dma_transfer, bool is
     if (dma_transfer && m_phy_caps.max_udma_mode < 0)
         return false;
 
+    if (is_multiple && m_ata_state.multiple_mode_sectors == 0)
+        return false;
+
     uint32_t lba = 0;
     uint16_t sector_count = regs->sector_count == 0 ? 256 : regs->sector_count;
     uint8_t head = 0;
     uint16_t cylinder = 0;
     uint8_t sector = 0;
-    bool status = false;
+    bool status = true;
     m_ata_state.data_state = ATA_DATA_IDLE;
     m_ata_state.dma_requested = dma_transfer;
     m_ata_state.crc_errors = 0;
@@ -429,22 +453,33 @@ bool IDERigidDevice::cmd_write(ide_registers_t *regs, bool dma_transfer, bool is
 
     if (m_image && m_image->writable())
     {
-        size_t block_size = m_devinfo.bytes_per_sector;
-        size_t block_count = sector_count;
-        if (is_multiple) {
-            block_size *= m_ata_state.multiple_mode_sectors;
-            // Sector count must be a multiple of multiple mode sectors
-            if ((sector_count % m_ata_state.multiple_mode_sectors) != 0) {
-                regs->error = IDE_ERROR_ABORT;
-                ide_phy_set_regs(regs);
-                ide_phy_assert_irq(IDE_STATUS_DEVRDY | IDE_STATUS_DSC | IDE_STATUS_ERR);
-                return false;
+        uint32_t sector_size = m_devinfo.bytes_per_sector;
+
+        if (is_multiple)
+        {
+            uint32_t multi_mode = m_ata_state.multiple_mode_sectors;
+            uint32_t block_size = sector_size * multi_mode;
+            uint32_t block_count = sector_count / multi_mode;
+
+            if (block_count > 0)
+            {
+                status = m_image->write((uint64_t)lba * sector_size, block_size, block_count, this);
+                lba += block_count * multi_mode;
             }
-            block_count /= m_ata_state.multiple_mode_sectors;
+
+            // "If the number of requested sectors is not evenly divisible by the block count,
+            // as many full blocks as possible are transferred, followed by a final, partial
+            // block transfer."
+            if (status && sector_count > block_count * multi_mode)
+            {
+                block_size = (sector_count - block_count * multi_mode) * sector_size;
+                status = m_image->write((uint64_t)lba * sector_size, block_size, 1, this);
+            }
         }
-        status = m_image->write((uint64_t)lba * m_devinfo.bytes_per_sector,
-                            block_size, block_count,
-                            this);
+        else
+        {
+            status = m_image->write((uint64_t)lba * sector_size, sector_size, sector_count, this);
+        }
     }
 
     if (status)
@@ -591,6 +626,7 @@ bool IDERigidDevice::cmd_identify_device(ide_registers_t *regs)
     copy_id_string(&idf[IDE_IDENTIFY_OFFSET_FIRMWARE_REV], 4, m_devconfig.ata_revision);
     copy_id_string(&idf[IDE_IDENTIFY_OFFSET_MODEL_NUMBER], 20, m_devconfig.ata_model);
     idf[IDE_IDENTIFY_OFFSET_MAX_SECTORS] = 0x8000 | (m_phy_caps.max_blocksize / m_devinfo.bytes_per_sector);
+    idf[IDE_IDENTIFY_OFFSET_MULTI_SECTOR_VALID] = 0x100 | m_ata_state.multiple_mode_sectors;
 
     idf[IDE_IDENTIFY_OFFSET_CAPABILITIES_1] = (m_phy_caps.supports_iordy ? 1 << 11 : 0) |
                                              (1 << 10) | // iordy may be disabled
@@ -685,23 +721,26 @@ bool IDERigidDevice::cmd_identify_device(ide_registers_t *regs)
 
 bool IDERigidDevice::cmd_set_multiple_mode(ide_registers_t *regs)
 {
-    dbgmsg("Setting multiple sector mode = ", (int) regs->sector_count, " sectors");
     if (regs->sector_count == 0)
     {
+        dbgmsg("-- Disable MULTIPLE_MODE");
         m_ata_state.multiple_mode_sectors = 0;
     }
     else if (regs->sector_count > (m_phy_caps.max_blocksize / m_devinfo.bytes_per_sector))
     {
+        dbgmsg("-- Host requested unsupported MULTIPLE_MODE = ", (int)regs->sector_count);
         m_ata_state.multiple_mode_sectors = 0;
         return false;
     }
     else
     {
+        dbgmsg("-- Set MULTIPLE_MODE = ", (int) regs->sector_count, " sectors");
         m_ata_state.multiple_mode_sectors = regs->sector_count;
     }
+
     regs->error = 0;
-    regs->status = IDE_STATUS_DEVRDY | IDE_STATUS_DSC;
     ide_phy_set_regs(regs);
+    ide_phy_assert_irq(IDE_STATUS_DEVRDY | IDE_STATUS_DSC);
     return true;
 }
 
