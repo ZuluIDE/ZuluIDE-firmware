@@ -245,7 +245,18 @@ ide_event_t ide_phy_get_events()
 
 bool ide_phy_is_command_interrupted()
 {
-    return g_ide_phy.watchdog_error || (g_idecomm.events & (CORE1_EVT_CMD_RECEIVED | CORE1_EVT_HWRST | CORE1_EVT_SWRST));
+    if (g_ide_phy.watchdog_error)
+    {
+        dbgmsg("Command interrupted because of watchdog error");
+        return true;
+    }
+    else if (g_idecomm.events & (CORE1_EVT_CMD_RECEIVED | CORE1_EVT_HWRST | CORE1_EVT_SWRST))
+    {
+        dbgmsg("Command interrupted because of events ", g_idecomm.events);
+        return true;
+    }
+
+    return false;
 }
 
 void ide_phy_get_regs(ide_registers_t *regs)
