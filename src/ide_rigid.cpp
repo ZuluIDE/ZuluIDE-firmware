@@ -328,9 +328,6 @@ bool IDERigidDevice::cmd_read(ide_registers_t *regs, bool dma_transfer, bool ver
     m_ata_state.dma_requested = dma_transfer;
     m_ata_state.crc_errors = 0;
 
-    regs->status |= IDE_STATUS_DEVRDY | IDE_STATUS_DSC;
-    ide_phy_set_regs(regs);
-
     if (is_lba_mode(regs))
     {
         lba |= 0xF & (regs->device << 24);
@@ -406,7 +403,17 @@ bool IDERigidDevice::cmd_read(ide_registers_t *regs, bool dma_transfer, bool ver
         m_ata_state.data_state = ATA_DATA_IDLE;
         if (status)
         {
-            ide_phy_assert_irq(IDE_STATUS_DEVRDY | IDE_STATUS_DSC);
+            if (dma_transfer)
+            {
+                // DMA transfer completion is indicated by interrupt
+                ide_phy_assert_irq(IDE_STATUS_DEVRDY | IDE_STATUS_DSC);
+            }
+            else
+            {
+                // For PIO DATA IN transfer there is no interrupt after the last block
+                regs->status = IDE_STATUS_DEVRDY | IDE_STATUS_DSC;
+                ide_phy_set_regs(regs);
+            }
         }
         else
         {
@@ -482,9 +489,17 @@ bool IDERigidDevice::cmd_write(ide_registers_t *regs, bool dma_transfer, bool is
             status = m_image->write((uint64_t)lba * sector_size, sector_size, sector_count, this);
         }
     }
+    else
+    {
+        dbgmsg("IDERigidDevice::cmd_write: image is not writable");
+        status = false;
+    }
 
     if (status)
     {
+        // Both DMA and PIO DATA OUT assert IRQ when the write command completes
+        regs->error = 0;
+        ide_phy_set_regs(regs);
         ide_phy_assert_irq(IDE_STATUS_DEVRDY | IDE_STATUS_DSC);
     }
     else
@@ -907,7 +922,7 @@ ssize_t IDERigidDevice::ata_send_data(const uint8_t *data, size_t blocksize, siz
     size_t max_blocksize = m_phy_caps.max_blocksize;
     if (blocksize > max_blocksize)
     {
-        dbgmsg("-- atapi_send_data_async(): Block size ", (int)blocksize, " exceeds limit ", (int)max_blocksize,
+        dbgmsg("-- ata_send_data(): Block size ", (int)blocksize, " exceeds limit ", (int)max_blocksize,
                ", using ata_send_chunked_data() instead");
 
         if (ata_send_chunked_data(data, blocksize, num_blocks))
@@ -942,12 +957,6 @@ bool IDERigidDevice::ata_send_data_block(const uint8_t *data, uint16_t blocksize
         ata_send_wait_finish();
         m_ata_state.blocksize = blocksize;
         m_ata_state.data_state = ATA_DATA_WRITE;
-
-        // Set number bytes to transfer to registers
-        ide_registers_t regs = {};
-        ide_phy_get_regs(&regs);
-        regs.status = IDE_STATUS_BSY;
-        ide_phy_set_regs(&regs);
 
         // Start data transfer
         int udma_mode = (m_ata_state.dma_requested ? m_ata_state.udma_mode : -1);
