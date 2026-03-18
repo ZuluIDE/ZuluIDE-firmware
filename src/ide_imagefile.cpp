@@ -123,12 +123,12 @@ bool IDEImageFile::internal_open(const char *filename)
     }
 
     m_capacity = m_file.size();
-    dbgmsg("Image file ", filename, " size ", (int)m_capacity);
+    dbgmsg("Image file ", filename, " size ", (uint64_t)m_capacity);
 
     uint32_t begin = 0, end = 0;
     if (m_file.contiguousRange(&begin, &end))
     {
-        dbgmsg("Image file ", filename, " is contiguous, sectors ", (int)begin, " to ", (int)end);
+        dbgmsg("Image file ", filename, " is contiguous, sectors ", (uint64_t)begin, " to ", (uint64_t)end);
         m_first_sector = begin;
         m_contiguous = true;
     }
