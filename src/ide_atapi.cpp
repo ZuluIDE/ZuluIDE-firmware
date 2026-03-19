@@ -111,10 +111,11 @@ void IDEATAPIDevice::handle_event(ide_event_t evt)
         if (evt == IDE_EVENT_HWRST)
         {
             m_atapi_state.udma_mode = -1;
+
+            m_atapi_state.unit_attention = true;
+            m_atapi_state.unit_attention_sense_asc = ATAPI_ASC_RESET_OCCURRED;
         }
 
-        m_atapi_state.unit_attention = true;
-        m_atapi_state.unit_attention_sense_asc = ATAPI_ASC_RESET_OCCURRED;
         set_device_signature(0, true);
     }
 }
