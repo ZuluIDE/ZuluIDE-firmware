@@ -40,6 +40,10 @@ static struct {
     int crc_errors;
     uint32_t block_crc0;
     uint32_t block_crc1;
+
+    // First ATA PIO data out block after command should
+    // not assert IRQ, but further ones do.
+    bool first_dataout_after_cmd;
 } g_ide_phy;
 
 #define BLOCK_CRC_VALID 0x10000
@@ -156,6 +160,7 @@ ide_event_t ide_phy_get_events()
     {
         uint8_t clrmask = FPGA_STATUS_IDE_CMD;
         fpga_wrcmd(FPGA_CMD_CLR_IRQ_FLAGS, &clrmask, 1);
+        g_ide_phy.first_dataout_after_cmd = true;
         return IDE_EVENT_CMD;
     }
     else if (g_ide_phy.transfer_running)
@@ -350,6 +355,15 @@ void ide_phy_start_ata_read(uint32_t blocklen, int udma_mode)
         g_ide_phy.udma_mode = -1;
         regs.status = IDE_STATUS_DEVRDY | IDE_STATUS_DSC | IDE_STATUS_DATAREQ;
         ide_phy_set_regs(&regs);
+
+        if (!g_ide_phy.first_dataout_after_cmd)
+        {
+            // FPGA does not issue interrupt, so do that manually
+            // if this continues a previous transfer.
+            ide_phy_assert_irq(regs.status);
+        }
+
+        g_ide_phy.first_dataout_after_cmd = false;
     }
     else
     {
