@@ -120,10 +120,13 @@ void ide_phy_write_block(const uint8_t *buf, uint32_t blocklen);
 bool ide_phy_is_write_finished();
 
 void ide_phy_start_read(uint32_t blocklen, int udma_mode = -1);
-void ide_phy_start_ata_read(uint32_t blocklen, int udma_mode = -1);
 bool ide_phy_can_read_block();
 void ide_phy_start_read_buffer(uint32_t blocklen);
 void ide_phy_read_block(uint8_t *buf, uint32_t blocklen, bool continue_transfer = false);
+
+// ATA version of start_read() differs in that it does not assert IRQ
+// for the first data block. See figure 28 in T13/1410D revision 3a.
+void ide_phy_start_ata_read(uint32_t blocklen, int udma_mode = -1);
 void ide_phy_ata_read_block(uint8_t *buf, uint32_t blocklen, bool continue_transfer = false);
 
 // Stop any running or finished transfers.

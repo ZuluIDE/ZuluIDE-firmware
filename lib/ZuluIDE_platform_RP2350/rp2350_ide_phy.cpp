@@ -47,6 +47,11 @@ static struct {
     uint32_t transfer_block_start_time;
     volatile bool watchdog_error;
 
+    // First ATA PIO data out block after command should
+    // not assert IRQ, but further ones do.
+    bool first_dataout_after_cmd;
+    bool suppress_first_dataout_irq;
+
     uint32_t bufferidx; // Index of next buffer in g_idebuffers to use
 } g_ide_phy;
 
@@ -231,6 +236,8 @@ ide_event_t ide_phy_get_events()
         ide_phy_clear_event(CORE1_EVT_CMD_RECEIVED);
         g_idecomm.udma_mode = -1; // For ATAPI packets
         g_ide_phy.transfer_block_start_time = millis();
+        g_ide_phy.first_dataout_after_cmd = true;
+        g_ide_phy.suppress_first_dataout_irq = false;
         return IDE_EVENT_CMD;
     }
     // Not used currently by application code
@@ -245,7 +252,18 @@ ide_event_t ide_phy_get_events()
 
 bool ide_phy_is_command_interrupted()
 {
-    return g_ide_phy.watchdog_error || (g_idecomm.events & (CORE1_EVT_CMD_RECEIVED | CORE1_EVT_HWRST | CORE1_EVT_SWRST));
+    if (g_ide_phy.watchdog_error)
+    {
+        dbgmsg("Command interrupted because of watchdog error");
+        return true;
+    }
+    else if (g_idecomm.events & (CORE1_EVT_CMD_RECEIVED | CORE1_EVT_HWRST | CORE1_EVT_SWRST))
+    {
+        dbgmsg("Command interrupted because of events ", g_idecomm.events);
+        return true;
+    }
+
+    return false;
 }
 
 void ide_phy_get_regs(ide_registers_t *regs)
@@ -371,7 +389,7 @@ bool ide_phy_is_write_finished()
     return !g_idecomm.phyregs.state_datain;
 }
 
-static void data_out_give_next_block()
+static void data_out_give_next_block(bool noirq)
 {
     // Select a buffer for the transfer
     uint8_t *block = get_block_pointer();
@@ -380,7 +398,16 @@ static void data_out_give_next_block()
     assert(sio_hw->fifo_st & SIO_FIFO_ST_RDY_BITS);
     sio_hw->fifo_wr = (uint32_t)block;
 
-    ide_phy_post_request(CORE1_REQ_START_DATAOUT);
+    if (g_ide_phy.suppress_first_dataout_irq && g_ide_phy.first_dataout_after_cmd)
+    {
+        ide_phy_post_request(CORE1_REQ_START_DATAOUT_NOIRQ);
+    }
+    else
+    {
+        ide_phy_post_request(CORE1_REQ_START_DATAOUT);
+    }
+
+    g_ide_phy.first_dataout_after_cmd = false;
     g_ide_phy.transfer_block_start_time = millis();
 }
 
@@ -393,11 +420,19 @@ void ide_phy_start_read(uint32_t blocklen, int udma_mode)
     g_idecomm.udma_checksum_errors = 0;
     g_ide_phy.transfer_running = true;
 
-    data_out_give_next_block();
+    data_out_give_next_block(false);
 }
 
 void ide_phy_start_ata_read(uint32_t blocklen, int udma_mode)
 {
+    if (udma_mode < 0)
+    {
+        // For ATA transfers, first PIO DATA OUT block should not assert IRQ.
+        // Further blocks should assert IRQ.
+        // See figure 28 in T13/1410D revision 3a
+        g_ide_phy.suppress_first_dataout_irq = true;
+    }
+
     ide_phy_start_read(blocklen, udma_mode);
 }
 
@@ -433,7 +468,7 @@ void ide_phy_read_block(uint8_t *buf, uint32_t blocklen, bool continue_transfer)
     if (continue_transfer)
     {
         // Next block reception can be started immediately
-        data_out_give_next_block();
+        data_out_give_next_block(false);
     }
 
     if (g_idecomm.udma_mode < 0)
