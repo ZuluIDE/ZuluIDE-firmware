@@ -27,6 +27,7 @@
 #include "ZuluIDE_log.h"
 #include "ZuluIDE_config.h"
 #include "ZuluIDE_platform.h"
+#include <charconv>
 
 const char *g_log_firmwareversion = ZULU_FW_VERSION " " __DATE__ " " __TIME__;
 bool g_log_debug = true;
@@ -125,21 +126,18 @@ void log_raw(uint64_t value)
 void log_raw(int value)
 {
     char decbuf[16] = {0};
-    char *p = &decbuf[14];
-    int remainder = (value < 0) ? -value : value;
-    do
-    {
-        *--p = '0' + (remainder % 10);
-        remainder /= 10;
-    } while (remainder > 0);
-    
-    if (value < 0)
-    {
-        *--p = '-';
-    }
-
-    log_raw(p);
+    std::to_chars(decbuf, decbuf + sizeof(decbuf), value);
+    log_raw(decbuf);
 }
+
+// Log integer 64 as decimal
+void log_raw(int64_t value)
+{
+    char decbuf[21] = {0};
+    std::to_chars(decbuf, decbuf + sizeof(decbuf), value);
+    log_raw(decbuf);
+}
+
 
 void log_raw(bytearray array)
 {

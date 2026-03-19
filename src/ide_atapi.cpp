@@ -1322,12 +1322,12 @@ bool IDEATAPIDevice::atapi_read(const uint8_t *cmd)
 
     if (lba + transfer_len > capacity_lba())
     {
-        logmsg("-- Host attempted read at LBA ", (int)lba, "+", (int)transfer_len,
-            ", beyond capacity ", capacity_lba());
+        logmsg("-- Host attempted read at LBA ", (int64_t)lba, "+", (int64_t)transfer_len,
+            ", beyond capacity ", (int64_t)capacity_lba());
         return atapi_cmd_error(ATAPI_SENSE_ILLEGAL_REQ, ATAPI_ASC_LBA_OUT_OF_RANGE);
     }
 
-    dbgmsg("-- Read ", (int)transfer_len, " sectors starting at ", (int)lba);
+    dbgmsg("-- Read ", (int64_t)transfer_len, " sectors starting at ", (int64_t)lba);
     return doRead(lba, transfer_len);
 }
 
@@ -1392,12 +1392,12 @@ bool IDEATAPIDevice::atapi_write(const uint8_t *cmd)
 
     if (lba + transfer_len > capacity_lba())
     {
-        logmsg("-- Host attempted write at LBA ", (int)lba, "+", (int)transfer_len,
-            ", beyond capacity ", (int)capacity_lba());
+        logmsg("-- Host attempted write at LBA ", (int64_t)lba, "+", (int64_t)transfer_len,
+            ", beyond capacity ", (int64_t)capacity_lba());
         return atapi_cmd_error(ATAPI_SENSE_ILLEGAL_REQ, ATAPI_ASC_LBA_OUT_OF_RANGE);
     }
 
-    dbgmsg("-- Write ", (int)transfer_len, " sectors starting at ", (int)lba);
+    dbgmsg("-- Write ", (int64_t)transfer_len, " sectors starting at ", (int64_t)lba);
     return doWrite(lba, transfer_len);
 }
 
@@ -1415,7 +1415,7 @@ bool IDEATAPIDevice::doWrite(uint32_t lba, uint32_t transfer_len)
     else if (m_atapi_state.crc_errors > 0)
     {
         logmsg("-- Detected ", m_atapi_state.crc_errors, " CRC errors during write to LBA ",
-            (int)lba, ", reporting error to host");
+            (int64_t)lba, ", reporting error to host");
         return atapi_cmd_error(ATAPI_SENSE_HARDWARE_ERROR, ATAPI_ASC_CRC_ERROR);
     }
     else

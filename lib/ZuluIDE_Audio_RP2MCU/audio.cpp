@@ -275,8 +275,8 @@ static bool setup_playback(uint32_t start, uint32_t length, bool continued)
         uint32_t seek_back = (track_info.data_start - start) * track_info.sector_length;
         if (seek_back > offset)
         {
-            logmsg("WARNING: Host attempted CD read at sector ", start, "+", length,
-                    " pregap request ", (int)seek_back, " exceeded available ", (int)offset, " for track ", track_info.track_number,
+            logmsg("WARNING: Host attempted CD read at sector ", (int64_t)start, "+", (int64_t)length,
+                    " pregap request ", (int)seek_back, " exceeded available ", (int64_t)offset, " for track ", track_info.track_number,
                     " (possible .cue file issue)");
             offset = 0;
             return false;
@@ -328,7 +328,7 @@ static bool setup_playback(uint32_t start, uint32_t length, bool continued)
         }
         else
         {
-            dbgmsg("------ Audio playback - length ", (int) length ,", beyond the last file in cue ");
+            dbgmsg("------ Audio playback - length ", (int64_t) length ,", beyond the last file in cue ");
             return false;
         }
     }
