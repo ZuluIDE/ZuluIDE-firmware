@@ -19,15 +19,16 @@
 #define CORE1_EVT_DATA_DONE         0x0008
 
 // Requests are written by core0 to g_idecomm.requests
-#define CORE1_REQ_SET_REGS          0x0001
-#define CORE1_REQ_ASSERT_IRQ        0x0002
-#define CORE1_REQ_START_DATAIN      0x0004
-#define CORE1_REQ_START_DATAOUT     0x0008
-#define CORE1_REQ_STOP_TRANSFERS    0x0010
-#define CORE1_REQ_PRINT_DEBUG       0x0020
-#define CORE1_REQ_SET_SIGNALS       0x0040
-#define CORE1_REQ_GET_SIGNALS       0x0080
-#define CORE1_REQ_CHANGE_PIO_MODE   0x0100
+#define CORE1_REQ_SET_REGS              0x0001
+#define CORE1_REQ_ASSERT_IRQ            0x0002
+#define CORE1_REQ_START_DATAIN          0x0004
+#define CORE1_REQ_START_DATAOUT         0x0008
+#define CORE1_REQ_STOP_TRANSFERS        0x0010
+#define CORE1_REQ_PRINT_DEBUG           0x0020
+#define CORE1_REQ_SET_SIGNALS           0x0040
+#define CORE1_REQ_GET_SIGNALS           0x0080
+#define CORE1_REQ_CHANGE_PIO_MODE       0x0100
+#define CORE1_REQ_START_DATAOUT_NOIRQ   0x0200
 
 // This is set and cleared by core1 to indicate whether
 // it is busy handling previous requests.
