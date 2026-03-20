@@ -83,8 +83,8 @@ bool IDEATAPIDevice::handle_command(ide_registers_t *regs)
     switch (regs->command)
     {
         // Commands superseded by the ATAPI packet interface
-        case IDE_CMD_IDENTIFY_DEVICE:
-        case IDE_CMD_READ_SECTORS:
+        case IDE_CMD_IDENTIFY_DEVICE: [[fallthrough]];
+        case IDE_CMD_READ_SECTORS: [[fallthrough]];
         case IDE_CMD_READ_SECTORS_EXT:
             return set_device_signature(IDE_ERROR_ABORT, false);
         case IDE_CMD_EXECUTE_DEVICE_DIAGNOSTIC:
@@ -99,6 +99,7 @@ bool IDEATAPIDevice::handle_command(ide_registers_t *regs)
         case IDE_CMD_IDLE_IMMEDIATE_E1H: [[fallthrough]];
         case IDE_CMD_IDLE_97H:           [[fallthrough]];
         case IDE_CMD_IDLE_E3H: return cmd_idle(regs);
+        case IDE_CMD_CHECK_POWER_MODE: return cmd_check_power_mode(regs);
         default: return false;
     }
 }
@@ -409,6 +410,15 @@ bool IDEATAPIDevice::cmd_idle(ide_registers_t *regs)
         dbgmsg("Idle immediate command is a stub, signaling INTRQ and device ready");
     }
     ide_phy_assert_irq(IDE_STATUS_DEVRDY | IDE_STATUS_DSC);
+    return true;
+}
+
+bool IDEATAPIDevice::cmd_check_power_mode(ide_registers_t *regs)
+{
+    regs->sector_count = 0xFF; // Result value
+    dbgmsg("Check Power Mode command is a stub, always reports as Active mode or Idle mode (0xFF). Signaling INTRQ and device ready");
+    ide_phy_assert_irq(IDE_STATUS_DEVRDY | IDE_STATUS_DSC);
+    ide_phy_set_regs(regs);
     return true;
 }
 

@@ -172,6 +172,7 @@ protected:
     virtual bool cmd_packet(ide_registers_t *regs);
     virtual bool cmd_device_reset(ide_registers_t *regs);
     virtual bool cmd_idle(ide_registers_t *regs);
+    virtual bool cmd_check_power_mode(ide_registers_t *regs);
 
     // Methods used by ATAPI command implementations
 
