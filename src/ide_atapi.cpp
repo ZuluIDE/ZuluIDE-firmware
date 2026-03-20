@@ -110,7 +110,8 @@ void IDEATAPIDevice::handle_event(ide_event_t evt)
     {
         if (evt == IDE_EVENT_HWRST)
         {
-            m_atapi_state.udma_mode = -1;
+            ide_phy_set_pio_mode(m_devconfig.default_pio_mode);
+            m_atapi_state.udma_mode = m_devconfig.default_udma_mode;
         }
 
         m_atapi_state.unit_attention = true;
