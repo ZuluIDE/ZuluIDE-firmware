@@ -783,6 +783,7 @@ bool IDEATAPIDevice::handle_atapi_command_wrapper(const uint8_t *cmd)
         case ATAPI_CMD_INQUIRY:         return atapi_inquiry(cmd);
         case ATAPI_CMD_REQUEST_SENSE:   return atapi_request_sense(cmd);
         case ATAPI_CMD_GET_EVENT_STATUS_NOTIFICATION: return atapi_get_event_status_notification(cmd);
+        case ATAPI_CMD_TEST_UNIT_READY: return atapi_test_unit_ready(cmd);
     }
 
     if (m_atapi_state.not_ready)
@@ -803,7 +804,6 @@ bool IDEATAPIDevice::handle_atapi_command(const uint8_t *cmd)
 {
     switch (cmd[0])
     {
-        case ATAPI_CMD_TEST_UNIT_READY: return atapi_test_unit_ready(cmd);
         case ATAPI_CMD_START_STOP_UNIT: return atapi_start_stop_unit(cmd);
         case ATAPI_CMD_LOAD_UNLOAD_MEDIUM: return atapi_load_unload_medium(cmd);
         case ATAPI_CMD_PREVENT_ALLOW_MEDIUM_REMOVAL: return atapi_prevent_allow_removal(cmd);
@@ -926,6 +926,13 @@ bool IDEATAPIDevice::atapi_cmd_ok()
 
 bool IDEATAPIDevice::atapi_test_unit_ready(const uint8_t *cmd)
 {
+    // reset unit attention on subsequent test units 
+    m_atapi_state.unit_attention = false;
+    m_atapi_state.unit_attention_sense_asc = ATAPI_ASC_NO_ASC;
+    m_atapi_state.sense_key = ATAPI_SENSE_NO_SENSE;
+    m_atapi_state.sense_asc = ATAPI_ASC_NO_ASC;
+    m_atapi_state.not_ready = false;
+
     if (m_devinfo.removable 
         && m_removable.ejected 
         && m_removable.reinsert_media_after_eject 
