@@ -127,6 +127,8 @@ protected:
         int ide_sectors;
         int access_delay;
         int ide_identify_gencfg;
+        int default_udma_mode;
+        int default_pio_mode;
     } m_devconfig;
 
     // PHY capabilities limited by active device configuration
