@@ -136,31 +136,22 @@ void ide_phy_reset()
 {
     if (g_rp2350_passive_sniffer) return;
 
-    // Make sure if anyone tries to read during configuring, we report BSY = 1
-    gpio_set_outover(IDE_D7, GPIO_OVERRIDE_HIGH);
-    gpio_set_outover(IDE_DATADIR, GPIO_OVERRIDE_HIGH);
-    gpio_set_oeover(IDE_D7, GPIO_OVERRIDE_HIGH);
-    gpio_set_outover(IDE_DATASEL, GPIO_OVERRIDE_LOW);
-
+    g_idecomm.enable_idephy = false;
+    busy_wait_us_32(CORE1_RESPONSE_DELAY);
     phy_ide_registers_t phyregs = g_idecomm.phyregs;
+    __sync_synchronize();
+
     g_ide_phy.watchdog_error = false;
+
     phyregs.state_irqreq = 0;
     phyregs.state_datain = 0;
     phyregs.state_dataout = 0;
     g_idecomm.phyregs = phyregs;
-    __sync_synchronize();
+    ide_phy_post_request(CORE1_REQ_SET_REGS | CORE1_REQ_STOP_TRANSFERS);
 
-    // PIO mode change request reinitializes the hardware interface quickly.
-    ide_phy_post_request(CORE1_REQ_CHANGE_PIO_MODE | CORE1_REQ_SET_REGS | CORE1_REQ_STOP_TRANSFERS);
+    g_idecomm.enable_idephy = true;
 
     busy_wait_us_32(CORE1_RESPONSE_DELAY);
-
-    // Unset overrides
-    gpio_set_outover(IDE_DATADIR, GPIO_OVERRIDE_NORMAL);
-    gpio_set_outover(IDE_DATASEL, GPIO_OVERRIDE_NORMAL);
-    gpio_set_oeover(IDE_D7, GPIO_OVERRIDE_NORMAL);
-    gpio_set_outover(IDE_D7, GPIO_OVERRIDE_NORMAL);
-
     core1_log_poll();
 
     if (g_idecomm.requests & CORE1_REQ_SET_REGS)
