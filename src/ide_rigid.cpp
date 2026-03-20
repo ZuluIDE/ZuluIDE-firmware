@@ -202,6 +202,7 @@ bool IDERigidDevice::handle_command(ide_registers_t *regs)
         case IDE_CMD_IDLE_IMMEDIATE_E1H: // fall through
         case IDE_CMD_IDLE_97H:           // fall through
         case IDE_CMD_IDLE_E3H: return cmd_idle(regs);
+        case IDE_CMD_CHECK_POWER_MODE: return cmd_check_power_mode(regs);
         default: return false;
     }
 }
@@ -798,6 +799,15 @@ bool IDERigidDevice::cmd_idle(ide_registers_t *regs)
         dbgmsg("Idle immediate command is a stub, signaling INTRQ and device ready");
     }
     ide_phy_assert_irq(IDE_STATUS_DEVRDY | IDE_STATUS_DSC);
+    return true;
+}
+
+bool IDERigidDevice::cmd_check_power_mode(ide_registers_t *regs)
+{
+    regs->sector_count = 0xFF; // Result value
+    dbgmsg("Check Power Mode command is a stub, always reports as Active mode or Idle mode (0xFF). Signaling INTRQ and device ready");
+    ide_phy_assert_irq(IDE_STATUS_DEVRDY | IDE_STATUS_DSC);
+    ide_phy_set_regs(regs);
     return true;
 }
 
