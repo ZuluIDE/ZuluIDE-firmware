@@ -95,6 +95,10 @@ bool IDEATAPIDevice::handle_command(ide_registers_t *regs)
         case IDE_CMD_IDENTIFY_PACKET_DEVICE: return cmd_identify_packet_device(regs);
         case IDE_CMD_PACKET: return cmd_packet(regs);
         case IDE_CMD_DEVICE_RESET: return cmd_device_reset(regs);
+        case IDE_CMD_IDLE_IMMEDIATE_95H: [[fallthrough]];
+        case IDE_CMD_IDLE_IMMEDIATE_E1H: [[fallthrough]];
+        case IDE_CMD_IDLE_97H:           [[fallthrough]];
+        case IDE_CMD_IDLE_E3H: return cmd_idle(regs);
         default: return false;
     }
 }
@@ -391,6 +395,20 @@ bool IDEATAPIDevice::cmd_device_reset(ide_registers_t *regs)
     fill_device_signature(regs);
     regs->status &= IDE_STATUS_IDX; // clear bits BSY, 6,5,4,2,0
     ide_phy_set_regs(regs);
+    return true;
+}
+
+bool IDEATAPIDevice::cmd_idle(ide_registers_t *regs)
+{
+    if (regs->command == IDE_CMD_IDLE_97H || regs->command == IDE_CMD_IDLE_E3H)
+    {
+        dbgmsg("Idle command is a stub, timeout value of ", regs->sector_count, " ignored. Signaling INTRQ and device ready");
+    }
+    else
+    {
+        dbgmsg("Idle immediate command is a stub, signaling INTRQ and device ready");
+    }
+    ide_phy_assert_irq(IDE_STATUS_DEVRDY | IDE_STATUS_DSC);
     return true;
 }
 
