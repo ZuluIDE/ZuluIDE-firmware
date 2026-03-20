@@ -136,12 +136,12 @@ class SniffDecoder:
             else:
                 if self.version >= 2:
                     if d != 31:
-                        self.timestamp += 3 * (33 - d)
+                        self.timestamp += 3 * (32 - d)
                         self.pin_states = p
                     elif p <= max_timedelta:
-                        self.timestamp += 3 * (max_timedelta - p - 1)
+                        self.timestamp += 3 * (max_timedelta - p + 3)
                     elif word == 0xFFFFFFFF:
-                        self.timestamp += 3 * (max_timedelta + 3)
+                        self.timestamp += 3 * (max_timedelta + 2)
                 else:
                     if d != 31:
                         self.timestamp += 5 * (31 - d)
