@@ -203,6 +203,7 @@ bool IDERigidDevice::handle_command(ide_registers_t *regs)
         case IDE_CMD_IDLE_97H:           // fall through
         case IDE_CMD_IDLE_E3H: return cmd_idle(regs);
         case IDE_CMD_CHECK_POWER_MODE: return cmd_check_power_mode(regs);
+        case IDE_CMD_GET_MEDIA_STATUS: return cmd_get_media_status(regs);
         default: return false;
     }
 }
@@ -808,6 +809,40 @@ bool IDERigidDevice::cmd_check_power_mode(ide_registers_t *regs)
     dbgmsg("Check Power Mode command is a stub, always reports as Active mode or Idle mode (0xFF). Signaling INTRQ and device ready");
     ide_phy_assert_irq(IDE_STATUS_DEVRDY | IDE_STATUS_DSC);
     ide_phy_set_regs(regs);
+    return true;
+}
+
+bool IDERigidDevice::cmd_get_media_status(ide_registers_t *regs)
+{
+    if (!m_image)
+    {
+        // No media
+        regs->error = 0x02;
+    }
+    else if (!m_image->writable())
+    {
+        // Write-protected
+        regs->error = 0x40;
+    }
+    else
+    {
+        // Ready
+        regs->error = 0x00;
+    }
+
+    ide_phy_set_regs(regs);
+
+    if (regs->error == 0)
+    {
+        // Normal status "all ready"
+        ide_phy_assert_irq(IDE_STATUS_DEVRDY | IDE_STATUS_DSC);
+    }
+    else
+    {
+        // Error status when any condition is set
+        ide_phy_assert_irq(IDE_STATUS_DEVRDY | IDE_STATUS_DSC | IDE_STATUS_ERR);
+    }
+
     return true;
 }
 
