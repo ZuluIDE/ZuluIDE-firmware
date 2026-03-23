@@ -780,10 +780,11 @@ bool IDEATAPIDevice::handle_atapi_command_wrapper(const uint8_t *cmd)
         // These command bypass unit attention
     switch (cmd[0])
     {
+        case ATAPI_CMD_TEST_UNIT_READY: return atapi_test_unit_ready(cmd);
         case ATAPI_CMD_INQUIRY:         return atapi_inquiry(cmd);
         case ATAPI_CMD_REQUEST_SENSE:   return atapi_request_sense(cmd);
         case ATAPI_CMD_GET_EVENT_STATUS_NOTIFICATION: return atapi_get_event_status_notification(cmd);
-        case ATAPI_CMD_TEST_UNIT_READY: return atapi_test_unit_ready(cmd);
+            case ATAPI_CMD_START_STOP_UNIT: return atapi_start_stop_unit(cmd);
     }
 
     if (m_atapi_state.not_ready)
@@ -804,7 +805,6 @@ bool IDEATAPIDevice::handle_atapi_command(const uint8_t *cmd)
 {
     switch (cmd[0])
     {
-        case ATAPI_CMD_START_STOP_UNIT: return atapi_start_stop_unit(cmd);
         case ATAPI_CMD_LOAD_UNLOAD_MEDIUM: return atapi_load_unload_medium(cmd);
         case ATAPI_CMD_PREVENT_ALLOW_MEDIUM_REMOVAL: return atapi_prevent_allow_removal(cmd);
         case ATAPI_CMD_MODE_SENSE6:     return atapi_mode_sense(cmd);
@@ -926,12 +926,15 @@ bool IDEATAPIDevice::atapi_cmd_ok()
 
 bool IDEATAPIDevice::atapi_test_unit_ready(const uint8_t *cmd)
 {
-    // reset unit attention on subsequent test units 
-    m_atapi_state.unit_attention = false;
-    m_atapi_state.unit_attention_sense_asc = ATAPI_ASC_NO_ASC;
+    // Progressively clear not ready then unit attention states to make device ready again
     m_atapi_state.sense_key = ATAPI_SENSE_NO_SENSE;
     m_atapi_state.sense_asc = ATAPI_ASC_NO_ASC;
-    m_atapi_state.not_ready = false;
+
+    if (m_atapi_state.not_ready)
+    {
+        m_atapi_state.not_ready = false;
+        return atapi_cmd_not_ready_error();
+    }
 
     if (m_devinfo.removable 
         && m_removable.ejected 
@@ -960,6 +963,16 @@ bool IDEATAPIDevice::atapi_test_unit_ready(const uint8_t *cmd)
     if (!is_medium_present())
     {
         return atapi_cmd_not_ready_error();
+    }
+
+    // Service Unit Attention state last, in case of device was ejected before
+    // Test Unit Ready was issued to clear the Unit Attention state
+    if (m_atapi_state.unit_attention)
+    {
+        m_atapi_state.unit_attention = false;
+        uint16_t asc = m_atapi_state.unit_attention_sense_asc;
+        m_atapi_state.unit_attention_sense_asc = ATAPI_ASC_NO_ASC;
+        return atapi_cmd_error(ATAPI_SENSE_UNIT_ATTENTION, asc);
     }
 
     return atapi_cmd_ok();
