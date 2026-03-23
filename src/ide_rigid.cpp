@@ -587,7 +587,41 @@ bool IDERigidDevice::cmd_init_dev_params(ide_registers_t *regs)
 // Responds with 512 bytes of identification data
 bool IDERigidDevice::cmd_identify_device(ide_registers_t *regs)
 {
-    uint16_t idf[256] = {0};
+    // FIXME: Hack to test #310
+    uint16_t idf[256] = {
+        0x044A, 0x3D14, 0x0000, 0x0010, 0x7E00, 0x0200, 0x003F, 0x00F0,
+        0x7EC0, 0x0000, 0x3344, 0x3043, 0x3037, 0x3338, 0x3136, 0x3030,
+        0x3030, 0x3039, 0x3637, 0x3832, 0x0002, 0x0002, 0x0004, 0x5665,
+        0x7232, 0x2E33, 0x3520, 0x4346, 0x2043, 0x6172, 0x6420, 0x2020,
+        0x2020, 0x2020, 0x2020, 0x2020, 0x2020, 0x2020, 0x2020, 0x2020,
+        0x2020, 0x2020, 0x2020, 0x2020, 0x2020, 0x2020, 0x2020, 0x0001,
+        0x0000, 0x0B00, 0x0000, 0x0200, 0x0000, 0x0007, 0x3D14, 0x0010,
+        0x003F, 0x7EC0, 0x00F0, 0x0100, 0x7EC0, 0x00F0, 0x0000, 0x0407,
+        0x0003, 0x0078, 0x0078, 0x0078, 0x0078, 0x0000, 0x0000, 0x0000,
+        0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000,
+        0x0000, 0x0000, 0x7003, 0x5004, 0x4000, 0x7000, 0x1004, 0x4000,
+        0x003F, 0x001E, 0x001E, 0x0000, 0xFFFE, 0x4000, 0x0000, 0x0000,
+        0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000,
+        0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000,
+        0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000,
+        0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000,
+        0x0021, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000,
+        0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000,
+        0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000,
+        0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000,
+        0x1000, 0x0000, 0x0000, 0x0092, 0x0000, 0x0000, 0x0000, 0x0000,
+        0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000,
+        0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000,
+        0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000,
+        0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000,
+        0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000,
+        0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000,
+        0x0000, 0x0001, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000,
+        0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000,
+        0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000,
+        0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000,
+        0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0xF5A5
+    };
 
     // Apple IDE hard drive settings - model DSAA-3360
     // idf[IDE_IDENTIFY_OFFSET_GENERAL_CONFIGURATION] = 0x045A;
@@ -624,99 +658,101 @@ bool IDERigidDevice::cmd_identify_device(ide_registers_t *regs)
     // idf[IDE_IDENTIFY_OFFSET_PIO_CYCLETIME_IORDY] = 0x00B4;
     // idf[129] = 0x000B;
 
-     // Generic IDE hard drive
-    uint64_t lba = capacity_lba();
+    //  // Generic IDE hard drive
+    // uint64_t lba = capacity_lba();
 
-    // Word 0 General Configuration - mostly depreciated in later versions of ATA-2, but some old ATA-1 hosts/drivers may expect specific values
-    idf[IDE_IDENTIFY_OFFSET_GENERAL_CONFIGURATION] = (m_devconfig.ide_identify_gencfg ? m_devconfig.ide_identify_gencfg : (m_devinfo.removable ? 0x80 : 0x40)); // Device type
+    // // Word 0 General Configuration - mostly depreciated in later versions of ATA-2, but some old ATA-1 hosts/drivers may expect specific values
+    // idf[IDE_IDENTIFY_OFFSET_GENERAL_CONFIGURATION] = (m_devconfig.ide_identify_gencfg ? m_devconfig.ide_identify_gencfg : (m_devinfo.removable ? 0x80 : 0x40)); // Device type
 
-    idf[IDE_IDENTIFY_OFFSET_NUM_CYLINDERS] = m_devinfo.cylinders;
-    idf[IDE_IDENTIFY_OFFSET_NUM_HEADS] = m_devinfo.heads;
-    idf[IDE_IDENTIFY_OFFSET_BYTES_PER_TRACK] = m_devinfo.bytes_per_sector * m_devinfo.sectors_per_track;
-    idf[IDE_IDENTIFY_OFFSET_BYTES_PER_SECTOR] = m_devinfo.bytes_per_sector;
-    idf[IDE_IDENTIFY_OFFSET_SECTORS_PER_TRACK] = m_devinfo.sectors_per_track;
+    // idf[IDE_IDENTIFY_OFFSET_NUM_CYLINDERS] = m_devinfo.cylinders;
+    // idf[IDE_IDENTIFY_OFFSET_NUM_HEADS] = m_devinfo.heads;
+    // idf[IDE_IDENTIFY_OFFSET_BYTES_PER_TRACK] = m_devinfo.bytes_per_sector * m_devinfo.sectors_per_track;
+    // idf[IDE_IDENTIFY_OFFSET_BYTES_PER_SECTOR] = m_devinfo.bytes_per_sector;
+    // idf[IDE_IDENTIFY_OFFSET_SECTORS_PER_TRACK] = m_devinfo.sectors_per_track;
 
-    // \todo set on older drives
-    // idf[IDE_IDENTIFY_OFFSET_BUFFER_TYPE] = 0x0003;
-    // idf[IDE_IDENTIFY_OFFSET_BUFFER_SIZE_512] = 0x00C0;
-    // idf[IDE_IDENTIFY_OFFSET_ECC_LONG_CMDS] = 0x0010;
-    copy_id_string(&idf[IDE_IDENTIFY_OFFSET_SERIAL_NUMBER], 10, m_devconfig.ata_serial);
-    copy_id_string(&idf[IDE_IDENTIFY_OFFSET_FIRMWARE_REV], 4, m_devconfig.ata_revision);
-    copy_id_string(&idf[IDE_IDENTIFY_OFFSET_MODEL_NUMBER], 20, m_devconfig.ata_model);
-    idf[IDE_IDENTIFY_OFFSET_MAX_SECTORS] = 0x8000 | (m_phy_caps.max_blocksize / m_devinfo.bytes_per_sector);
-    idf[IDE_IDENTIFY_OFFSET_MULTI_SECTOR_VALID] = 0x100 | m_ata_state.multiple_mode_sectors;
+    // // \todo set on older drives
+    // // idf[IDE_IDENTIFY_OFFSET_BUFFER_TYPE] = 0x0003;
+    // // idf[IDE_IDENTIFY_OFFSET_BUFFER_SIZE_512] = 0x00C0;
+    // // idf[IDE_IDENTIFY_OFFSET_ECC_LONG_CMDS] = 0x0010;
+    // copy_id_string(&idf[IDE_IDENTIFY_OFFSET_SERIAL_NUMBER], 10, m_devconfig.ata_serial);
+    // copy_id_string(&idf[IDE_IDENTIFY_OFFSET_FIRMWARE_REV], 4, m_devconfig.ata_revision);
+    // copy_id_string(&idf[IDE_IDENTIFY_OFFSET_MODEL_NUMBER], 20, m_devconfig.ata_model);
+    // idf[IDE_IDENTIFY_OFFSET_MAX_SECTORS] = 0x8000 | (m_phy_caps.max_blocksize / m_devinfo.bytes_per_sector);
+    // idf[IDE_IDENTIFY_OFFSET_MULTI_SECTOR_VALID] = 0x100 | m_ata_state.multiple_mode_sectors;
 
-    idf[IDE_IDENTIFY_OFFSET_CAPABILITIES_1] = (m_phy_caps.supports_iordy ? 1 << 11 : 0) |
-                                             (1 << 10) | // iordy may be disabled
-                                             (1 << 9)  |  // Shall be set to one
-                                             (1 << 8);    // Shall be set to one
-    idf[IDE_IDENTIFY_OFFSET_PIO_MODE_ATA1] = (m_phy_caps.max_pio_mode << 8);
-    // \todo set on older drives
-    // idf[IDE_IDENTIFY_OFFSET_OLD_DMA_TIMING_MODE] = 0x0200;
-    idf[IDE_IDENTIFY_OFFSET_MODE_INFO_VALID] =  0x01;
-    idf[IDE_IDENTIFY_OFFSET_MODE_INFO_VALID] |= (m_phy_caps.max_udma_mode >= 0) ? 0x04 : 0x00; // UDMA support word valid
-    idf[IDE_IDENTIFY_OFFSET_MODE_INFO_VALID] |= ((m_phy_caps.max_pio_mode >= 3)) ? 0x02 : 0x00; // PIO support word valid
-    // \todo set on older drives
-    idf[IDE_IDENTIFY_OFFSET_CURRENT_CYLINDERS] = m_devinfo.current_cylinders;
-    idf[IDE_IDENTIFY_OFFSET_CURRENT_HEADS] = m_devinfo.current_heads;
-    idf[IDE_IDENTIFY_OFFSET_CURRENT_SECTORS_PER_TRACK] = m_devinfo.current_sectors;
-    uint32_t current_sector_cap = m_devinfo.current_cylinders * m_devinfo.current_heads * m_devinfo.current_sectors;
-    idf[IDE_IDENTIFY_OFFSET_CURRENT_CAPACITY_IN_SECTORS_LOW] = current_sector_cap & 0xFFFF;;
-    idf[IDE_IDENTIFY_OFFSET_CURRENT_CAPACITY_IN_SECTORS_HI] = (current_sector_cap >> 16) & 0xFFFF;
-    idf[IDE_IDENTIFY_OFFSET_TOTAL_SECTORS]     = lba & 0xFFFF;
-    idf[IDE_IDENTIFY_OFFSET_TOTAL_SECTORS + 1] = (lba >> 16) & 0xFFFF;
-    idf[IDE_IDENTIFY_OFFSET_MODEINFO_SINGLEWORD] = 0;// 0x0007; // disabling single word dma
-    idf[IDE_IDENTIFY_OFFSET_MODEINFO_MULTIWORD] = 0; // 0x0103; // disabling multi-word dma
+    // idf[IDE_IDENTIFY_OFFSET_CAPABILITIES_1] = (m_phy_caps.supports_iordy ? 1 << 11 : 0) |
+    //                                          (1 << 10) | // iordy may be disabled
+    //                                          (1 << 9)  |  // Shall be set to one
+    //                                          (1 << 8);    // Shall be set to one
+    // idf[IDE_IDENTIFY_OFFSET_PIO_MODE_ATA1] = (m_phy_caps.max_pio_mode << 8);
+    // // \todo set on older drives
+    // // idf[IDE_IDENTIFY_OFFSET_OLD_DMA_TIMING_MODE] = 0x0200;
+    // idf[IDE_IDENTIFY_OFFSET_MODE_INFO_VALID] =  0x01;
+    // idf[IDE_IDENTIFY_OFFSET_MODE_INFO_VALID] |= (m_phy_caps.max_udma_mode >= 0) ? 0x04 : 0x00; // UDMA support word valid
+    // idf[IDE_IDENTIFY_OFFSET_MODE_INFO_VALID] |= ((m_phy_caps.max_pio_mode >= 3)) ? 0x02 : 0x00; // PIO support word valid
+    // // \todo set on older drives
+    // idf[IDE_IDENTIFY_OFFSET_CURRENT_CYLINDERS] = m_devinfo.current_cylinders;
+    // idf[IDE_IDENTIFY_OFFSET_CURRENT_HEADS] = m_devinfo.current_heads;
+    // idf[IDE_IDENTIFY_OFFSET_CURRENT_SECTORS_PER_TRACK] = m_devinfo.current_sectors;
+    // uint32_t current_sector_cap = m_devinfo.current_cylinders * m_devinfo.current_heads * m_devinfo.current_sectors;
+    // idf[IDE_IDENTIFY_OFFSET_CURRENT_CAPACITY_IN_SECTORS_LOW] = current_sector_cap & 0xFFFF;;
+    // idf[IDE_IDENTIFY_OFFSET_CURRENT_CAPACITY_IN_SECTORS_HI] = (current_sector_cap >> 16) & 0xFFFF;
+    // idf[IDE_IDENTIFY_OFFSET_TOTAL_SECTORS]     = lba & 0xFFFF;
+    // idf[IDE_IDENTIFY_OFFSET_TOTAL_SECTORS + 1] = (lba >> 16) & 0xFFFF;
+    // idf[IDE_IDENTIFY_OFFSET_MODEINFO_SINGLEWORD] = 0;// 0x0007; // disabling single word dma
+    // idf[IDE_IDENTIFY_OFFSET_MODEINFO_MULTIWORD] = 0; // 0x0103; // disabling multi-word dma
 
-    idf[IDE_IDENTIFY_OFFSET_MODEINFO_PIO] = (m_phy_caps.max_pio_mode >= 3) ? 1 : 0; // PIO3 supported?
-    idf[IDE_IDENTIFY_OFFSET_PIO_CYCLETIME_MIN] = m_phy_caps.min_pio_cycletime_no_iordy; // Without IORDY
-    idf[IDE_IDENTIFY_OFFSET_PIO_CYCLETIME_IORDY] = m_phy_caps.min_pio_cycletime_with_iordy; // With IORDY
+    // idf[IDE_IDENTIFY_OFFSET_MODEINFO_PIO] = (m_phy_caps.max_pio_mode >= 3) ? 1 : 0; // PIO3 supported?
+    // idf[IDE_IDENTIFY_OFFSET_PIO_CYCLETIME_MIN] = m_phy_caps.min_pio_cycletime_no_iordy; // Without IORDY
+    // idf[IDE_IDENTIFY_OFFSET_PIO_CYCLETIME_IORDY] = m_phy_caps.min_pio_cycletime_with_iordy; // With IORDY
 
-    idf[IDE_IDENTIFY_OFFSET_STANDARD_VERSION_MAJOR] = 0x0078; // Version ATAPI-6
-    idf[IDE_IDENTIFY_OFFSET_STANDARD_VERSION_MINOR] = 0x0019; // Minor version rev 3a
-    idf[IDE_IDENTIFY_OFFSET_COMMAND_SET_SUPPORT_1] = 0x7004; //  Removable device command sets supported
-    idf[IDE_IDENTIFY_OFFSET_COMMAND_SET_SUPPORT_2] = 0x4000;
-    idf[IDE_IDENTIFY_OFFSET_COMMAND_SET_SUPPORT_3] = 0x4000;
-    idf[IDE_IDENTIFY_OFFSET_COMMAND_SET_ENABLED_1] = 0x7004;
+    // idf[IDE_IDENTIFY_OFFSET_STANDARD_VERSION_MAJOR] = 0x0078; // Version ATAPI-6
+    // idf[IDE_IDENTIFY_OFFSET_STANDARD_VERSION_MINOR] = 0x0019; // Minor version rev 3a
+    // idf[IDE_IDENTIFY_OFFSET_COMMAND_SET_SUPPORT_1] = 0x7004; //  Removable device command sets supported
+    // idf[IDE_IDENTIFY_OFFSET_COMMAND_SET_SUPPORT_2] = 0x4000;
+    // idf[IDE_IDENTIFY_OFFSET_COMMAND_SET_SUPPORT_3] = 0x4000;
+    // idf[IDE_IDENTIFY_OFFSET_COMMAND_SET_ENABLED_1] = 0x7004;
 
-    if (m_phy_caps.max_udma_mode >= 0)
-    {
-        // Bitmask of supported UDMA modes
-        idf[IDE_IDENTIFY_OFFSET_MODEINFO_ULTRADMA] = (2 << m_phy_caps.max_udma_mode) - 1;
-        if (m_ata_state.udma_mode >= 0)
-        {
-            // Active UDMA mode
-            idf[IDE_IDENTIFY_OFFSET_MODEINFO_ULTRADMA] |= (1 << (8 + m_ata_state.udma_mode));
-        }
-    }
+    // if (m_phy_caps.max_udma_mode >= 0)
+    // {
+    //     // Bitmask of supported UDMA modes
+    //     idf[IDE_IDENTIFY_OFFSET_MODEINFO_ULTRADMA] = (2 << m_phy_caps.max_udma_mode) - 1;
+    //     if (m_ata_state.udma_mode >= 0)
+    //     {
+    //         // Active UDMA mode
+    //         idf[IDE_IDENTIFY_OFFSET_MODEINFO_ULTRADMA] |= (1 << (8 + m_ata_state.udma_mode));
+    //     }
+    // }
 
-    // Diagnostics results
-    const ide_phy_config_t *phycfg = ide_protocol_get_config();
-    if (m_devconfig.dev_index == 0)
-    {
-        idf[IDE_IDENTIFY_OFFSET_HARDWARE_RESET_RESULT] = 0x4009; // Device 0 passed diagnostics
-        if (phycfg->enable_dev1_zeros)
-        {
-            idf[IDE_IDENTIFY_OFFSET_HARDWARE_RESET_RESULT] |= (1 << 6); // Device 0 responds for device 1
-        }
-        else
-        {
-            idf[IDE_IDENTIFY_OFFSET_HARDWARE_RESET_RESULT] |= 0x30; // Device 1 detected
-        }
-    }
-    else
-    {
-        idf[IDE_IDENTIFY_OFFSET_HARDWARE_RESET_RESULT] = 0x4900; // Device 1 passed diagnostics
-    }
-    // Calculate checksum
-    // See 8.15.61 Word 255: Integrity word
-    uint8_t checksum = 0xA5;
-    for (int i = 0; i < 255; i++)
-    {
-        checksum += (idf[i] & 0xFF) + (idf[i] >> 8);
-    }
-    checksum = -checksum;
-    idf[IDE_IDENTIFY_OFFSET_INTEGRITY_WORD] = ((uint16_t)checksum << 8) | 0xA5;
+    // // Diagnostics results
+    // const ide_phy_config_t *phycfg = ide_protocol_get_config();
+    // if (m_devconfig.dev_index == 0)
+    // {
+    //     idf[IDE_IDENTIFY_OFFSET_HARDWARE_RESET_RESULT] = 0x4009; // Device 0 passed diagnostics
+    //     if (phycfg->enable_dev1_zeros)
+    //     {
+    //         idf[IDE_IDENTIFY_OFFSET_HARDWARE_RESET_RESULT] |= (1 << 6); // Device 0 responds for device 1
+    //     }
+    //     else
+    //     {
+    //         idf[IDE_IDENTIFY_OFFSET_HARDWARE_RESET_RESULT] |= 0x30; // Device 1 detected
+    //     }
+    // }
+    // else
+    // {
+    //     idf[IDE_IDENTIFY_OFFSET_HARDWARE_RESET_RESULT] = 0x4900; // Device 1 passed diagnostics
+    // }
+    // // Calculate checksum
+    // // See 8.15.61 Word 255: Integrity word
+    // uint8_t checksum = 0xA5;
+    // for (int i = 0; i < 255; i++)
+    // {
+    //     checksum += (idf[i] & 0xFF) + (idf[i] >> 8);
+    // }
+    // checksum = -checksum;
+    // idf[IDE_IDENTIFY_OFFSET_INTEGRITY_WORD] = ((uint16_t)checksum << 8) | 0xA5;
+
+    logmsg("Writing hard-coded test IDENTIFY DEVICE data");
 
     ide_phy_start_write(sizeof(idf));
     ide_phy_write_block((uint8_t*)idf, sizeof(idf));
