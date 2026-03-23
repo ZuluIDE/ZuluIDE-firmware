@@ -721,36 +721,60 @@ bool IDECDROMDevice::atapi_get_event_status_notification(const uint8_t *cmd)
 {
     m_removable.receiving_event_status_notifications = true;
     uint8_t *buf = m_buffer.bytes;
-
+    uint8_t response_len = 8;
 
     if (!(cmd[1] & 1))
     {
         // Async. notification is not supported
         return atapi_cmd_error(ATAPI_SENSE_ILLEGAL_REQ, ATAPI_ASC_INVALID_FIELD);
     }
+    constexpr uint8_t operational_change_bit = 0x02;
+    constexpr uint8_t media_event_bit        = 0x10;
+    constexpr uint8_t device_busy_bit        = 0x40;
+    constexpr uint8_t supported_events = operational_change_bit | media_event_bit | device_busy_bit;
 
-    bool operation_change_bit_set = cmd[4] & 0x02;
-    bool media_event_bit_set = cmd[4] & 0x10;
+    bool operation_change_bit_set = cmd[4] & operational_change_bit;
+    bool media_event_bit_set =      cmd[4] & media_event_bit;
+    bool device_busy_bit_set =      cmd[4] & device_busy_bit;
+    bool no_event_bits_set   =      cmd[4] == 0;
 
-    // Skip operation event if change bit not set in ATAPI command
-    if (!operation_change_bit_set && m_esn.event != esn_event_t::NoChange && m_esn.request == esn_class_request_t::OperationChange )
+    // Get next event if media event bit set and current event is operation change
+    if (media_event_bit_set && m_esn.event != esn_event_t::NoChange && m_esn.request == esn_class_request_t::OperationChange )
     {
         esn_next_event();
     }
 
     // Operation change class request
-    if (operation_change_bit_set && (m_esn.event != esn_event_t::NoChange && m_esn.request == esn_class_request_t::OperationChange))
+    if (operation_change_bit_set && m_esn.request == esn_class_request_t::OperationChange)
     {
-        buf[0] = 0;
-        buf[1] = 6; // EventDataLength
-        buf[2] = 0x01;   // Operational Change request/notification
-        buf[3] = 0x12; // Supported events
-        buf[4] = 0x02; // Operational state has changed
-        buf[5] = 0x00; // Power status
-        buf[6] = 0x00; // Start slot
-        buf[7] = 0x01; // End slot
-        esn_next_event();
-        dbgmsg("---- Event: Operational state has changed");
+        if (m_esn.event != esn_event_t::NoChange)
+        {
+            buf[0] = 0;
+            buf[1] = 6; // EventDataLength
+            buf[2] = 0x01;  // Operational Change request/notification
+            buf[3] = supported_events; // Supported events
+            buf[4] = 0x02; // Operational state has changed
+            buf[5] = 0x00; // Operation status (depreciated - reserved as 0x00)
+            buf[6] = 0x00; // Operational change (1/2bytes)
+            buf[7] = 0x01; // Feature change (0x01) - Operational change (2/2 bytes)
+            esn_next_event();
+            dbgmsg("---- Event: Operational state has changed");
+        }
+        else
+        {
+            // No events to report
+            dbgmsg("---- Event: No change in operational state");
+            buf[0] = 0;
+            buf[1] = 0x06; // EventDataLength
+            buf[2] = 0x01; // Operational Change request/notification
+            buf[3] = supported_events; // Supported events
+            buf[4] = 0x00; // No change to operational state
+            buf[5] = 0x00; // Operation status (depreciated - reserved as 0x00)
+            buf[6] = 0x00; // Operational change (1/2bytes)
+            buf[7] = 0x00; // No Change (0x00) - Operational change (2/2 bytes)
+            set_esn_event(esn_event_t::NoChange);
+        }
+    
     }
     // Media class request
     else if (media_event_bit_set && m_esn.request == esn_class_request_t::Media)
@@ -764,7 +788,7 @@ bool IDECDROMDevice::atapi_get_event_status_notification(const uint8_t *cmd)
                 buf[0] = 0;
                 buf[1] = 6; // EventDataLength
                 buf[2] = m_esn.request; // Media status events
-                buf[3] = 0x12; // Supported events
+                buf[3] = supported_events; // Supported events
                 if (m_esn.current_event == esn_event_t::MEjectRequest)
                 {
                     dbgmsg("---- Event: EjectRequest");
@@ -796,7 +820,7 @@ bool IDECDROMDevice::atapi_get_event_status_notification(const uint8_t *cmd)
                 buf[0] = 0;
                 buf[1] = 6; // EventDataLength
                 buf[2] = m_esn.request; // Media status events
-                buf[3] = 0x12; // Supported events
+                buf[3] = supported_events; // Supported events
                 buf[4] = 0x03; // Media Removal
                 buf[5] = 0x01; // Media absent and tray open
                 buf[6] = 0; // Start slot
@@ -814,7 +838,7 @@ bool IDECDROMDevice::atapi_get_event_status_notification(const uint8_t *cmd)
                 buf[0] = 0;
                 buf[1] = 6; // EventDataLength
                 buf[2] = IDECDROMDevice::esn_class_request_t::Media; // Media status events
-                buf[3] = 0x12; // Supported events
+                buf[3] = supported_events; // Supported events
                 buf[4] = 0x00; // No Change
                 if (is_medium_present())
                 {
@@ -846,13 +870,41 @@ bool IDECDROMDevice::atapi_get_event_status_notification(const uint8_t *cmd)
             }
         }
     }
-    else
+    else if (device_busy_bit_set && !operation_change_bit_set && !media_event_bit_set)
     {
-        // No events to report
-        dbgmsg("---- Event: No events");
+        dbgmsg("---- Event: device not busy");
+        // Device Busy stub, always return not busy
+        buf[0] = 0;
+        buf[1] = 6;    // EventDataLength
+        buf[2] = 0x06; // Operational Change request/notification
+        buf[3] = supported_events; // Supported events
+        buf[4] = 0x00; // Event code - No Change (0x00)
+        buf[5] = 0x00; // Device Busy Status - Not Busy (0x00)
+        buf[6] = 0x00; // Time (1/2bytes)
+        buf[7] = 0x00; // Not Busy so value is ignored - Time (2/2 bytes)
+
+    }
+    else if (!device_busy_bit_set && !operation_change_bit_set && !media_event_bit_set)
+    {
+        // No supported event
+        if (no_event_bits_set)
+            dbgmsg("---- Event: No notification class requested - sending supported events");
+        else
+            dbgmsg("---- Event: Requested notification classes unsupported");
+
+        buf[0] = 0;
+        buf[1] = 0x02; // EventDataLength
+        buf[2] = 0x80; // NEA - No Event Available
+        buf[3] = supported_events; // Supported events
+        response_len = 4;
+    }
+    else if (operation_change_bit_set)
+    {
+        // Catch operational change without matching ESN event request
+        dbgmsg("---- Event: Operational Change with no matching ESN event request");
         buf[0] = 0;
         buf[1] = 0x06; // EventDataLength
-        buf[2] = 0x01; // Operational Change request/notification
+        buf[2] = IDECDROMDevice::esn_class_request_t::OperationChange; // Operational Change request/notification
         buf[3] = 0x12; // Supported events
         buf[4] = 0x00; // No change to operational state
         buf[5] = 0x00; // Logical unit ready for operation
@@ -860,8 +912,32 @@ bool IDECDROMDevice::atapi_get_event_status_notification(const uint8_t *cmd)
         buf[7] = 0x00; // End slot
         set_esn_event(esn_event_t::NoChange);
     }
+    else if (media_event_bit_set)
+    {
+        // Catch media status without matching ESN event request
+        dbgmsg("---- Event: Media Status with no matching ESN event request");
+        buf[0] = 0;
+        buf[1] = 6; // EventDataLength
+        buf[2] = IDECDROMDevice::esn_class_request_t::Media; // Media status events
+        buf[3] = supported_events; // Supported events
+        buf[4] = 0x00; // No Change
+        if (is_medium_present())
+        {
+            dbgmsg("---- Event: no change (media present)");
+            buf[5] = 0x02; // Media Present
+        }
+        else
+        {
+            dbgmsg("---- Event: No change (media not present) and tray open");
+            buf[5] = 0x01;
+        }
+        buf[6] = 0; // Start slot
+        buf[7] = 0; // End slot
+        set_esn_event(esn_event_t::NoChange);
+    }
 
-    if (!atapi_send_data(m_buffer.bytes, 8))
+
+    if (!atapi_send_data(m_buffer.bytes, response_len))
     {
         return atapi_cmd_error(ATAPI_SENSE_ABORTED_CMD, 0);
     }
