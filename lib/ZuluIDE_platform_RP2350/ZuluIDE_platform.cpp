@@ -247,19 +247,22 @@ static void reclock_for_audio() {
             CLOCKS_CLK_PERI_CTRL_AUXSRC_VALUE_CLKSRC_PLL_USB,
             48 * MHZ,
             48 * MHZ);
-    // reset PLL for 200.4MHz sys clock
-    pll_init(pll_sys, 2, 1002000000, 5, 1);
+    // // reset PLL for 251.2MHz sys clock
+    pll_init(pll_sys, 3, 1256000000, 5, 1);
+
+
+
     // switch clocks back to pll_sys
     clock_configure(clk_sys,
             CLOCKS_CLK_SYS_CTRL_SRC_VALUE_CLKSRC_CLK_SYS_AUX,
             CLOCKS_CLK_SYS_CTRL_AUXSRC_VALUE_CLKSRC_PLL_SYS,
-            200400000,
-            200400000);
+            251200000,
+            251200000);
     clock_configure(clk_peri,
             0,
             CLOCKS_CLK_PERI_CTRL_AUXSRC_VALUE_CLKSRC_PLL_SYS,
-            200400000,
-            200400000);
+            251200000,
+            251200000);
     // reset UART for the new clock speed
     uart_init(uart0, 1000000);
 }
