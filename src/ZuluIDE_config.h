@@ -31,7 +31,7 @@
 #include <ZuluIDE_platform.h>
 
 // Use variables for version number
-#define FW_VER_NUM      "2026.03.24"
+#define FW_VER_NUM      "2026.03.31"
 #define FW_VER_SUFFIX   "dev"
 #define ZULU_FW_VERSION FW_VER_NUM "-" FW_VER_SUFFIX
 
