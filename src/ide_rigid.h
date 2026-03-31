@@ -40,6 +40,8 @@ class IDERigidDevice: public IDEDevice, public IDEImage::Callback
 public:
     virtual void initialize(int devidx) override;
 
+    virtual void print_device_config() override;
+
     virtual void post_image_setup() override;
 
     virtual void reset() override;

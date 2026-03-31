@@ -74,6 +74,25 @@ void IDEZipDrive::initialize(int devidx)
     m_zip_disk_info.serial_string[sizeof(m_zip_disk_info.serial_string)- 1] = '\0';
 }
 
+void IDEZipDrive::print_device_config()
+{
+    char imgfile[MAX_FILE_PATH + 1];
+
+    if (!m_image || !m_image->get_image_name(imgfile, sizeof(imgfile)))
+    {
+        logmsg("-- ATAPI ZIP drive, image not loaded");
+    }
+    else if (m_image->get_drive_type() ==  drive_type_t::DRIVE_TYPE_ZIP250)
+    {
+        logmsg("-- ATAPI ZIP250 drive, image ", imgfile);
+    }
+    else
+    {
+        logmsg("-- ATAPI ZIP100 drive, image ", imgfile);
+    }
+    IDEDevice::print_device_config();
+}
+
 // Capacity is based on image size
 uint64_t IDEZipDrive::capacity()
 {

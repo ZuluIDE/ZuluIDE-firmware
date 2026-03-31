@@ -71,8 +71,18 @@ void IDERigidDevice::initialize(int devidx)
     m_devinfo.bytes_per_sector = 512;
 }
 
+void IDERigidDevice::print_device_config()
+{
+    char imgfile[MAX_FILE_PATH + 1];
+    if (!m_image || !m_image->get_image_name(imgfile, sizeof(imgfile))) strcpy(imgfile, "not loaded");
+    logmsg("-- ATA hard drive, image ", imgfile);
+    IDEDevice::print_device_config();
+}
+
 void IDERigidDevice::post_image_setup()
 {
+    IDEDevice::post_image_setup();
+
     uint64_t cap = capacity();
     uint64_t lba = capacity_lba();
 
@@ -132,13 +142,13 @@ void IDERigidDevice::post_image_setup()
     m_devinfo.current_cylinders = m_devinfo.cylinders;
     m_devinfo.current_heads = m_devinfo.heads;
     m_devinfo.current_sectors = m_devinfo.sectors_per_track;
-    logmsg("Selected Cylinders/Heads/Sectors settings from ", method, " with size ", (int) (capacity() / 1000000), "MB (total sectors = ", (int64_t)lba,") as C: ", (int) m_devinfo.cylinders,
+    logmsg("-- Selected Cylinders/Heads/Sectors settings from ", method, " with size ", (int) (capacity() / 1000000), "MB (total sectors = ", (int64_t)lba,") as C: ", (int) m_devinfo.cylinders,
         " H: ",(int) m_devinfo.heads,
         " S: ", (int) m_devinfo.sectors_per_track);
     if (!found_chs)
     {
         uint32_t difference = lba - (m_devinfo.cylinders * m_devinfo.heads * m_devinfo.sectors_per_track);
-        logmsg("Reported CHS has ", (int64_t) difference, " less blocks than the image's LBA capacity which does not exactly fit in any CHS combination");
+        logmsg("-- Reported CHS has ", (int64_t) difference, " less blocks than the image's LBA capacity which does not exactly fit in any CHS combination");
     }
     m_devinfo.writable = true;
 
@@ -155,6 +165,11 @@ void IDERigidDevice::reset()
 
 void IDERigidDevice::set_image(IDEImage *image)
 {
+    if (m_image && !image && !is_removable())
+    {
+        logmsg("-- WARNING: Unloading media for non-removable hard drive, expect host to report error");
+    }
+
     m_image = image;
 }
 
@@ -173,6 +188,7 @@ bool IDERigidDevice::handle_command(ide_registers_t *regs)
         // Device reset command is only for ATAPI devices, make
         // sure we appear like non-ATAPI device.
         case IDE_CMD_DEVICE_RESET:
+        case IDE_CMD_IDENTIFY_PACKET_DEVICE:
             return set_device_signature(IDE_ERROR_ABORT, false);
 
         // Supported IDE commands
@@ -875,7 +891,9 @@ bool IDERigidDevice::set_device_signature(uint8_t error, bool was_reset)
         regs.status = IDE_STATUS_DEVRDY | IDE_STATUS_DSC;
     }
 
-    ide_phy_set_regs(&regs);
+    // We might not be the currently selected device, so specify index when
+    // setting the registers.
+    ide_phy_set_regs(&regs, m_devconfig.dev_index);
 
     if (!was_reset)
     {

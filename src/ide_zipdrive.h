@@ -36,6 +36,8 @@ class IDEZipDrive: public IDEATAPIDevice
 public:
     virtual void initialize(int devidx);
 
+    virtual void print_device_config() override;
+
     virtual void set_image(IDEImage *image);
 
     virtual uint64_t capacity() override;

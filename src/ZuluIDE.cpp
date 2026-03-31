@@ -62,7 +62,7 @@ static FsFile g_logfile;
 
 static uint32_t g_ide_buffer[IDE_BUFFER_SIZE / 4];
 
-// Currently supports one IDE device
+// The main IDE device that is controlled by e.g. eject button
 static IDECDROMDevice g_ide_cdrom;
 static IDEZipDrive g_ide_zipdrive;
 static IDERemovable g_ide_removable;
@@ -70,6 +70,18 @@ static IDERigidDevice g_ide_rigid;
 IDEImageFile g_ide_imagefile;
 static IDEDevice *g_ide_device;
 static bool g_loadedFirstImage = false;
+static bool g_isPrimary;
+
+#ifdef ENABLE_DUAL_DEVICE
+// The dual device mode currently only supports rigid disc as
+// the second device. It can be either primary or secondary on
+// the IDE bus, depending on DIP switch.
+static IDEImageFile g_ide_imagefile2;
+static IDERigidDevice g_ide_rigid2;
+static IDEDevice *g_ide_device2;
+#else
+static IDEDevice * const g_ide_device2 = nullptr;
+#endif
 
 zuluide::status::StatusController g_StatusController;
 zuluide::pipe::ImageResponsePipe<zuluide::control::select_controller_source_t> g_ControllerImageResponsePipe;
@@ -474,6 +486,94 @@ drive_type_t searchForDriveType() {
   return Image::ToDriveType(matching_type);
 }
 
+#ifdef ENABLE_DUAL_DEVICE
+// Find images for configuration of dual drive mode.
+// The images are called "HD0.*" and "HD1.*" so we need to find out the file extension.
+// If this returns true, ide_protocol_init() has already been called.
+bool setupDualDrive()
+{
+  FsFile root = SD.open("/");
+  FsFile file;
+  char HD0_filename[MAX_FILE_PATH + 1];
+  char HD1_filename[MAX_FILE_PATH + 1];
+  bool found_hd0 = false;
+  bool found_hd1 = false;
+
+  while (file.openNext(&root, O_RDONLY))
+  {
+    if (!file.isDir())
+    {
+      char filename[MAX_FILE_PATH + 1];
+      if (file.getName(filename, sizeof(filename)) > MAX_FILE_PATH)
+      {
+        continue; // Too long filename
+      }
+
+      if (strncasecmp(filename, DUALDRIVE_IMAGE_PRIMARY, strlen(DUALDRIVE_IMAGE_PRIMARY)) == 0)
+      {
+        found_hd0 = true;
+        strncpy(HD0_filename, filename, sizeof(HD0_filename));
+      }
+
+      if (strncasecmp(filename, DUALDRIVE_IMAGE_SECONDARY, strlen(DUALDRIVE_IMAGE_SECONDARY)) == 0)
+      {
+        found_hd1 = true;
+        strncpy(HD1_filename, filename, sizeof(HD1_filename));
+      }
+    }
+  }
+
+  if (found_hd0 && found_hd1)
+  {
+    dbgmsg("Operating as two drives, primary HDD ", HD0_filename, ", secondary HDD ", HD1_filename);
+    g_ide_imagefile.open_file(HD0_filename);
+    g_ide_imagefile.set_drive_type(DRIVE_TYPE_RIGID);
+    g_ide_rigid.set_image(&g_ide_imagefile);
+    g_ide_device = &g_ide_rigid;
+
+    g_ide_imagefile2.open_file(HD1_filename);
+    g_ide_imagefile2.set_drive_type(DRIVE_TYPE_RIGID);
+    g_ide_rigid2.set_image(&g_ide_imagefile2);
+    g_ide_device2 = &g_ide_rigid2;
+
+    g_isPrimary = true;
+    ide_protocol_init(g_ide_device, g_ide_device2);
+    return true;
+  }
+  else if (found_hd0)
+  {
+    dbgmsg("Operating as two drives, primary HDD ", HD0_filename);
+
+    g_ide_imagefile2.open_file(HD0_filename);
+    g_ide_imagefile2.set_drive_type(DRIVE_TYPE_RIGID);
+    g_ide_rigid2.set_image(&g_ide_imagefile2);
+    g_ide_device2 = &g_ide_rigid2;
+
+    // The "dual" device is the primary drive, normal control logic applies to the secondary drive.
+    g_isPrimary = false;
+    ide_protocol_init(g_ide_device2, g_ide_device);
+    return true;
+  }
+  else if (found_hd1)
+  {
+    dbgmsg("Operating as two drives, secondary HDD ", HD1_filename);
+
+    g_ide_imagefile2.open_file(HD1_filename);
+    g_ide_imagefile2.set_drive_type(DRIVE_TYPE_RIGID);
+    g_ide_rigid2.set_image(&g_ide_imagefile2);
+    g_ide_device2 = &g_ide_rigid2;
+
+    // The "dual" device is the secondary drive, normal control logic applies to the primary drive.
+    g_isPrimary = true;
+    ide_protocol_init(g_ide_device, g_ide_device2);
+    return true;
+  }
+
+  // No dual drive image found
+  return false;
+}
+#endif
+
 /***
  * Configures the status controller. The status controller is used to
 */
@@ -490,7 +590,7 @@ void setupStatusController()
   platform_set_controller_image_response_pipe(&g_ControllerImageResponsePipe);
   g_StatusController.Reset();
   g_StatusController.SetFirmwareVersion(std::string(g_log_firmwareversion));
-  bool isPrimary = platform_get_device_id() == 0;
+  g_isPrimary = (platform_get_device_id() == 0);
   char device_name[33] = {0};
 
   ini_gets("IDE", "device", "", device_name, sizeof(device_name), CONFIGFILE);
@@ -525,27 +625,22 @@ void setupStatusController()
   case DRIVE_TYPE_CDROM:
     g_ide_device = &g_ide_cdrom;
     device = std::move(std::make_unique<zuluide::status::CDROMStatus>(zuluide::status::CDROMStatus::Status::NoImage, zuluide::status::CDROMStatus::DriveSpeed::Single));
-    logmsg("Device is a CDROM drive");
     break;
   case DRIVE_TYPE_ZIP100:
     g_ide_device = &g_ide_zipdrive;
     device = std::move(std::make_unique<zuluide::status::ZipStatus>(zuluide::status::ZipStatus::Status::NoImage, zuluide::status::ZipStatus::ZipDriveType::Zip100));
-    logmsg("Device is a Iomega Zip Drive 100");
     break;
   case DRIVE_TYPE_ZIP250:
     g_ide_device = &g_ide_zipdrive;
     device = std::move(std::make_unique<zuluide::status::ZipStatus>(zuluide::status::ZipStatus::Status::NoImage, zuluide::status::ZipStatus::ZipDriveType::Zip250));
-    logmsg("Device is a Iomega Zip Drive 250");
     break;
   case DRIVE_TYPE_REMOVABLE:
     g_ide_device = &g_ide_removable;
     device = std::move(std::make_unique<zuluide::status::RemovableStatus>(zuluide::status::RemovableStatus::Status::NoImage));
-    logmsg("Device is a generic removable drive");
     break;
   case DRIVE_TYPE_RIGID:
     g_ide_device = &g_ide_rigid;
     device = std::move(std::make_unique<zuluide::status::RigidStatus>(zuluide::status::RigidStatus::Status::NoImage));
-    logmsg("Device is a hard drive");
     break;
   default:
     g_ide_device = &g_ide_cdrom;
@@ -558,15 +653,26 @@ void setupStatusController()
   g_StatusController.SetIsPreventRemovable(false);
   g_StatusController.SetIsDeferred(false);
 
-  if (isPrimary)
-      ide_protocol_init(g_ide_device, NULL); // Primary device
-  else
-      ide_protocol_init(NULL, g_ide_device); // Secondary device
+  bool ide_protocol_init_done = false;
 
+#ifdef ENABLE_DUAL_DEVICE
+  if (setupDualDrive())
+  {
+    // Dual drive file name overrides DIP switch setting
+    ide_protocol_init_done = true;
+  }
+#endif
 
+  if (!ide_protocol_init_done)
+  {
+    if (g_isPrimary)
+        ide_protocol_init(g_ide_device, nullptr); // Primary device
+    else
+        ide_protocol_init(nullptr, g_ide_device); // Secondary device
+  }
 
   if (device) {
-    g_StatusController.SetIsPrimary(isPrimary);
+    g_StatusController.SetIsPrimary(g_isPrimary);
     g_StatusController.UpdateDeviceStatus(std::move(device));
   }
 
@@ -599,10 +705,6 @@ void setupStatusController()
     g_StatusController.EndUpdate();
   }
 
-  if (isPrimary)
-    ide_protocol_init(g_ide_device, NULL); // Primary device
-  else
-    ide_protocol_init(NULL, g_ide_device); // Secondary device
   if (g_ide_device->is_removable() && ini_getbool("IDE", "no_media_on_init", 0, CONFIGFILE))
   {
     g_ide_device->set_image(nullptr);
@@ -611,8 +713,8 @@ void setupStatusController()
   }
   else
   {
-        g_ide_device->set_loaded_without_media(false);
-        loadFirstImage();
+    g_ide_device->set_loaded_without_media(false);
+    loadFirstImage();
   }
 }
 
@@ -622,8 +724,8 @@ void loadFirstImage() {
   zuluide::images::ImageIterator imgIterator;
   bool matching_type = false;
   bool found_file = false;
-  bool success = false;
-  if (ini_getbool("IDE", "init_with_last_used_image", 1, CONFIGFILE))
+  bool success = g_ide_device->has_image();
+  if (!success && ini_getbool("IDE", "init_with_last_used_image", 1, CONFIGFILE))
   {
     imgIterator.Reset(!quiet);
     FsFile last_saved = SD.open(LASTFILE, O_RDONLY);
@@ -738,8 +840,22 @@ void loadFirstImage() {
     }
   }
 
-  if (g_loadedFirstImage)
-     g_ide_device->post_image_setup();
+#ifdef ENABLE_DUAL_DEVICE
+  // Perform the post image setup in order that gives reasonable
+  // log messages in the dual drive configuration
+  if (g_isPrimary)
+  {
+    if (g_ide_device && g_ide_device->has_image()) g_ide_device->post_image_setup();
+    if (g_ide_device2 && g_ide_device2->has_image()) g_ide_device2->post_image_setup();
+  }
+  else
+  {
+    if (g_ide_device2 && g_ide_device2->has_image()) g_ide_device2->post_image_setup();
+    if (g_ide_device && g_ide_device->has_image()) g_ide_device->post_image_setup();
+  }
+#else
+  if (g_ide_device && g_ide_device->has_image()) g_ide_device->post_image_setup();
+#endif
 
   imgIterator.Cleanup();
 }
@@ -794,7 +910,6 @@ void load_image(const zuluide::images::Image& toLoad, bool insert)
   
   clear_image();
    
-  logmsg("Loading image \"", toLoad.GetFilename().c_str(), "\"");
   g_ide_imagefile.open_file(toLoad.GetFilename().c_str(), false);
   if (g_ide_device) {
     if (insert)
@@ -908,7 +1023,13 @@ void zuluide_init(void)
   }
 #endif
 
+  // The image files for dual-device configuration should be able to share the same
+  // transfer buffer because only one device can have transfer active at a time.
   g_ide_imagefile = IDEImageFile((uint8_t*)g_ide_buffer, sizeof(g_ide_buffer));
+
+#ifdef ENABLE_DUAL_DEVICE
+  g_ide_imagefile2 = IDEImageFile((uint8_t*)g_ide_buffer, sizeof(g_ide_buffer));
+#endif
 
   // Setup the status controller.
   setupStatusController();
@@ -998,6 +1119,14 @@ void zuluide_main_loop(void)
                     }
                     g_ide_imagefile.close();
                     g_ide_device->set_image(nullptr);
+
+#ifdef ENABLE_DUAL_DEVICE
+                    if (g_ide_device2)
+                    {
+                      g_ide_imagefile2.close();
+                      g_ide_device2->set_image(nullptr);
+                    }
+#endif
                 }
             }
         }
