@@ -40,7 +40,10 @@ public:
     virtual void initialize(int devidx);
 
     // Finishes initialization after the first image has been loaded
-    virtual void post_image_setup() = 0;
+    virtual void post_image_setup();
+
+    // Print device configuration to log
+    virtual void print_device_config();
 
     // Resets member variables after IDE/ATA reset
     virtual void reset() = 0;

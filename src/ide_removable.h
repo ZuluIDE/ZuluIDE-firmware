@@ -33,6 +33,7 @@ class IDERemovable: public IDEATAPIDevice
 {
 public:
     virtual void initialize(int devidx);
+    virtual void print_device_config() override;
 
     virtual void set_image(IDEImage *image);
 

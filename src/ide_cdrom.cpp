@@ -311,6 +311,14 @@ void IDECDROMDevice::initialize(int devidx)
     m_eject_then_load_cycle = false;
 }
 
+void IDECDROMDevice::print_device_config()
+{
+    char imgfile[MAX_FILE_PATH + 1];
+    if (!m_image || !m_image->get_image_name(imgfile, sizeof(imgfile))) strcpy(imgfile, "not loaded");
+    logmsg("-- ATAPI CD-ROM drive, image ", imgfile);
+    IDEDevice::print_device_config();
+}
+
 void IDECDROMDevice::reset()
 {
     IDEATAPIDevice::reset();

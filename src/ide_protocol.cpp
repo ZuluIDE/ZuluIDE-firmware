@@ -541,25 +541,35 @@ void IDEDevice::initialize(int devidx)
     m_devconfig.max_pio_mode = ini_getl("IDE", "max_pio", 3, CONFIGFILE);
     m_devconfig.max_udma_mode = ini_getl("IDE", "max_udma", 2, CONFIGFILE);
     m_devconfig.max_blocksize = ini_getl("IDE", "max_blocksize", m_phy_caps.max_blocksize, CONFIGFILE);
-    logmsg("Device ", devidx, " configuration:");
-    logmsg("-- Max PIO mode: ", m_devconfig.max_pio_mode, " (phy max ", m_phy_caps.max_pio_mode, ")");
-    logmsg("-- Max UDMA mode: ", m_devconfig.max_udma_mode, " (phy max ", m_phy_caps.max_udma_mode, ")");
-    logmsg("-- Max blocksize: ", m_devconfig.max_blocksize, " (phy max ", (int)m_phy_caps.max_blocksize, ")");
     m_devconfig.ide_sectors = ini_getl("IDE", "sectors", 0, CONFIGFILE);
     m_devconfig.ide_heads = ini_getl("IDE", "heads", 0, CONFIGFILE);
     m_devconfig.ide_cylinders = ini_getl("IDE", "cylinders", 0, CONFIGFILE);
     m_devconfig.access_delay = ini_getl("IDE", "access_delay", 0, CONFIGFILE);
     m_devconfig.ide_identify_gencfg = ini_getl("IDE", "identify_gencfg", 0, CONFIGFILE);
 
+    g_ignore_cmd_interrupt = ini_getl("IDE", "ignore_command_interrupt", 1, CONFIGFILE);
+    m_phy_caps.max_udma_mode = std::min(m_phy_caps.max_udma_mode, m_devconfig.max_udma_mode);
+    m_phy_caps.max_pio_mode = std::min(m_phy_caps.max_pio_mode, m_devconfig.max_pio_mode);
+    m_phy_caps.max_blocksize = std::min<int>(m_phy_caps.max_blocksize, m_devconfig.max_blocksize);
+}
+
+void IDEDevice::post_image_setup()
+{
+    logmsg("Device ", m_devconfig.dev_index, " configuration:");
+    print_device_config();
+}
+
+void IDEDevice::print_device_config()
+{
+    logmsg("-- Max PIO mode: ", m_devconfig.max_pio_mode, " (phy max ", m_phy_caps.max_pio_mode, ")");
+    logmsg("-- Max UDMA mode: ", m_devconfig.max_udma_mode, " (phy max ", m_phy_caps.max_udma_mode, ")");
+    logmsg("-- Max blocksize: ", m_devconfig.max_blocksize, " (phy max ", (int)m_phy_caps.max_blocksize, ")");
+
     if (m_devconfig.ide_identify_gencfg)
         logmsg("-- ATA IDENTIFY General Configuration: ", (uint16_t) m_devconfig.ide_identify_gencfg);
-    
-    g_ignore_cmd_interrupt = ini_getl("IDE", "ignore_command_interrupt", 1, CONFIGFILE);
+
     if (!g_ignore_cmd_interrupt)
     {
         logmsg("-- New commands may interrupt previous command - ignore_command_interrupt set to 0");
     }
-    m_phy_caps.max_udma_mode = std::min(m_phy_caps.max_udma_mode, m_devconfig.max_udma_mode);
-    m_phy_caps.max_pio_mode = std::min(m_phy_caps.max_pio_mode, m_devconfig.max_pio_mode);
-    m_phy_caps.max_blocksize = std::min<int>(m_phy_caps.max_blocksize, m_devconfig.max_blocksize);
 }

@@ -54,6 +54,14 @@ void IDERemovable::initialize(int devidx)
     m_removable.reinsert_media_on_inquiry =  ini_getbool("IDE", "reinsert_media_on_inquiry", true, CONFIGFILE);
 }
 
+void IDERemovable::print_device_config()
+{
+    char imgfile[MAX_FILE_PATH + 1];
+    if (!m_image || !m_image->get_image_name(imgfile, sizeof(imgfile))) strcpy(imgfile, "not yet loaded");
+    logmsg("-- ATAPI removable drive, image ", imgfile);
+    IDEDevice::print_device_config();
+}
+
 uint64_t IDERemovable::capacity()
 {
     return (m_image ? (m_image->capacity() / REMOVABLE_SECTORSIZE) * REMOVABLE_SECTORSIZE: 0);

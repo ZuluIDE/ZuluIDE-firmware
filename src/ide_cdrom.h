@@ -35,6 +35,8 @@ class IDECDROMDevice: public IDEATAPIDevice
 public:
     virtual void initialize(int devidx) override;
 
+    virtual void print_device_config() override;
+
     virtual void reset() override;
 
     virtual void set_image(IDEImage *image);

@@ -62,6 +62,14 @@ void IDEATAPIDevice::initialize(int devidx)
     IDEDevice::initialize(devidx);
 }
 
+void IDEATAPIDevice::print_device_config()
+{
+    char imgfile[MAX_FILE_PATH + 1];
+    if (!m_image || !m_image->get_image_name(imgfile, sizeof(imgfile))) strcpy(imgfile, "not loaded");
+    logmsg("-- Generic ATAPI device, image ", imgfile);
+    IDEDevice::print_device_config();
+}
+
 void IDEATAPIDevice::reset()
 {
     m_removable.prevent_persistent = false;
@@ -472,6 +480,12 @@ void IDEATAPIDevice::loaded_new_media()
     m_atapi_state.unit_attention_sense_asc = ATAPI_ASC_MEDIUM_CHANGE;
     m_removable.ejected = false;
     set_not_ready(true);
+
+    char filename[MAX_FILE_PATH + 1];
+    if (m_image && m_image->get_image_name(filename, sizeof(filename)))
+    {
+        logmsg("Device ", m_devconfig.dev_index, " loading media: \"", filename, "\"");
+    }
 }
 
 void IDEATAPIDevice::eject_then_load_new_media()
@@ -1632,7 +1646,6 @@ void IDEATAPIDevice::insert_media(IDEImage *image)
             g_ide_imagefile.clear();
             if (g_ide_imagefile.open_file(img_iterator.Get().GetFilename().c_str()))
             {
-                logmsg("-- Device loading media: \"", img_iterator.Get().GetFilename().c_str(), "\"");
                 set_image(&g_ide_imagefile);
                 loaded_new_media();
             }

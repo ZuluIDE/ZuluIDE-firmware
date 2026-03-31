@@ -625,27 +625,22 @@ void setupStatusController()
   case DRIVE_TYPE_CDROM:
     g_ide_device = &g_ide_cdrom;
     device = std::move(std::make_unique<zuluide::status::CDROMStatus>(zuluide::status::CDROMStatus::Status::NoImage, zuluide::status::CDROMStatus::DriveSpeed::Single));
-    logmsg("Device is a CDROM drive");
     break;
   case DRIVE_TYPE_ZIP100:
     g_ide_device = &g_ide_zipdrive;
     device = std::move(std::make_unique<zuluide::status::ZipStatus>(zuluide::status::ZipStatus::Status::NoImage, zuluide::status::ZipStatus::ZipDriveType::Zip100));
-    logmsg("Device is a Iomega Zip Drive 100");
     break;
   case DRIVE_TYPE_ZIP250:
     g_ide_device = &g_ide_zipdrive;
     device = std::move(std::make_unique<zuluide::status::ZipStatus>(zuluide::status::ZipStatus::Status::NoImage, zuluide::status::ZipStatus::ZipDriveType::Zip250));
-    logmsg("Device is a Iomega Zip Drive 250");
     break;
   case DRIVE_TYPE_REMOVABLE:
     g_ide_device = &g_ide_removable;
     device = std::move(std::make_unique<zuluide::status::RemovableStatus>(zuluide::status::RemovableStatus::Status::NoImage));
-    logmsg("Device is a generic removable drive");
     break;
   case DRIVE_TYPE_RIGID:
     g_ide_device = &g_ide_rigid;
     device = std::move(std::make_unique<zuluide::status::RigidStatus>(zuluide::status::RigidStatus::Status::NoImage));
-    logmsg("Device is a hard drive");
     break;
   default:
     g_ide_device = &g_ide_cdrom;
@@ -915,7 +910,6 @@ void load_image(const zuluide::images::Image& toLoad, bool insert)
   
   clear_image();
    
-  logmsg("Loading image \"", toLoad.GetFilename().c_str(), "\"");
   g_ide_imagefile.open_file(toLoad.GetFilename().c_str(), false);
   if (g_ide_device) {
     if (insert)

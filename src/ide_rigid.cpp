@@ -71,8 +71,18 @@ void IDERigidDevice::initialize(int devidx)
     m_devinfo.bytes_per_sector = 512;
 }
 
+void IDERigidDevice::print_device_config()
+{
+    char imgfile[MAX_FILE_PATH + 1];
+    if (!m_image || !m_image->get_image_name(imgfile, sizeof(imgfile))) strcpy(imgfile, "not loaded");
+    logmsg("-- ATA hard drive, image ", imgfile);
+    IDEDevice::print_device_config();
+}
+
 void IDERigidDevice::post_image_setup()
 {
+    IDEDevice::post_image_setup();
+
     uint64_t cap = capacity();
     uint64_t lba = capacity_lba();
 
@@ -132,13 +142,13 @@ void IDERigidDevice::post_image_setup()
     m_devinfo.current_cylinders = m_devinfo.cylinders;
     m_devinfo.current_heads = m_devinfo.heads;
     m_devinfo.current_sectors = m_devinfo.sectors_per_track;
-    logmsg("Selected Cylinders/Heads/Sectors settings from ", method, " with size ", (int) (capacity() / 1000000), "MB (total sectors = ", (int64_t)lba,") as C: ", (int) m_devinfo.cylinders,
+    logmsg("-- Selected Cylinders/Heads/Sectors settings from ", method, " with size ", (int) (capacity() / 1000000), "MB (total sectors = ", (int64_t)lba,") as C: ", (int) m_devinfo.cylinders,
         " H: ",(int) m_devinfo.heads,
         " S: ", (int) m_devinfo.sectors_per_track);
     if (!found_chs)
     {
         uint32_t difference = lba - (m_devinfo.cylinders * m_devinfo.heads * m_devinfo.sectors_per_track);
-        logmsg("Reported CHS has ", (int64_t) difference, " less blocks than the image's LBA capacity which does not exactly fit in any CHS combination");
+        logmsg("-- Reported CHS has ", (int64_t) difference, " less blocks than the image's LBA capacity which does not exactly fit in any CHS combination");
     }
     m_devinfo.writable = true;
 
