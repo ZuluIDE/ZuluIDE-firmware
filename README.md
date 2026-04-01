@@ -54,7 +54,7 @@ CD Audio playback emulation is fully functional for both ZuluIDE V1 and V2. The 
 
 Cycling Images
 --------------
-All versions of ZuluIDE V2 and later revisions of ZuluSCSI Compact RP2040 have a hardware eject button on the board, along with a pin header that can be used for attaching a switch, which will simulate an eject, and move to the next image alphabetically, if you are not using the hardware control board.
+All versions of ZuluIDE V2 and later revisions of ZuluIDE Compact RP2040 (V1) have a hardware eject button on the board, along with a pin header that can be used for attaching a switch, which will simulate an eject, and move to the next image alphabetically, if you are not using the hardware control board.
 
 You can also cycle through images by sending the eject command from within an operating system. This will load the next valid image file in alphabetic order.
 
