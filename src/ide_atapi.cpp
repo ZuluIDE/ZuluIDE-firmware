@@ -103,6 +103,7 @@ bool IDEATAPIDevice::handle_command(ide_registers_t *regs)
         case IDE_CMD_IDENTIFY_PACKET_DEVICE: return cmd_identify_packet_device(regs);
         case IDE_CMD_PACKET: return cmd_packet(regs);
         case IDE_CMD_DEVICE_RESET: return cmd_device_reset(regs);
+        case IDE_CMD_FLUSH_CACHE: return cmd_flush_cache(regs);
         case IDE_CMD_IDLE_IMMEDIATE_95H: [[fallthrough]];
         case IDE_CMD_IDLE_IMMEDIATE_E1H: [[fallthrough]];
         case IDE_CMD_IDLE_97H:           [[fallthrough]];
@@ -405,6 +406,15 @@ bool IDEATAPIDevice::cmd_device_reset(ide_registers_t *regs)
     fill_device_signature(regs);
     regs->status &= IDE_STATUS_IDX; // clear bits BSY, 6,5,4,2,0
     ide_phy_set_regs(regs);
+    return true;
+}
+
+bool IDEATAPIDevice::cmd_flush_cache(ide_registers_t *regs)
+{
+    /// stub out flush cache command, just return success
+    regs->error = 0;
+    ide_phy_set_regs(regs);
+    ide_phy_assert_irq(IDE_STATUS_DEVRDY | IDE_STATUS_DSC);
     return true;
 }
 

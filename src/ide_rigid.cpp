@@ -205,6 +205,7 @@ bool IDERigidDevice::handle_command(ide_registers_t *regs)
         case IDE_CMD_WRITE_SECTORS_WOUT_RETRIES:
         case IDE_CMD_WRITE_SECTORS: return cmd_write(regs, false, false);
         case IDE_CMD_WRITE_MULTIPLE: return cmd_write(regs, false, true);
+        case IDE_CMD_FLUSH_CACHE: return cmd_flush_cache(regs);
         case IDE_CMD_READ_BUFFER: return cmd_read_buffer(regs);
         case IDE_CMD_WRITE_BUFFER: return cmd_write_buffer(regs);
         case IDE_CMD_INIT_DEV_PARAMS: return cmd_init_dev_params(regs);
@@ -527,6 +528,15 @@ bool IDERigidDevice::cmd_write(ide_registers_t *regs, bool dma_transfer, bool is
         ide_phy_assert_irq(IDE_STATUS_DEVRDY | IDE_STATUS_DSC | IDE_STATUS_ERR);
     }
     return status;
+}
+
+bool IDERigidDevice::cmd_flush_cache(ide_registers_t *regs)
+{
+    /// stub out flush cache command, just return success
+    regs->error = 0;
+    ide_phy_set_regs(regs);
+    ide_phy_assert_irq(IDE_STATUS_DEVRDY | IDE_STATUS_DSC);
+    return true;
 }
 
 bool IDERigidDevice::cmd_read_buffer(ide_registers_t *regs)
