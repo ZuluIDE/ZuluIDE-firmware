@@ -811,7 +811,7 @@ bool IDEATAPIDevice::handle_atapi_command_wrapper(const uint8_t *cmd)
         case ATAPI_CMD_INQUIRY:         return atapi_inquiry(cmd);
         case ATAPI_CMD_REQUEST_SENSE:   return atapi_request_sense(cmd);
         case ATAPI_CMD_GET_EVENT_STATUS_NOTIFICATION: return atapi_get_event_status_notification(cmd);
-            case ATAPI_CMD_START_STOP_UNIT: return atapi_start_stop_unit(cmd);
+        case ATAPI_CMD_START_STOP_UNIT: return atapi_start_stop_unit(cmd);
     }
 
     if (m_atapi_state.not_ready)
@@ -820,9 +820,23 @@ bool IDEATAPIDevice::handle_atapi_command_wrapper(const uint8_t *cmd)
         return atapi_cmd_not_ready_error();
     }
 
+    if (m_atapi_state.unit_attention && m_atapi_state.unit_attention_reported)
+    {
+        // Unit attention condition has already been reported, clear it now
+        m_atapi_state.unit_attention = false;
+        m_atapi_state.unit_attention_reported = false;
+        m_atapi_state.unit_attention_sense_asc = ATAPI_ASC_NO_ASC;
+    }
+
     if (m_atapi_state.unit_attention)
     {
+        m_atapi_state.unit_attention_reported = true;
         return atapi_cmd_error(ATAPI_SENSE_UNIT_ATTENTION, m_atapi_state.unit_attention_sense_asc);
+    }
+    else
+    {
+        // unit attention reported should always be false if unit attention is false, but clear it just in case
+        m_atapi_state.unit_attention_reported = false;
     }
 
     return handle_atapi_command(cmd);

@@ -136,6 +136,7 @@ protected:
         int udma_mode;  // Negotiated udma mode, or negative if not enabled
         bool dma_requested; // Host requests to use DMA transfer for current command
         bool unit_attention;
+        bool unit_attention_reported; // Whether unit attention error has been reported to host for current media change
         bool not_ready;
         int crc_errors; // CRC errors in latest transfer
     } m_atapi_state;
