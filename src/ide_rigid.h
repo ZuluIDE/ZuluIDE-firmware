@@ -142,6 +142,7 @@ protected:
     virtual bool cmd_seek(ide_registers_t *regs);
     virtual bool cmd_read(ide_registers_t *regs, bool dma_transfer, bool verify_only, bool is_multiple);
     virtual bool cmd_write(ide_registers_t *regs, bool dma_transfer, bool is_multiple);
+    virtual bool cmd_flush_cache(ide_registers_t *regs);
     virtual bool cmd_read_buffer(ide_registers_t *regs);
     virtual bool cmd_write_buffer(ide_registers_t *regs);
     virtual bool cmd_init_dev_params(ide_registers_t *regs);

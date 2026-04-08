@@ -172,6 +172,7 @@ protected:
     virtual bool cmd_identify_packet_device(ide_registers_t *regs);
     virtual bool cmd_packet(ide_registers_t *regs);
     virtual bool cmd_device_reset(ide_registers_t *regs);
+    virtual bool cmd_flush_cache(ide_registers_t *regs);
     virtual bool cmd_idle(ide_registers_t *regs);
     virtual bool cmd_check_power_mode(ide_registers_t *regs);
 
