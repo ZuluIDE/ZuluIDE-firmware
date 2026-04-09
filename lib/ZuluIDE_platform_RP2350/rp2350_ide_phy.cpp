@@ -212,6 +212,12 @@ void ide_phy_print_debug()
     dbgmsg("GPIO in: ", sio_hw->gpio_in, " out: ", sio_hw->gpio_out, " oe: ", sio_hw->gpio_oe);
 
     core1_log_poll();
+
+    if (ide_phy_check_pending_request(CORE1_REQ_PRINT_DEBUG))
+    {
+        logmsg("ide_phy_print_debug: Core1 is not responding, forcing reinit");
+        ide_phy_config(&g_ide_phy.config);
+    }
 }
 
 ide_event_t ide_phy_get_events()

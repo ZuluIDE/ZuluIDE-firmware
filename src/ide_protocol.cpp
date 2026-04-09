@@ -323,6 +323,7 @@ void ide_protocol_poll()
                 " LBAL:", regs.lba_low,
                 " LBAM:", regs.lba_mid,
                 " LBAH:", regs.lba_high);
+            ide_phy_print_debug();
         }
 
         if (regs.status & IDE_STATUS_BSY)
