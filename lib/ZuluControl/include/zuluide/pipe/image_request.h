@@ -32,7 +32,7 @@
 
 namespace zuluide::pipe {
   
-enum class image_request_t {First, Next, Prev, Current, Last, Cleanup, Reset, Empty};
+enum class image_request_t {First, Next, Prev, Current, Last, Cleanup, Reset, WiFiConnect, Empty};
 template<typename SrcType>
 class ImageRequest{
   public:

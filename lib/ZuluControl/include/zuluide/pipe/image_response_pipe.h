@@ -26,10 +26,10 @@
 #include <zuluide/observable.h>
 #include <zuluide/queue/safe_queue.h>
 #include <zuluide/images/image_iterator.h>
+#include <zuluide/i2c/i2c_actions.h>
 #include "zuluide/pipe/image_response_pipe.h"
 #include <ide_protocol.h>
-#include "ZuluIDE_log.h"
-
+#include <ZuluIDE_log.h>
 #include <algorithm>
 #include <functional>
 #include <memory>
@@ -77,6 +77,11 @@ class ImageResponsePipe : public Observable<ImageResponse<SrcType>>
      * Image iterator
      */
     zuluide::images::ImageIterator imageIterator;
+
+    /***
+     * I2C Actions
+     */
+    zuluide::i2c::I2CActions i2cActions;
 
     /***
         Simple class for storing updates.
@@ -187,6 +192,10 @@ void ImageResponsePipe<SrcType>::HandleRequest(ImageRequest<SrcType>& current)
     case image_request_t::Reset:
       dbgmsg("Image response pipe is resetting");
       imageIterator.Reset();
+      return;
+    case image_request_t::WiFiConnect:
+      dbgmsg("Image response pipe attempting to connect to WiFi");
+      i2cActions.WiFiConnect();
       return;
     case image_request_t::Empty:
       dbgmsg("Requesting image was emtpy and doesn't have a source");
