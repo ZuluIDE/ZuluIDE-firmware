@@ -33,7 +33,7 @@
 #include "i2c_server_src_type.h"
 #include <string>
 
-#define I2C_API_VERSION "3.2.0"
+#define I2C_API_VERSION "3.2.1"
 
 // Delay between reading the filenames off the SD card in milliseconds
 #ifndef I2C_FILENAME_TRANSFER_DELAY
@@ -189,6 +189,11 @@ namespace zuluide::i2c {
     void HandleFetchImages(const std::unique_ptr<ImageResponse<i2c_server_source_t>>&& response);
     void HandleFetchImage(const std::unique_ptr<ImageResponse<i2c_server_source_t>>&& response);
     void HandleSetToCurrent(const std::unique_ptr<ImageResponse<i2c_server_source_t>>&& response);
+
+    /**
+     * Sends WiFi connection request
+     */
+    void RequestWiFiConnect(const i2c_server_source_t source);
     /**
      * Sends a clean up iterator request
      */

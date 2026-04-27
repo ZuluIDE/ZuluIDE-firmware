@@ -105,7 +105,7 @@ void I2CServer::HandleUpdate(const SystemStatus& current) {
     }
     else
     {
-      platform_wifi_controller_connect();
+      RequestWiFiConnect(i2c_server_source_t::None);
     }
   }
 
@@ -228,6 +228,13 @@ void I2CServer::HandleSetToCurrent(const std::unique_ptr<ImageResponse<i2c_serve
     deviceControl->LoadImageSafe(response->GetImage());
   RequestCleanup(i2c_server_source_t::SetToCurrent);
 }
+
+void I2CServer::RequestWiFiConnect(const i2c_server_source_t source)
+{
+      ImageRequest<i2c_server_source_t> connect(image_request_t::WiFiConnect, source);
+      imageRequestPipe->RequestImageSafe(connect);
+}
+
 
 void I2CServer::RequestCleanup(const i2c_server_source_t source)
 {
