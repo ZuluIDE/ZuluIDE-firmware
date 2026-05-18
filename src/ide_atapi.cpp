@@ -188,11 +188,11 @@ bool IDEATAPIDevice::cmd_set_features(ide_registers_t *regs)
     ide_phy_set_regs(regs);
     if (regs->error == 0)
     {
-        ide_phy_assert_irq(IDE_STATUS_DEVRDY);
+        ide_phy_assert_irq(IDE_STATUS_DEVRDY | IDE_STATUS_DSC);
     }
     else
     {
-        ide_phy_assert_irq(IDE_STATUS_DEVRDY | IDE_STATUS_ERR);
+        ide_phy_assert_irq(IDE_STATUS_DEVRDY | IDE_STATUS_DSC| IDE_STATUS_ERR);
     }
 
     return true;
@@ -325,7 +325,7 @@ bool IDEATAPIDevice::cmd_identify_packet_device(ide_registers_t *regs)
 
     regs->error = 0;
     ide_phy_set_regs(regs);
-    ide_phy_assert_irq(IDE_STATUS_DEVRDY);
+    ide_phy_assert_irq(IDE_STATUS_DEVRDY | IDE_STATUS_DSC);
     return true;
 }
 
@@ -465,9 +465,9 @@ bool IDEATAPIDevice::set_device_signature(uint8_t error, bool was_reset)
     {
         // Command complete
         if (error == IDE_ERROR_ABORT)
-            ide_phy_assert_irq(IDE_STATUS_DEVRDY | IDE_STATUS_ERR);
+            ide_phy_assert_irq(IDE_STATUS_DEVRDY | IDE_STATUS_DSC| IDE_STATUS_ERR);
         else
-            ide_phy_assert_irq(IDE_STATUS_DEVRDY);
+            ide_phy_assert_irq(IDE_STATUS_DEVRDY | IDE_STATUS_DSC);
 
     }
 
@@ -934,7 +934,7 @@ bool IDEATAPIDevice::atapi_cmd_error(uint8_t sense_key, uint16_t sense_asc)
     regs.lba_mid = 0xFE;
     regs.lba_high = 0xFF;
     ide_phy_set_regs(&regs);
-    ide_phy_assert_irq(IDE_STATUS_DEVRDY | IDE_STATUS_ERR);
+    ide_phy_assert_irq(IDE_STATUS_DEVRDY | IDE_STATUS_DSC |  IDE_STATUS_ERR);
 
     return true;
 }
