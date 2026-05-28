@@ -38,8 +38,28 @@
 #include "ide_constants.h"
 #include "ide_phy.h"
 #include "rp2350_sniffer.h"
+#include "rp2350_iocs16.pio.h"
 
 #include <zuluide_rp2350b_core1.h>
+
+// PIO state machine used for IOC16 handling
+// Must have IOBASE 16.
+// The PIO is shared with SDIO and the offset is fixed to avoid
+// problems when SDIO dynamically switches PIO programs, as they
+// can take varying amount of space.
+#ifndef IOCS16_PIO
+#define IOCS16_PIO pio1
+#define IOCS16_PIO_GPIO_FUNC GPIO_FUNC_PIO1
+#endif
+#ifndef IOCS16_PIO_SM
+#define IOCS16_PIO_SM 3
+#endif
+#ifndef IOCS16_DMA_CH
+#define IOCS16_DMA_CH 5
+#endif
+#ifndef IOCS16_PIO_PROG_OFFSET
+#define IOCS16_PIO_PROG_OFFSET 0
+#endif
 
 static struct {
     ide_phy_config_t config;
@@ -51,6 +71,9 @@ static struct {
     // not assert IRQ, but further ones do.
     bool first_dataout_after_cmd;
     bool suppress_first_dataout_irq;
+
+    // PIO address for iocs16 program
+    bool pio_iocs16_claimed;
 
     uint32_t bufferidx; // Index of next buffer in g_idebuffers to use
 } g_ide_phy;
@@ -93,6 +116,40 @@ void ide_phy_config(const ide_phy_config_t* config)
     g_idecomm.enable_idephy = false;
     busy_wait_us_32(CORE1_RESPONSE_DELAY);
 
+    if (!g_ide_phy.pio_iocs16_claimed)
+    {
+        pio_sm_claim(IOCS16_PIO, IOCS16_PIO_SM);
+        pio_add_program_at_offset(IOCS16_PIO, &rp2350_iocs16_program, IOCS16_PIO_PROG_OFFSET);
+        dma_channel_claim(IOCS16_DMA_CH);
+        g_idecomm.iocs16_dma_channel = IOCS16_DMA_CH;
+        g_idecomm.iocs16_dma_target_addr = (uint32_t)&IOCS16_PIO->txf[IOCS16_PIO_SM];
+    }
+
+    // Configure the PIO block that is used for IOCS16 signal handling
+    if (config->disable_iocs16)
+    {
+        g_idecomm.enable_iocs16 = false;
+        gpio_set_outover(IDE_IOCS16, GPIO_OVERRIDE_HIGH);
+        dbgmsg("IOCS16 signaling for PIO data transfers is disabled");
+    }
+    else
+    {
+        assert(IOCS16_PIO->gpiobase == 16);
+        g_idecomm.enable_iocs16 = true;
+        pio_sm_config cfg = rp2350_iocs16_program_get_default_config(IOCS16_PIO_PROG_OFFSET);
+        sm_config_set_set_pins(&cfg, IDE_IOCS16, 1);
+        pio_sm_set_enabled(IOCS16_PIO, IOCS16_PIO_SM, false);
+        pio_sm_init(IOCS16_PIO, IOCS16_PIO_SM, IOCS16_PIO_PROG_OFFSET, &cfg);
+        pio_sm_put(IOCS16_PIO, IOCS16_PIO_SM, 0x40); // Data register address
+        pio_sm_exec(IOCS16_PIO, IOCS16_PIO_SM, pio_encode_pull(false, false));
+        pio_sm_exec(IOCS16_PIO, IOCS16_PIO_SM, pio_encode_out(pio_y, 8));
+        pio_sm_set_consecutive_pindirs(IOCS16_PIO, IOCS16_PIO_SM, IDE_IOCS16, 1, true);
+        pio_sm_set_enabled(IOCS16_PIO, IOCS16_PIO_SM, true);
+        gpio_set_function(IDE_IOCS16, IOCS16_PIO_GPIO_FUNC);
+        gpio_set_outover(IDE_IOCS16, GPIO_OVERRIDE_NORMAL);
+        dbgmsg("Enabled IOCS16 signaling");
+    }
+
     // Only initialize registers once after boot, after that ide_protocol handles it.
     static bool regs_inited = false;
     phy_ide_registers_t phyregs = g_idecomm.phyregs;
@@ -119,8 +176,6 @@ void ide_phy_config(const ide_phy_config_t* config)
     g_idecomm.atapi_dev1           = config->atapi_dev1;
     g_idecomm.disable_iordy        = config->disable_iordy;
     g_idecomm.enable_packet_intrq  = config->enable_packet_intrq;
-    g_idecomm.disable_iocs16       = config->disable_iocs16;
-    if (g_idecomm.disable_iocs16) dbgmsg("IOCS16 signaling for PIO data transfers is disabled");
     g_idecomm.cpu_freq_hz = clock_get_hz(clk_sys);
     phyregs.state_irqreq = 0;
     phyregs.state_datain = 0;

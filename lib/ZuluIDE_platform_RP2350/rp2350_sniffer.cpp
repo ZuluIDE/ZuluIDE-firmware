@@ -50,12 +50,12 @@
 
 // DMA channel for transfer of data from PIO to RAM
 #ifndef SNIFFER_DMACH
-#define SNIFFER_DMACH 5
+#define SNIFFER_DMACH 7
 #endif
 
 // DMA channel for reconfiguring first DMA channel
 #ifndef SNIFFER_DMACH_B
-#define SNIFFER_DMACH_B 6
+#define SNIFFER_DMACH_B 8
 #endif
 
 // PIO block used for capture
