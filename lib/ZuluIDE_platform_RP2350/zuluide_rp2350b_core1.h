@@ -75,11 +75,13 @@ extern struct idecomm_t {
    // Enables INTRQ between the initial ATA PACKET command and receiving the ATAPI command
     bool enable_packet_intrq;
 
-    // IOCS16 signaling for PIO data transfer implementation is not completely to spec on the ZuluIDE V2
-    // IOCS16 is being activated for the whole data transfer, instead of based on register address.
-    // This only matters for systems where ATA interface is directly on ISA bus (ATA v2 implementation)
-    // Most of such systems are ok with the current workaround, but if necessary, it can be disabled.
-    bool disable_iocs16;
+    // For IOCS16 handling, the IDE register address is transferred to a state machine in
+    // another PIO block. This is done because address pins are in GPIO6-10 while IOCS16
+    // is on GPIO32. On RP2350 the same PIO cannot access them both.
+    // This config must be set before setting enable_idephy.
+    bool enable_iocs16;
+    int iocs16_dma_channel;
+    uint32_t iocs16_dma_target_addr;
 
     // Event flags set by core1, cleared by core0
     uint32_t events;
