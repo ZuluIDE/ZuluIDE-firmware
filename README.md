@@ -7,9 +7,11 @@ ZuluIDE™ is a hardware interface between IDE bus and SD cards. There are two g
 
 ZuluIDE supports emulating:
 
+* Rigid hard drives
 * ATAPI CD-ROM drives
+* ATAPI Zip drives
 * Rigid hard disks
-* ATAPI Zip Drive
+
 * Generic ATAPI removable drive
 
 All images files reside on a FAT32 or exFAT-formatted SD card.
@@ -17,25 +19,26 @@ All images files reside on a FAT32 or exFAT-formatted SD card.
 Drive Types
 -----------
 There are three ways to specify drive type
-1) In the zuluide.ini file under `[IDE]` set `Device = "[Type]"`
-    - `CDROM` - CD-ROM drive
-    - `Zip100` - Iomega Zip Drive 100
-    - `Removable` - Generic removable device
-2) Use a image filename prefix of:
+1) Use an image filename prefix of:
     - `CDRM` - for a CD-ROM drive
     - `HDDR` - for a hard drive images
     - `ZIPD` - for a Zip Drive 100
     - `REMV` - for a generic ATAPI removable device
+
+2) In the zuluide.ini file under `[IDE]` set `Device = "[Type]"`
+    - `CDROM` - CD-ROM drive
+    - `Zip100` - Iomega Zip Drive 100
+    - `Removable` - Generic removable device
     
 3) If no prefix or `Device = [type]` used the drive will default to CD-ROM
 
 Image files
 -----------
-- Currently `.iso` image files, as well as `.bin/.cue` files, are supported for the CD-ROM drive. The images are  used alphabetically. 
+- Currently `.iso` image files, as well as `.bin/.cue` files, are supported for CD-ROM drive emulation. Image files are loaded alphabetically, but preference is given to image files prefixed with `CDRM`, `HDDR`, `ZIPD`, or `REMV` if they are present.
 - For Zip drives and removable drives the extension is optional but also any extension is valid, except for `.iso`, `.bin/.cue`, and any extension on the [ignored list](#ignored-list). The images are used in alphabetic order.
 - If a prefix to specify the drive is used, all other files that wish to be inserted and ejected into the drive must have the same prefix. The files are used alphabetically.
  - If ZuluIDE has defaulted to a CD-ROM drive, the first image that it finds on the SD card will be used as a CD. This filename is logged to zululog.txt
- - For rigid hard disk emulation, any raw file format (regardless of file suffix, `.img`, `.ima`, `.hda`, `.hfs`) will work. In addition, later ZuluIDE firmware versions support Virtual Hard Disk Version 1 (only, V2 not supported) image files 
+ - For rigid hard disk emulation, any raw file format (regardless of file suffix, `.img`, `.ima`, `.hda`, `.hfs`) will work. In addition, later ZuluIDE firmware versions support Virtual Hard Disk Version 1 (only, V2 not supported) image files.
 
 Any file on the [ignored list](#ignored-list) will not be used as an device image.
 
