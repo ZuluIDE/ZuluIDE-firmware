@@ -1053,6 +1053,10 @@ void platform_boot_to_main_firmware()
     nvic_hw->icpr[0] = 0xFFFFFFFF;
     nvic_hw->icpr[1] = 0xFFFFFFFF;
 
+    // Reset SDIO PIO state
+    pio_set_sm_mask_enabled(SDIO_PIO, 0xF, false);
+    pio_clear_instruction_memory(SDIO_PIO);
+
     // Jump directly to main firmware
     uint32_t *application_base = (uint32_t*)(XIP_BASE + MAINAPP_OFFSET);
     scb_hw->vtor = (uint32_t)application_base;
