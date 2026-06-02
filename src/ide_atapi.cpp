@@ -871,6 +871,7 @@ bool IDEATAPIDevice::handle_atapi_command(const uint8_t *cmd)
         case ATAPI_CMD_WRITE10:         return atapi_write(cmd);
         case ATAPI_CMD_WRITE12:         return atapi_write(cmd);
         case ATAPI_CMD_WRITE_AND_VERIFY10: return atapi_write(cmd);
+        case ATAPI_CMD_SYNCHRONIZE_CACHE: return atapi_cmd_ok();
 
         default:
             logmsg("-- WARNING: Unsupported ATAPI command ", get_atapi_command_name(cmd[0]));
