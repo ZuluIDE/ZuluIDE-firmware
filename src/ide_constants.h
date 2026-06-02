@@ -67,7 +67,7 @@ X(IDE_CMD_CFA_REQUEST_EXTENDED_ERROR                , 0x03) \
 X(IDE_CMD_DEVICE_RESET                              , 0x08) \
 X(IDE_CMD_RECALIBRATE                               , 0x10) \
 X(IDE_CMD_READ_SECTORS                              , 0x20) \
-X(IDE_CMD_READ_SECTORS_WOUT_RETRIES                 , 0x21) \
+X(IDE_CMD_READ_SECTORS_WOUT_RETRY                  , 0x21) \
 X(IDE_CMD_READ_SECTORS_EXT                          , 0x24) \
 X(IDE_CMD_READ_DMA_EXT                              , 0x25) \
 X(IDE_CMD_READ_DMA_QUEUED_EXT                       , 0x26) \
@@ -75,7 +75,7 @@ X(IDE_CMD_READ_NATIVE_MAX_ADDRESS_EXT               , 0x27) \
 X(IDE_CMD_READ_MULTIPLE_EXT                         , 0x29) \
 X(IDE_CMD_READ_LOG_EXT                              , 0x2F) \
 X(IDE_CMD_WRITE_SECTORS                             , 0x30) \
-X(IDE_CMD_WRITE_SECTORS_WOUT_RETRIES                , 0x31) \
+X(IDE_CMD_WRITE_SECTORS_WOUT_RETRY                 , 0x31) \
 X(IDE_CMD_WRITE_SECTORS_EXT                         , 0x34) \
 X(IDE_CMD_WRITE_DMA_EXT                             , 0x35) \
 X(IDE_CMD_WRITE_DMA_QUEUED_EXT                      , 0x36) \
@@ -84,6 +84,7 @@ X(IDE_CMD_CFA_WRITE_SECTORS_WOUT_ERASE              , 0x38) \
 X(IDE_CMD_WRITE_MULTIPLE_EXT                        , 0x39) \
 X(IDE_CMD_WRITE_LOG_EXT                             , 0x3F) \
 X(IDE_CMD_READ_VERIFY_SECTORS                       , 0x40) \
+X(IDE_CMD_READ_VERIFY_SECTORS_WOUT_RETRY            , 0x41) \
 X(IDE_CMD_READ_VERIFY_SECTORS_EXT                   , 0x42) \
 X(IDE_CMD_SEEK                                      , 0x70) \
 X(IDE_CMD_CFA_TRANSLATE_SECTOR                      , 0x87) \
@@ -105,7 +106,9 @@ X(IDE_CMD_WRITE_MULTIPLE                            , 0xC5) \
 X(IDE_CMD_SET_MULTIPLE_MODE                         , 0xC6) \
 X(IDE_CMD_READ_DMA_QUEUED                           , 0xC7) \
 X(IDE_CMD_READ_DMA                                  , 0xC8) \
+X(IDE_CMD_READ_DMA_WOUT_RETRY                       , 0xC9) \
 X(IDE_CMD_WRITE_DMA                                 , 0xCA) \
+X(IDE_CMD_WRITE_DMA_WOUT_RETRY                      , 0xCB) \
 X(IDE_CMD_WRITE_DMA_QUEUED                          , 0xCC) \
 X(IDE_CMD_CFA_WRITE_MULTIPLE_WOUT_ERASE             , 0xCD) \
 X(IDE_CMD_CHECK_MEDIA_CARD_TYPE                     , 0xD1) \
