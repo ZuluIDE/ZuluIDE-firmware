@@ -189,7 +189,7 @@ bool IDERigidDevice::handle_command(ide_registers_t *regs)
         // sure we appear like non-ATAPI device.
         case IDE_CMD_DEVICE_RESET:
         case IDE_CMD_IDENTIFY_PACKET_DEVICE:
-            return set_device_signature(IDE_ERROR_ABORT, false);
+            return set_device_signature(regs, IDE_ERROR_ABORT, false);
 
         // Supported IDE commands
         case IDE_CMD_NOP: return cmd_nop(regs);
@@ -884,29 +884,34 @@ void IDERigidDevice::handle_event(ide_event_t evt)
             m_ata_state.udma_mode = -1;
         }
 
-        set_device_signature(0, true);
+        set_device_signature(nullptr, 0, true);
     }
 }
 
 // Set non-packet device signature values to PHY registers
 // See T13/1410D revision 3a section 9.12 Signature and persistence
-bool IDERigidDevice::set_device_signature(uint8_t error, bool was_reset)
+bool IDERigidDevice::set_device_signature(ide_registers_t* regs, uint8_t error, bool was_reset)
 {
-    ide_registers_t regs = {};
-    ide_phy_get_regs(&regs);
+    ide_registers_t local_regs = {};
+    if (regs == nullptr)
+    {
+        regs = &local_regs;
+        ide_phy_get_regs(regs);
+    }
+    
 
-    regs.error = error;
-    fill_device_signature(&regs);
+    regs->error = error;
+    fill_device_signature(regs);
 
     if (was_reset)
     {
-        regs.error = 1; // Diagnostics ok
-        regs.status = IDE_STATUS_DEVRDY | IDE_STATUS_DSC;
+        regs->error = 1; // Diagnostics ok
+        regs->status = IDE_STATUS_DEVRDY | IDE_STATUS_DSC;
     }
 
     // We might not be the currently selected device, so specify index when
     // setting the registers.
-    ide_phy_set_regs(&regs, m_devconfig.dev_index);
+    ide_phy_set_regs(regs, m_devconfig.dev_index);
 
     if (!was_reset)
     {

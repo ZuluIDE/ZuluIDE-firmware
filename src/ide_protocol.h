@@ -79,7 +79,9 @@ public:
     // Returns true if this device does not use the IORdy signal
     virtual bool disables_iordy() { return false; }
 
-    virtual bool set_device_signature(uint8_t error, bool was_reset) = 0;
+    // Sets the device signature, can be used as a ata command and passed regs
+    // or used standalone when regs == nullptr
+    virtual bool set_device_signature(ide_registers_t *regs, uint8_t error, bool was_reset) = 0;
 
     // Set signature values for ide register
     virtual void fill_device_signature(ide_registers_t *regs) = 0;
