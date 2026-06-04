@@ -189,20 +189,23 @@ bool IDERigidDevice::handle_command(ide_registers_t *regs)
         // sure we appear like non-ATAPI device.
         case IDE_CMD_DEVICE_RESET:
         case IDE_CMD_IDENTIFY_PACKET_DEVICE:
-            return set_device_signature(IDE_ERROR_ABORT, false);
+            return set_device_signature(regs, IDE_ERROR_ABORT, false);
 
         // Supported IDE commands
         case IDE_CMD_NOP: return cmd_nop(regs);
         case IDE_CMD_SET_FEATURES: return cmd_set_features(regs);
         case IDE_CMD_SET_MULTIPLE_MODE: return cmd_set_multiple_mode(regs);
         case IDE_CMD_SEEK: return cmd_seek(regs);
+        case IDE_CMD_READ_DMA_WOUT_RETRY: [[fallthrough]];
         case IDE_CMD_READ_DMA: return cmd_read(regs, true, false, false);
+        case IDE_CMD_WRITE_DMA_WOUT_RETRY: [[fallthrough]];
         case IDE_CMD_WRITE_DMA: return cmd_write(regs, true, false);
-        case IDE_CMD_READ_SECTORS_WOUT_RETRIES:
+        case IDE_CMD_READ_SECTORS_WOUT_RETRY: [[fallthrough]];
         case IDE_CMD_READ_SECTORS: return cmd_read(regs, false, false, false);
         case IDE_CMD_READ_MULTIPLE: return cmd_read(regs, false, false, true);
+        case IDE_CMD_READ_VERIFY_SECTORS_WOUT_RETRY: [[fallthrough]];
         case IDE_CMD_READ_VERIFY_SECTORS: return cmd_read(regs, false, true, false);
-        case IDE_CMD_WRITE_SECTORS_WOUT_RETRIES:
+        case IDE_CMD_WRITE_SECTORS_WOUT_RETRY: [[fallthrough]];
         case IDE_CMD_WRITE_SECTORS: return cmd_write(regs, false, false);
         case IDE_CMD_WRITE_MULTIPLE: return cmd_write(regs, false, true);
         case IDE_CMD_FLUSH_CACHE: return cmd_flush_cache(regs);
@@ -211,13 +214,13 @@ bool IDERigidDevice::handle_command(ide_registers_t *regs)
         case IDE_CMD_INIT_DEV_PARAMS: return cmd_init_dev_params(regs);
         case IDE_CMD_IDENTIFY_DEVICE: return cmd_identify_device(regs);
         case IDE_CMD_RECALIBRATE: return cmd_recalibrate(regs);
-        case IDE_CMD_STANDBY_IMMEDIATE_94H: // fall through
-        case IDE_CMD_STANDBY_IMMEDIATE_E0H: // fall through
-        case IDE_CMD_STANDBY_96H:           // fall through
+        case IDE_CMD_STANDBY_IMMEDIATE_94H: [[fallthrough]];
+        case IDE_CMD_STANDBY_IMMEDIATE_E0H: [[fallthrough]];
+        case IDE_CMD_STANDBY_96H:           [[fallthrough]];
         case IDE_CMD_STANDBY_E2H: return cmd_standby(regs);
-        case IDE_CMD_IDLE_IMMEDIATE_95H: // fall through
-        case IDE_CMD_IDLE_IMMEDIATE_E1H: // fall through
-        case IDE_CMD_IDLE_97H:           // fall through
+        case IDE_CMD_IDLE_IMMEDIATE_95H: [[fallthrough]];
+        case IDE_CMD_IDLE_IMMEDIATE_E1H: [[fallthrough]];
+        case IDE_CMD_IDLE_97H:           [[fallthrough]];
         case IDE_CMD_IDLE_E3H: return cmd_idle(regs);
         case IDE_CMD_CHECK_POWER_MODE: return cmd_check_power_mode(regs);
         case IDE_CMD_GET_MEDIA_STATUS: return cmd_get_media_status(regs);
@@ -881,29 +884,34 @@ void IDERigidDevice::handle_event(ide_event_t evt)
             m_ata_state.udma_mode = -1;
         }
 
-        set_device_signature(0, true);
+        set_device_signature(nullptr, 0, true);
     }
 }
 
 // Set non-packet device signature values to PHY registers
 // See T13/1410D revision 3a section 9.12 Signature and persistence
-bool IDERigidDevice::set_device_signature(uint8_t error, bool was_reset)
+bool IDERigidDevice::set_device_signature(ide_registers_t* regs, uint8_t error, bool was_reset)
 {
-    ide_registers_t regs = {};
-    ide_phy_get_regs(&regs);
+    ide_registers_t local_regs = {};
+    if (regs == nullptr)
+    {
+        regs = &local_regs;
+        ide_phy_get_regs(regs);
+    }
+    
 
-    regs.error = error;
-    fill_device_signature(&regs);
+    regs->error = error;
+    fill_device_signature(regs);
 
     if (was_reset)
     {
-        regs.error = 1; // Diagnostics ok
-        regs.status = IDE_STATUS_DEVRDY | IDE_STATUS_DSC;
+        regs->error = 1; // Diagnostics ok
+        regs->status = IDE_STATUS_DEVRDY | IDE_STATUS_DSC;
     }
 
     // We might not be the currently selected device, so specify index when
     // setting the registers.
-    ide_phy_set_regs(&regs, m_devconfig.dev_index);
+    ide_phy_set_regs(regs, m_devconfig.dev_index);
 
     if (!was_reset)
     {

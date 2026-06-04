@@ -3,18 +3,17 @@ ZuluIDE™ Firmware
 
 ZuluIDE™ is a hardware interface between IDE bus and SD cards. There are two generations of ZuluIDE:
 * ZuluIDE V2, powered by the RP2350B microcontroller
-* The oiriginal ZuluIDE RP2040, powered by the RP2040 mirocontroller and a small ICE40-family Field-programmable gate array. This first-generation ZuluIDE is still supported, but ZuluIDE V2 has succeeded it, as it is faster and costs less to produce.
+* The oiriginal ZuluIDE RP2040, powered by the RP2040 mirocontroller and a small field-programmable gate array. This first-generation ZuluIDE is still supported, but ZuluIDE V2 has permanently succeeded it, as it is faster and costs less to produce.
 
-ZuluIDE supports emulating:
-
+ZuluIDE V2 can emulate:
 * Rigid hard drives
-* ATAPI CD-ROM drives
-* ATAPI Zip drives
-* Rigid hard disks
-
+* ATAPI/IDE CD-ROM drives
+* ATAPI/IDE Zip drives
 * Generic ATAPI removable drive
 
-All images files reside on a FAT32 or exFAT-formatted SD card.
+...including two devices (primary and secondary) simlutaneously.
+
+All image files reside on a FAT32 or exFAT-formatted SD card.
 
 Drive Types
 -----------

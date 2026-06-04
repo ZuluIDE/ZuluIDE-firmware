@@ -94,9 +94,9 @@ bool IDEATAPIDevice::handle_command(ide_registers_t *regs)
         case IDE_CMD_IDENTIFY_DEVICE: [[fallthrough]];
         case IDE_CMD_READ_SECTORS: [[fallthrough]];
         case IDE_CMD_READ_SECTORS_EXT:
-            return set_device_signature(IDE_ERROR_ABORT, false);
+            return set_device_signature(regs, IDE_ERROR_ABORT, false);
         case IDE_CMD_EXECUTE_DEVICE_DIAGNOSTIC:
-            return set_device_signature(IDE_ERROR_EXEC_DEV_DIAG_DEV0_PASS, false);
+            return set_device_signature(regs, IDE_ERROR_EXEC_DEV_DIAG_DEV0_PASS, false);
         // Supported IDE commands
         case IDE_CMD_NOP: return cmd_nop(regs);
         case IDE_CMD_SET_FEATURES: return cmd_set_features(regs);
@@ -125,7 +125,7 @@ void IDEATAPIDevice::handle_event(ide_event_t evt)
             m_atapi_state.unit_attention_sense_asc = ATAPI_ASC_RESET_OCCURRED;
         }
 
-        set_device_signature(0, true);
+        set_device_signature(nullptr, 0, true);
     }
 }
 
@@ -443,23 +443,28 @@ bool IDEATAPIDevice::cmd_check_power_mode(ide_registers_t *regs)
 
 // Set the packet device signature values to PHY registers
 // See T13/1410D revision 3a section 9.12 Signature and persistence
-bool IDEATAPIDevice::set_device_signature(uint8_t error, bool was_reset)
+bool IDEATAPIDevice::set_device_signature(ide_registers_t *regs, uint8_t error, bool was_reset)
 {
-    ide_registers_t regs = {};
-    ide_phy_get_regs(&regs);
+    ide_registers_t local_regs = {};
+    if (regs == nullptr)
+    {
+        regs = &local_regs;
+        ide_phy_get_regs(regs);
+    }
 
-    regs.error = error;
-    fill_device_signature(&regs);
+
+    regs->error = error;
+    fill_device_signature(regs);
 
     if (was_reset)
     {
-        regs.error = 1; // Diagnostics ok
-        regs.status = 0;
+        regs->error = 1; // Diagnostics ok
+        regs->status = 0;
     }
 
     // We might not be the currently selected device, so specify index when
     // setting the registers.
-    ide_phy_set_regs(&regs, m_devconfig.dev_index);
+    ide_phy_set_regs(regs, m_devconfig.dev_index);
 
     if (!was_reset)
     {
@@ -871,6 +876,7 @@ bool IDEATAPIDevice::handle_atapi_command(const uint8_t *cmd)
         case ATAPI_CMD_WRITE10:         return atapi_write(cmd);
         case ATAPI_CMD_WRITE12:         return atapi_write(cmd);
         case ATAPI_CMD_WRITE_AND_VERIFY10: return atapi_write(cmd);
+        case ATAPI_CMD_SYNCHRONIZE_CACHE: return atapi_cmd_ok();
 
         default:
             logmsg("-- WARNING: Unsupported ATAPI command ", get_atapi_command_name(cmd[0]));

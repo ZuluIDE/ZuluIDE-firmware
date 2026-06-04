@@ -123,6 +123,7 @@ void ide_phy_config(const ide_phy_config_t* config)
         dma_channel_claim(IOCS16_DMA_CH);
         g_idecomm.iocs16_dma_channel = IOCS16_DMA_CH;
         g_idecomm.iocs16_dma_target_addr = (uint32_t)&IOCS16_PIO->txf[IOCS16_PIO_SM];
+        g_ide_phy.pio_iocs16_claimed = true;
     }
 
     // Configure the PIO block that is used for IOCS16 signal handling
