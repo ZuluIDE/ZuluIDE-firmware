@@ -80,7 +80,7 @@ public:
 
     virtual void sd_card_inserted() override;
 
-    virtual bool set_device_signature(uint8_t error, bool was_reset) override;
+    virtual bool set_device_signature(ide_registers_t *regs, uint8_t error, bool was_reset) override;
 
     virtual void fill_device_signature(ide_registers_t *regs) override;
 
