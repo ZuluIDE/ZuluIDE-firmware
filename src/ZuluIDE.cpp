@@ -1168,3 +1168,215 @@ void zuluide_main_loop(void)
         sd_card_check_time = millis();
     }
 }
+
+// -----------------------------------------------------------------------
+// USB serial console bridge functions
+// Declared extern in ZuluIDE_usb_console.cpp; implemented here because they
+// need access to the file-scope statics (g_ide_cdrom, etc.).
+// All image load/eject operations go through the ZuluControl StatusController
+// so the IDE device, display, and I2C server all see consistent state.
+// -----------------------------------------------------------------------
+
+// Helper: map a device index to the IDEDevice pointer
+static IDEDevice *console_get_dev(int idx)
+{
+    if (idx == 0) return g_ide_device;
+#ifdef ENABLE_DUAL_DEVICE
+    if (idx == 1) return g_ide_device2;
+#endif
+    return nullptr;
+}
+
+// Helper: map a device index to the IDEImageFile pointer
+static IDEImageFile *console_get_imgfile(int idx)
+{
+    if (idx == 0) return &g_ide_imagefile;
+#ifdef ENABLE_DUAL_DEVICE
+    if (idx == 1) return &g_ide_imagefile2;
+#endif
+    return nullptr;
+}
+
+int zuluide_console_device_count()
+{
+    int n = (g_ide_device != nullptr) ? 1 : 0;
+#ifdef ENABLE_DUAL_DEVICE
+    if (g_ide_device2) n++;
+#endif
+    return n;
+}
+
+const char *zuluide_console_device_type_name(int idx)
+{
+    IDEDevice *dev = console_get_dev(idx);
+    if (!dev)                              return "None";
+    if (dev == static_cast<IDEDevice *>(&g_ide_cdrom))     return "CD-ROM";
+    if (dev == static_cast<IDEDevice *>(&g_ide_zipdrive))  return "ZIP Drive";
+    if (dev == static_cast<IDEDevice *>(&g_ide_removable)) return "Removable";
+    return "Hard Drive";
+}
+
+bool zuluide_console_is_removable(int idx)
+{
+    IDEDevice *dev = console_get_dev(idx);
+    return dev && dev->is_removable();
+}
+
+// Returns the filename of the currently loaded image via the ZuluControl
+// StatusController for the primary device, or from the imagefile directly
+// for the secondary device.
+bool zuluide_console_get_image(int idx, char *buf, size_t buflen)
+{
+    if (idx == 0)
+    {
+        const auto &st = g_StatusController.GetStatus();
+        if (!st.HasLoadedImage()) return false;
+        strncpy(buf, st.GetLoadedImage().GetFilename().c_str(), buflen - 1);
+        buf[buflen - 1] = '\0';
+        return buf[0] != '\0';
+    }
+#ifdef ENABLE_DUAL_DEVICE
+    if (idx == 1)
+    {
+        IDEImageFile *f = console_get_imgfile(1);
+        return f && f->is_open() && f->get_filename(buf, buflen);
+    }
+#endif
+    return false;
+}
+
+// Load an image by full SD-card path, going through ZuluControl for the
+// primary device so observers (display, I2C) see the state change.
+void zuluide_console_load_image(int idx, const char *path)
+{
+    if (!path || path[0] == '\0') return;
+
+    if (idx == 0)
+    {
+        g_StatusController.LoadImage(zuluide::images::Image(std::string(path)));
+        return;
+    }
+#ifdef ENABLE_DUAL_DEVICE
+    if (idx == 1)
+    {
+        IDEDevice    *dev = console_get_dev(1);
+        IDEImageFile *f   = console_get_imgfile(1);
+        if (!dev || !f) return;
+        f->close();
+        f->open_file(path, false);
+        if (f->is_open())
+            dev->insert_media(f);
+    }
+#endif
+}
+
+// Eject via ZuluControl for the primary device (triggers status_observer →
+// button_eject_media), direct call for the secondary device.
+void zuluide_console_eject(int idx)
+{
+    if (idx == 0)
+    {
+        g_StatusController.EjectImage();
+        return;
+    }
+#ifdef ENABLE_DUAL_DEVICE
+    if (idx == 1)
+    {
+        IDEDevice *dev = console_get_dev(1);
+        if (dev) dev->button_eject_media();
+    }
+#endif
+}
+
+// Re-insert the image that is currently open in the imagefile.
+// For the primary device this reloads through ZuluControl so all observers
+// see the state change.
+bool zuluide_console_insert(int idx)
+{
+    if (idx == 0)
+    {
+        char path[MAX_FILE_PATH];
+        if (!g_ide_imagefile.is_open() ||
+            !g_ide_imagefile.get_filename(path, sizeof(path)) ||
+            path[0] == '\0')
+            return false;
+        g_StatusController.LoadImage(zuluide::images::Image(std::string(path)));
+        return true;
+    }
+#ifdef ENABLE_DUAL_DEVICE
+    if (idx == 1)
+    {
+        IDEDevice    *dev = console_get_dev(1);
+        IDEImageFile *f   = console_get_imgfile(1);
+        if (!dev || !f || !f->is_open()) return false;
+        dev->insert_media(f);
+        return true;
+    }
+#endif
+    return false;
+}
+
+// Advance to the next image in the alphabetical sequence, wrapping from the
+// last image back to the first.
+//
+// IDEDevice::insert_next_media() is guarded by m_removable.ejected so it
+// returns false whenever media is currently inserted — useless from the
+// console.  We replicate the same ImageIterator logic here but without that
+// guard, and route the load through g_StatusController so all ZuluControl
+// observers (display, I2C server, status_observer → load_image) see the
+// change.
+bool zuluide_console_load_next(int idx)
+{
+    if (idx != 0)
+    {
+        // Secondary device: fall through to the device's own implementation.
+        IDEDevice *dev = console_get_dev(idx);
+        return dev && dev->insert_next_media();
+    }
+
+    zuluide::images::ImageIterator iter;
+    iter.Reset();
+    if (iter.IsEmpty())
+    {
+        iter.Cleanup();
+        return false;
+    }
+
+    // Position the iterator at the currently loaded image so IsLast() is
+    // accurate.  After Reset(), root is open so MoveToFile / MoveFirst both
+    // work correctly for root-directory images.
+    bool positioned = false;
+    const auto &st = g_StatusController.GetStatus();
+    if (st.HasLoadedImage())
+    {
+        const char *cur = st.GetLoadedImage().GetFilename().c_str();
+        positioned = iter.MoveToFile(cur);
+    }
+
+    bool moved = false;
+    if (positioned)
+    {
+        // Wrap last → first, otherwise step forward one image.
+        moved = iter.IsLast() ? iter.MoveFirst() : iter.MoveNext();
+    }
+    else
+    {
+        // No current image or current not found — go to the first image.
+        moved = iter.MoveFirst();
+    }
+
+    if (!moved)
+    {
+        iter.Cleanup();
+        return false;
+    }
+
+    auto img = iter.Get();
+    iter.Cleanup();
+
+    if (img.GetFilename().empty())
+        return false;
+
+    g_StatusController.LoadImage(img);
+    return true;
+}

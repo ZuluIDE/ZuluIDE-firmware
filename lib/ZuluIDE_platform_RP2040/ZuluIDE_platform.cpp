@@ -49,6 +49,7 @@
 #include <Adafruit_SSD1306.h>
 #include "ZuluIDE_platform_gpio.h"
 #include <ZuluControl_platform.h>
+#include <ZuluIDE_usb_platform.h>
 
 #include <minIni.h>
 

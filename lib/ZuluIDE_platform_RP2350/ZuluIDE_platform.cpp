@@ -27,6 +27,7 @@
 #include "ZuluIDE_log.h"
 #include "ZuluIDE_config.h"
 #include <ZuluControl_platform.h>
+#include <ZuluIDE_usb_platform.h>
 #include <ZuluIDE.h>
 #include "ide_phy.h"
 #include <SdFat.h>
@@ -771,46 +772,6 @@ void platform_reset_mcu()
 
 void usb_command_handler(char *cmd)
 {
-}
-
-// Poll for commands sent through the USB serial port
-void usb_command_poll()
-{
-    static uint8_t rx_buf[64];
-    static int rx_len;
-
-    uint32_t available = Serial.available();
-    if (available > 0)
-    {
-        available = std::min<uint32_t>(available, sizeof(rx_buf) - rx_len);
-        Serial.readBytes(rx_buf + rx_len, available);
-        rx_len += available;
-    }
-
-    if (rx_len > 0)
-    {
-        char *first = (char*)rx_buf;
-        for (int i = 0; i < rx_len; i++)
-        {
-            if (rx_buf[i] == '\n' || rx_buf[i] == '\r')
-            {
-                // Got complete line
-                rx_buf[i] = '\0';
-                usb_command_handler(first);
-                rx_len = 0;
-            }
-            else if (isspace(*first))
-            {
-                first++;
-            }
-        }
-
-        if (rx_len == sizeof(rx_buf))
-        {
-            // Too long line, discard
-            rx_len = 0;
-        }
-    }
 }
 
 // Pass forwards log messages from core1 code.
