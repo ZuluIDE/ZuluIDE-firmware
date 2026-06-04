@@ -977,7 +977,9 @@ bool IDERigidDevice::ata_send_chunked_data(const uint8_t *data, size_t blocksize
 
 ssize_t IDERigidDevice::ata_send_data(const uint8_t *data, size_t blocksize, size_t num_blocks)
 {
-    if (m_ata_state.data_state == ATA_DATA_WRITE && blocksize == m_ata_state.blocksize)
+    if (m_ata_state.data_state == ATA_DATA_WRITE &&
+        blocksize == m_ata_state.blocksize &&
+        m_devconfig.block_read_delay_us <= 0)
     {
         // Fast path, transfer size has already been set up
         size_t blocks_sent = 0;
@@ -1066,6 +1068,15 @@ bool IDERigidDevice::ata_send_data_block(const uint8_t *data, uint16_t blocksize
         ide_phy_write_block(data, blocksize);
     }
 
+    if (m_devconfig.block_read_delay_us > 0)
+    {
+        // Simulate slow drives of late 1980s which only have buffer space
+        // for a single sector. Indication of needing this delay is typically
+        // multi-sector reads getting stuck but single-sector reads working.
+        ata_send_wait_finish();
+        delayMicroseconds(m_devconfig.block_read_delay_us);
+    }
+
     return true;
 }
 
@@ -1143,6 +1154,11 @@ bool IDERigidDevice::ata_recv_data(uint8_t *data, size_t blocksize, size_t num_b
             }
         }
 
+        if (m_devconfig.block_write_delay_us > 0)
+        {
+            delayMicroseconds(m_devconfig.block_write_delay_us);
+        }
+
         // Read out previous block
         bool continue_transfer = (i + 1 < num_blocks);
         // dbgmsg("Reading datablock ", (int)i, " continue ", continue_transfer);
@@ -1191,8 +1207,14 @@ bool IDERigidDevice::ata_recv_data_block(uint8_t *data, uint16_t blocksize)
         }
     }
 
+    if (m_devconfig.block_write_delay_us > 0)
+    {
+        delayMicroseconds(m_devconfig.block_write_delay_us);
+    }
+
     ide_phy_read_block(data, blocksize);
     ide_phy_stop_transfers();
+
     return true;
 }
 
@@ -1202,6 +1224,7 @@ bool IDERigidDevice::ata_recv_data_block(uint8_t *data, uint16_t blocksize)
 ssize_t IDERigidDevice::read_callback(const uint8_t *data, size_t blocksize, size_t num_blocks)
 {
     platform_poll();
+
     return ata_send_data(data, blocksize, num_blocks);
 }
 

@@ -552,7 +552,8 @@ bool IDEATAPIDevice::atapi_send_data(const uint8_t *data, size_t blocksize, size
 ssize_t IDEATAPIDevice::atapi_send_data_async(const uint8_t *data, size_t blocksize, size_t num_blocks)
 {
     if (m_atapi_state.data_state == ATAPI_DATA_WRITE &&
-        blocksize == m_atapi_state.blocksize)
+        blocksize == m_atapi_state.blocksize &&
+        m_devconfig.block_read_delay_us <= 0)
     {
         // Fast path, transfer size has already been set up
         size_t blocks_sent = 0;
@@ -668,6 +669,12 @@ bool IDEATAPIDevice::atapi_send_data_block(const uint8_t *data, uint16_t blocksi
         ide_phy_write_block(data, blocksize);
     }
 
+    if (m_devconfig.block_read_delay_us > 0)
+    {
+        atapi_send_wait_finish();
+        delayMicroseconds(m_devconfig.block_read_delay_us);
+    }
+
     return true;
 }
 
@@ -756,6 +763,11 @@ bool IDEATAPIDevice::atapi_recv_data(uint8_t *data, size_t blocksize, size_t num
             }
         }
 
+        if (m_devconfig.block_write_delay_us > 0)
+        {
+            delayMicroseconds(m_devconfig.block_write_delay_us);
+        }
+
         // Read out previous block
         bool continue_transfer = (i + 1 < num_blocks);
         ide_phy_read_block(data + blocksize * i, blocksize, continue_transfer);
@@ -768,6 +780,7 @@ bool IDEATAPIDevice::atapi_recv_data(uint8_t *data, size_t blocksize, size_t num
         logmsg("IDEATAPIDevice::atapi_recv_data UDMA checksum errors: ", (int)m_atapi_state.crc_errors);
         return false;
     }
+
     return true;
 }
 
@@ -803,6 +816,11 @@ bool IDEATAPIDevice::atapi_recv_data_block(uint8_t *data, uint16_t blocksize)
             ide_phy_print_debug();
             return false;
         }
+    }
+
+    if (m_devconfig.block_write_delay_us > 0)
+    {
+        delayMicroseconds(m_devconfig.block_write_delay_us);
     }
 
     ide_phy_read_block(data, blocksize);

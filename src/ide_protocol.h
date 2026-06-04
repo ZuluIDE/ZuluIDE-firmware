@@ -132,6 +132,8 @@ protected:
         int ide_sectors;
         int access_delay;
         int ide_identify_gencfg;
+        int block_read_delay_us;
+        int block_write_delay_us;
     } m_devconfig;
 
     // PHY capabilities limited by active device configuration
