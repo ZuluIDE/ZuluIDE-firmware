@@ -42,6 +42,9 @@ public:
     // Finishes initialization after the first image has been loaded
     virtual void post_image_setup();
 
+    // Human-readable device type name for log messages
+    virtual const char* get_type_name() const { return "Device"; }
+
     // Print device configuration to log
     virtual void print_device_config();
 

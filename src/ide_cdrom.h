@@ -35,6 +35,8 @@ class IDECDROMDevice: public IDEATAPIDevice
 public:
     virtual void initialize(int devidx) override;
 
+    virtual const char* get_type_name() const override { return "CD-ROM"; }
+
     virtual void print_device_config() override;
 
     virtual void reset() override;

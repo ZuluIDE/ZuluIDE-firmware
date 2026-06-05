@@ -498,26 +498,31 @@ void isr_hardfault(void)
 // also starts calling this after 2 seconds.
 // This ensures that log messages get passed even if code hangs,
 // but does not unnecessarily delay normal execution.
+static uint32_t g_usb_logpos = 0;
+
 static void usb_log_poll()
 {
-    static uint32_t logpos = 0;
-
     if (Serial.availableForWrite())
     {
         // Retrieve pointer to log start and determine number of bytes available.
         uint32_t available = 0;
-        const char *data = log_get_buffer(&logpos, &available);
+        const char *data = log_get_buffer(&g_usb_logpos, &available);
                 // Limit to CDC packet size
         uint32_t len = available;
         if (len == 0) return;
         if (len > CFG_TUD_CDC_EP_BUFSIZE) len = CFG_TUD_CDC_EP_BUFSIZE;
-        
+
         // Update log position by the actual number of bytes sent
         // If USB CDC buffer is full, this may be 0
         uint32_t actual = 0;
         actual = Serial.write(data, len);
-        logpos -= available - actual;
+        g_usb_logpos -= available - actual;
     }
+}
+
+bool platform_usb_log_is_flushed()
+{
+    return g_usb_logpos >= log_get_buffer_len();
 }
 
 // Use ADC to implement supply voltage monitoring for the +3.0V rail.

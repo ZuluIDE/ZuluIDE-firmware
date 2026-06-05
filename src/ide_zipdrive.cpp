@@ -151,7 +151,6 @@ void IDEZipDrive::insert_media(IDEImage *image)
         g_ide_imagefile.clear();
         if (g_ide_imagefile.open_file(img_iterator.Get().GetFilename().c_str()))
         {
-            logmsg("-- Device loading media: \"", img_iterator.Get().GetFilename().c_str(), "\"");
             set_image(&g_ide_imagefile);
             loaded_new_media();
         }

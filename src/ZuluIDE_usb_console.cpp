@@ -39,6 +39,12 @@ constexpr uint32_t k_serial_timeout_ms = 30;
 constexpr uint32_t k_serial_timeout_ms = IDE_CONSOLE_SERIAL_TIMEOUT_MS;
 #endif
 
+// Check if all log data has been sent over USB serial
+static bool log_buffer_is_empty()
+{
+    return platform_usb_log_is_flushed();
+}
+
 // -----------------------------------------------------------------------
 // Bridge functions implemented in ZuluIDE.cpp
 // Forward-declared here to avoid a cross-layer header dependency.
@@ -60,6 +66,7 @@ extern bool       zuluide_console_load_next(int dev_idx);
 static void serial_out(const char *str)
 {
     if (!str || !*str) return;
+    if (!log_buffer_is_empty()) return;
     uint32_t remaining = static_cast<uint32_t>(strlen(str));
     const uint8_t *p = reinterpret_cast<const uint8_t *>(str);
     uint32_t timeout_start = millis();

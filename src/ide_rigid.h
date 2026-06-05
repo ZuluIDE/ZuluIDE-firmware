@@ -40,6 +40,8 @@ class IDERigidDevice: public IDEDevice, public IDEImage::Callback
 public:
     virtual void initialize(int devidx) override;
 
+    virtual const char* get_type_name() const override { return "Hard Drive"; }
+
     virtual void print_device_config() override;
 
     virtual void post_image_setup() override;

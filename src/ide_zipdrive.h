@@ -36,6 +36,8 @@ class IDEZipDrive: public IDEATAPIDevice
 public:
     virtual void initialize(int devidx);
 
+    virtual const char* get_type_name() const override { return "ZIP Drive"; }
+
     virtual void print_device_config() override;
 
     virtual void set_image(IDEImage *image);

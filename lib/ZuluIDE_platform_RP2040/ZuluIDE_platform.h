@@ -131,6 +131,9 @@ bool platform_serial_ready();
 /* write directly to the serial port*/
 size_t platform_serial_write(uint8_t *buf, size_t len);
 
+/* true when all log data has been sent over USB serial */
+bool platform_usb_log_is_flushed();
+
 
 // FPGA bitstream is protected by a license key stored in RP2040 flash,
 // in the last page before 1 MB boundary.

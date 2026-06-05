@@ -895,8 +895,15 @@ void status_observer(const zuluide::status::SystemStatus& current) {
     // The current image has changed.
     if (current.HasLoadedImage())
     {
-      load_image(current.GetLoadedImage());
-    } 
+      // Skip if the ATAPI layer (e.g. insert_next_media) already opened this image —
+      // it called g_StatusController.LoadImage() only to update ZuluControl state,
+      // not to request a reload via this observer.
+      char open_name[MAX_FILE_PATH + 1] = {};
+      bool already_open = g_ide_imagefile.get_image_name(open_name, sizeof(open_name))
+                          && current.GetLoadedImage().GetFilename() == open_name;
+      if (!already_open)
+        load_image(current.GetLoadedImage());
+    }
 
   }
   g_previous_controller_status = current;
@@ -909,7 +916,7 @@ void load_image(const zuluide::images::Image& toLoad, bool insert)
     return blinkStatus(BLINK_DEFFERED_LOADING);
   
   clear_image();
-   
+
   g_ide_imagefile.open_file(toLoad.GetFilename().c_str(), false);
   if (g_ide_device) {
     if (insert)
