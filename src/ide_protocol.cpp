@@ -546,6 +546,8 @@ void IDEDevice::initialize(int devidx)
     m_devconfig.ide_cylinders = ini_getl("IDE", "cylinders", 0, CONFIGFILE);
     m_devconfig.access_delay = ini_getl("IDE", "access_delay", 0, CONFIGFILE);
     m_devconfig.ide_identify_gencfg = ini_getl("IDE", "identify_gencfg", 0, CONFIGFILE);
+    m_devconfig.block_read_delay_us = ini_getl("IDE", "block_read_delay_us", 0, CONFIGFILE);
+    m_devconfig.block_write_delay_us = ini_getl("IDE", "block_write_delay_us", 0, CONFIGFILE);
 
     g_ignore_cmd_interrupt = ini_getl("IDE", "ignore_command_interrupt", 1, CONFIGFILE);
     m_phy_caps.max_udma_mode = std::min(m_phy_caps.max_udma_mode, m_devconfig.max_udma_mode);
