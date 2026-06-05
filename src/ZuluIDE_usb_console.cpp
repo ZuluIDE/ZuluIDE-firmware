@@ -94,15 +94,16 @@ static void serial_println(const char *str)
 
 enum class MenuState : uint8_t
 {
-    Inactive,
-    DeviceList,    // multi-device: choose which IDE device to manage
-    DeviceActions, // choose action for selected device
-    ImageList,     // choose image from enumerated list
+    Inactive,                 // No menu active
+    MainMenu,                 // Main menu with media selection and debug toggle
+    MainMenuMediaConfirm,     // Waiting for 'y' confirmation on media menu entry
+    MainMenuDebugConfirm,     // Waiting for 'y' confirmation on debug toggle
+    ImageSelection,           // Image list and selection for primary device
+    ImageSelectionList,       // Browsing enumerated images
 };
 
 static MenuState s_state      = MenuState::Inactive;
-static uint8_t   s_sel_dev    = 0;    // selected device index (0 or 1)
-static int       s_image_cnt  = 0;    // cached image count for ImageList
+static int       s_image_cnt  = 0;    // cached image count for ImageSelectionList
 static char      s_num_buf[4] = {};   // digit accumulator for image selection
 static uint8_t   s_num_len    = 0;
 
@@ -110,45 +111,22 @@ static uint8_t   s_num_len    = 0;
 // Display helpers
 // -----------------------------------------------------------------------
 
-static void show_device_list()
+static void show_main_menu()
 {
-    const int count = zuluide_console_device_count();
     serial_println("");
-    serial_println("  ZuluIDE Media Management");
+    serial_println("  ZuluIDE Main Menu");
     serial_println("  ================================================");
-    serial_println("  IDE devices:");
-    for (int i = 0; i < count; i++)
-    {
-        char cur[MAX_FILE_PATH];
-        const bool has_img = zuluide_console_get_image(i, cur, sizeof(cur));
-        const char *basename = "(ejected)";
-        if (has_img)
-        {
-            const char *sl = strrchr(cur, '/');
-            basename = sl ? sl + 1 : cur;
-        }
-        serial_out("    ");
-        serial_out_int(i);
-        serial_out(": ");
-        serial_out(zuluide_console_device_type_name(i));
-        serial_out("  [");
-        serial_out(basename);
-        serial_println("]");
-    }
-    serial_println("  ------------------------------------------------");
-    serial_out("  Select device (0");
-    if (count > 1)
-    {
-        serial_out("-");
-        serial_out_int(count - 1);
-    }
-    serial_println(") or 'q' to exit:");
+    serial_println("    'm' - Media Menu");
+    serial_out("    'd' - debug logging  [");
+    serial_out(g_log_debug ? "ON" : "OFF");
+    serial_println("]");
+    serial_println("  ================================================");
 }
 
-static void show_device_actions()
+static void show_image_selection()
 {
     char cur[MAX_FILE_PATH];
-    const bool has_img = zuluide_console_get_image(s_sel_dev, cur, sizeof(cur));
+    const bool has_img = zuluide_console_get_image(0, cur, sizeof(cur));
     const char *basename = "(ejected)";
     if (has_img)
     {
@@ -156,24 +134,20 @@ static void show_device_actions()
         basename = sl ? sl + 1 : cur;
     }
 
-    serial_println("");
+    serial_println("\n");
     serial_out("  Device: ");
-    serial_out(zuluide_console_device_type_name(s_sel_dev));
+    serial_out(zuluide_console_device_type_name(0));
     serial_out("  |  Current: ");
     serial_println(basename);
     serial_println("  ================================================");
     serial_println("    'l' - list and select image");
     serial_println("    'n' - load next image in sequence");
-    if (zuluide_console_is_removable(s_sel_dev))
+    if (zuluide_console_is_removable(0))
     {
         serial_println("    'e' - eject media");
         serial_println("    'i' - insert (re-insert current image)");
     }
-    serial_out("    'd' - toggle debug logging  [");
-    serial_out(g_log_debug ? "ON" : "OFF");
-    serial_println("]");
-    if (zuluide_console_device_count() > 1)
-        serial_println("    'b' - back to device list");
+    serial_println("    'b' - back to main menu");
     serial_println("    'q' - exit menu");
     serial_println("  Or type image number + Enter to load directly:");
 }
@@ -184,11 +158,11 @@ static void show_device_actions()
 // auto-calls Reset() which reopens the SD root.  MoveFirst() requires root to
 // already be open and therefore fails after any prior Cleanup().  Using only
 // MoveNext() is the correct pattern for images in the root directory.
-static int show_image_list()
+static int show_image_selection_list()
 {
     serial_println("");
     serial_out("  Available images (");
-    serial_out(zuluide_console_device_type_name(s_sel_dev));
+    serial_out(zuluide_console_device_type_name(0));
     serial_println("):");
     serial_println("  ------------------------------------------------");
 
@@ -222,7 +196,7 @@ static int show_image_list()
         serial_println("    (no images found)");
 
     serial_println("  ------------------------------------------------");
-    serial_println("  Enter number + Enter to load, or 'b' to cancel:");
+    serial_println("  Enter number + Enter to load, 'b' to cancel, or 'q' to exit menu:");
     return count;
 }
 
@@ -256,18 +230,15 @@ static void do_load_by_index(int idx_1based)
     char path[MAX_FILE_PATH];
     if (!get_path_by_index(idx_1based, path, sizeof(path)))
     {
-        serial_out("  Image ");
-        serial_out_int(idx_1based);
-        serial_println(" not found.");
+        logmsg("Image ", idx_1based, " not found.");
         return;
     }
 
-    serial_out("  Loading '");
     const char *base = strrchr(path, '/');
-    serial_out(base ? base + 1 : path);
-    serial_println("' ...");
-    zuluide_console_load_image(s_sel_dev, path);
-    serial_println("  Done — host will see a media change.");
+    const char *filename = base ? base + 1 : path;
+    logmsg("Loading '", filename, "' ...");
+    zuluide_console_load_image(0, path);
+    logmsg("Done - host will see a media change.");
 }
 
 // -----------------------------------------------------------------------
@@ -293,50 +264,71 @@ void ideConsoleMenuEnter()
         return;
     }
 
-    if (count > 1)
-    {
-        s_state = MenuState::DeviceList;
-        show_device_list();
-    }
-    else
-    {
-        s_sel_dev = 0;
-        s_state   = MenuState::DeviceActions;
-        show_device_actions();
-    }
+    s_state = MenuState::MainMenu;
+    show_main_menu();
 }
 
 void ideConsoleMenuProcess(char c)
 {
-    // Ignore lone CR/LF when no digit is pending
-    if ((c == '\r' || c == '\n') && s_num_len == 0)
-        return;
-
     switch (s_state)
     {
         // ----------------------------------------------------------------
-        case MenuState::DeviceList:
+        case MenuState::MainMenu:
         {
-            if (c == 'q' || c == 'Q')
+            switch (c | 0x20)
             {
-                serial_println("  Exiting media menu.");
-                s_state = MenuState::Inactive;
-                return;
+                case 'm':
+                    s_state = MenuState::MainMenuMediaConfirm;
+                    serial_println("  Enter Media Menu? Press 'y' to confirm or any other key to cancel:");
+                    break;
+
+                case 'd':
+                    s_state = MenuState::MainMenuDebugConfirm;
+                    serial_out("  Toggle debug logging to ");
+                    serial_out(g_log_debug ? "OFF" : "ON");
+                    serial_println("? Press 'y' to confirm or any other key to cancel:");
+                    break;
+
+                default:
+                    show_main_menu();
+                    break;
             }
-            const int dev_idx = c - '0';
-            if (c >= '0' && dev_idx < zuluide_console_device_count())
-            {
-                s_sel_dev = static_cast<uint8_t>(dev_idx);
-                s_state   = MenuState::DeviceActions;
-                show_device_actions();
-                return;
-            }
-            show_device_list();
             break;
         }
 
         // ----------------------------------------------------------------
-        case MenuState::DeviceActions:
+        case MenuState::MainMenuMediaConfirm:
+        {
+            if (c == 'y' || c == 'Y')
+            {
+                s_num_len    = 0;
+                s_num_buf[0] = '\0';
+                s_state      = MenuState::ImageSelection;
+                show_image_selection();
+            }
+            else
+            {
+                s_state = MenuState::MainMenu;
+                show_main_menu();
+            }
+            break;
+        }
+
+        // ----------------------------------------------------------------
+        case MenuState::MainMenuDebugConfirm:
+        {
+            if (c == 'y' || c == 'Y')
+            {
+                g_log_debug = !g_log_debug;
+                logmsg("Debug logging ", g_log_debug ? "enabled." : "disabled.");
+            }
+            s_state = MenuState::MainMenu;
+            show_main_menu();
+            break;
+        }
+
+        // ----------------------------------------------------------------
+        case MenuState::ImageSelection:
         {
             // Accumulate digits for direct image-number entry
             if (c >= '0' && c <= '9' && s_num_len < 3)
@@ -355,7 +347,7 @@ void ideConsoleMenuProcess(char c)
                 s_num_len    = 0;
                 s_num_buf[0] = '\0';
                 do_load_by_index(idx);
-                show_device_actions();
+                show_image_selection();
                 break;
             }
 
@@ -365,91 +357,85 @@ void ideConsoleMenuProcess(char c)
                 case 'l':
                     s_num_len    = 0;
                     s_num_buf[0] = '\0';
-                    s_state      = MenuState::ImageList;
-                    s_image_cnt  = show_image_list();
+                    s_state      = MenuState::ImageSelectionList;
+                    s_image_cnt  = show_image_selection_list();
                     break;
 
                 case 'n':
-                    if (zuluide_console_load_next(s_sel_dev))
-                        serial_println("  Next image loaded — host will see media change.");
+                    if (zuluide_console_load_next(0))
+                        logmsg("Next image loaded - host will see media change.");
                     else
-                        serial_println("  No next image available.");
-                    show_device_actions();
-                    break;
-
-                case 'd':
-                    g_log_debug = !g_log_debug;
-                    serial_out("  Debug logging ");
-                    serial_println(g_log_debug ? "enabled." : "disabled.");
-                    show_device_actions();
+                        logmsg("No next image available.");
+                    show_image_selection();
                     break;
 
                 case 'e':
-                    if (zuluide_console_is_removable(s_sel_dev))
+                    if (zuluide_console_is_removable(0))
                     {
-                        zuluide_console_eject(s_sel_dev);
-                        serial_println("  Media ejected.");
+                        zuluide_console_eject(0);
+                        logmsg("Media ejected.");
                     }
                     else
                     {
-                        serial_println("  Device is not removable.");
+                        logmsg("Device is not removable.");
                     }
-                    show_device_actions();
+                    show_image_selection();
                     break;
 
                 case 'i':
-                    if (zuluide_console_is_removable(s_sel_dev))
+                    if (zuluide_console_is_removable(0))
                     {
-                        if (zuluide_console_insert(s_sel_dev))
-                            serial_println("  Media inserted.");
+                        if (zuluide_console_insert(0))
+                            logmsg("Media inserted.");
                         else
-                            serial_println("  No image loaded — use 'l' to select one.");
+                            logmsg("No image loaded - use 'l' to select one.");
                     }
                     else
                     {
-                        serial_println("  Device is not removable.");
+                        logmsg("Device is not removable.");
                     }
-                    show_device_actions();
+                    show_image_selection();
                     break;
 
                 case 'b':
                     s_num_len    = 0;
                     s_num_buf[0] = '\0';
-                    if (zuluide_console_device_count() > 1)
-                    {
-                        s_state = MenuState::DeviceList;
-                        show_device_list();
-                    }
-                    else
-                    {
-                        serial_println("  Exiting media menu.");
-                        s_state = MenuState::Inactive;
-                    }
+                    s_state      = MenuState::MainMenu;
+                    show_main_menu();
                     break;
 
                 case 'q':
-                    serial_println("  Exiting media menu.");
+                    logmsg("Exiting media menu.");
                     s_state = MenuState::Inactive;
                     break;
 
                 default:
                     s_num_len    = 0;
                     s_num_buf[0] = '\0';
-                    show_device_actions();
+                    show_image_selection();
                     break;
             }
             break;
         }
 
         // ----------------------------------------------------------------
-        case MenuState::ImageList:
+        case MenuState::ImageSelectionList:
         {
             if (c == 'b' || c == 'B')
             {
                 s_num_len    = 0;
                 s_num_buf[0] = '\0';
-                s_state      = MenuState::DeviceActions;
-                show_device_actions();
+                s_state      = MenuState::ImageSelection;
+                show_image_selection();
+                return;
+            }
+
+            if (c == 'q' || c == 'Q')
+            {
+                s_num_len    = 0;
+                s_num_buf[0] = '\0';
+                logmsg("Exiting media menu.");
+                s_state      = MenuState::Inactive;
                 return;
             }
 
@@ -471,22 +457,14 @@ void ideConsoleMenuProcess(char c)
 
                 if (idx < 1 || idx > s_image_cnt)
                 {
-                    serial_out("  Invalid index ");
-                    serial_out_int(idx);
-                    serial_out(" — valid range is 1");
-                    if (s_image_cnt > 1)
-                    {
-                        serial_out(" to ");
-                        serial_out_int(s_image_cnt);
-                    }
-                    serial_println(".");
+                    logmsg("Invalid index ", idx, " - valid range is 1 to ", s_image_cnt, ".");
                     serial_println("  Enter number + Enter, or 'b' to cancel:");
                     return;
                 }
 
                 do_load_by_index(idx);
-                s_state = MenuState::DeviceActions;
-                show_device_actions();
+                s_state = MenuState::ImageSelection;
+                show_image_selection();
                 return;
             }
 

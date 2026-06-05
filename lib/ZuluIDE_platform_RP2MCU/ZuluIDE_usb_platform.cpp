@@ -38,6 +38,7 @@ void usb_command_poll()
 {
     static uint8_t rx_buf[64];
     static int rx_len;
+    static bool menu_shown = false;
 
     uint32_t available = Serial.available();
     if (available > 0)
@@ -56,6 +57,7 @@ void usb_command_poll()
         for (int i = 0; i < rx_len; i++)
             ideConsoleMenuProcess(static_cast<char>(rx_buf[i]));
         rx_len = 0;
+        menu_shown = false;
         return;
     }
 
@@ -69,12 +71,22 @@ void usb_command_poll()
         {
             ideConsoleMenuEnter();
             rx_len = 0;
+            menu_shown = false;
             return;
         }
         if (c == '\n' || c == '\r')
         {
             rx_buf[i] = '\0';
             usb_command_handler(first);
+            rx_len = 0;
+            menu_shown = false;
+            return;
+        }
+        // Show main menu on first non-whitespace character (except 'l')
+        if (!menu_shown && !isspace(static_cast<unsigned char>(c)) && c != 'l' && c != 'L')
+        {
+            ideConsoleMenuEnter();
+            menu_shown = true;
             rx_len = 0;
             return;
         }
@@ -83,5 +95,8 @@ void usb_command_poll()
     }
 
     if (rx_len == sizeof(rx_buf))
+    {
         rx_len = 0;
+        menu_shown = false;
+    }
 }
