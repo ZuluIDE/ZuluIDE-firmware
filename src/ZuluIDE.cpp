@@ -880,6 +880,13 @@ void clear_image() {
 }
 
 void status_observer(const zuluide::status::SystemStatus& current) {
+  // Guard against re-entrant calls: device eject/load handlers can call back
+  // into the StatusController (e.g. IDEZipDrive::eject_media calls
+  // SetIsCardPresent), which synchronously re-fires this observer.
+  static bool s_in_observer = false;
+  if (s_in_observer) return;
+  s_in_observer = true;
+
   // We need to check and see what changes have occurred.
   if (!current.HasLoadedImage() && current.IsEject())
   {
@@ -907,6 +914,7 @@ void status_observer(const zuluide::status::SystemStatus& current) {
 
   }
   g_previous_controller_status = current;
+  s_in_observer = false;
 }
 
 void load_image(const zuluide::images::Image& toLoad, bool insert)
