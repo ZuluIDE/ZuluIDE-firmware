@@ -145,7 +145,7 @@ drive_type_t Image::ToDriveType(const Image::ImageType toConvert)
     case Image::ImageType::unknown:
     default: {
       // If nothing is found, default to a CDROM.
-      return drive_type_t::DRIVE_TYPE_CDROM;
+      return drive_type_t::DRIVE_TYPE_UKNOWN;
     }
   }
 }

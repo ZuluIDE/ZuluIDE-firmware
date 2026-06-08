@@ -68,7 +68,7 @@ static IDEZipDrive g_ide_zipdrive;
 static IDERemovable g_ide_removable;
 static IDERigidDevice g_ide_rigid;
 IDEImageFile g_ide_imagefile;
-static IDEDevice *g_ide_device;
+static IDEDevice *g_ide_device = nullptr;
 static bool g_loadedFirstImage = false;
 static bool g_isPrimary;
 
@@ -478,11 +478,6 @@ drive_type_t searchForDriveType() {
 
   imgIter.Cleanup();
 
-  // If nothing is found, default to a CDROM.
-  if (matching_type == Image::ImageType::unknown) {
-    matching_type = Image::ImageType::cdrom;
-  }
-
   return Image::ToDriveType(matching_type);
 }
 
@@ -490,7 +485,7 @@ drive_type_t searchForDriveType() {
 // Find images for configuration of dual drive mode.
 // The images are called "HD0.*" and "HD1.*" so we need to find out the file extension.
 // If this returns true, ide_protocol_init() has already been called.
-bool setupDualDrive()
+bool setupDualDrive(std::unique_ptr<zuluide::status::IDeviceStatus> &device)
 {
   FsFile root = SD.open("/");
   FsFile file;
@@ -498,7 +493,6 @@ bool setupDualDrive()
   char HD1_filename[MAX_FILE_PATH + 1];
   bool found_hd0 = false;
   bool found_hd1 = false;
-
   while (file.openNext(&root, O_RDONLY))
   {
     if (!file.isDir())
@@ -530,6 +524,7 @@ bool setupDualDrive()
     g_ide_imagefile.set_drive_type(DRIVE_TYPE_RIGID);
     g_ide_rigid.set_image(&g_ide_imagefile);
     g_ide_device = &g_ide_rigid;
+    device = std::move(std::make_unique<zuluide::status::RigidStatus>(zuluide::status::RigidStatus::Status::NoImage));
 
     g_ide_imagefile2.open_file(HD1_filename);
     g_ide_imagefile2.set_drive_type(DRIVE_TYPE_RIGID);
@@ -542,31 +537,62 @@ bool setupDualDrive()
   }
   else if (found_hd0)
   {
-    dbgmsg("Operating as two drives, primary HDD ", HD0_filename);
+    if (g_ide_device)
+    {
+      dbgmsg("Operating as two drives, primary HDD ", HD0_filename);
 
-    g_ide_imagefile2.open_file(HD0_filename);
-    g_ide_imagefile2.set_drive_type(DRIVE_TYPE_RIGID);
-    g_ide_rigid2.set_image(&g_ide_imagefile2);
-    g_ide_device2 = &g_ide_rigid2;
+      g_ide_imagefile2.open_file(HD0_filename);
+      g_ide_imagefile2.set_drive_type(DRIVE_TYPE_RIGID);
+      g_ide_rigid2.set_image(&g_ide_imagefile2);
+      g_ide_device2 = &g_ide_rigid2;
 
-    // The "dual" device is the primary drive, normal control logic applies to the secondary drive.
-    g_isPrimary = false;
-    ide_protocol_init(g_ide_device2, g_ide_device);
-    return true;
+      // The "dual" device is the primary drive, normal control logic applies to the secondary drive.
+      g_isPrimary = false;
+      ide_protocol_init(g_ide_device2, g_ide_device);
+      return true;
+    }
+    else
+    {
+      dbgmsg("Primary dual drive HDD image found, ",HD0_filename,", but no media for other device. Setting up as a single HDD on the primary channel");
+      g_ide_imagefile.open_file(HD0_filename);
+      g_ide_imagefile.set_drive_type(DRIVE_TYPE_RIGID);
+      g_ide_rigid.set_image(&g_ide_imagefile);
+      g_ide_device = &g_ide_rigid;
+      device = std::move(std::make_unique<zuluide::status::RigidStatus>(zuluide::status::RigidStatus::Status::NoImage));
+      g_isPrimary = true;
+      ide_protocol_init(g_ide_device, nullptr); // Primary device
+      return true;
+    }
   }
   else if (found_hd1)
   {
-    dbgmsg("Operating as two drives, secondary HDD ", HD1_filename);
 
-    g_ide_imagefile2.open_file(HD1_filename);
-    g_ide_imagefile2.set_drive_type(DRIVE_TYPE_RIGID);
-    g_ide_rigid2.set_image(&g_ide_imagefile2);
-    g_ide_device2 = &g_ide_rigid2;
+    if (g_ide_device)
+    {
+      dbgmsg("Operating as two drives, secondary HDD ", HD1_filename);
 
-    // The "dual" device is the secondary drive, normal control logic applies to the primary drive.
-    g_isPrimary = true;
-    ide_protocol_init(g_ide_device, g_ide_device2);
-    return true;
+      g_ide_imagefile2.open_file(HD1_filename);
+      g_ide_imagefile2.set_drive_type(DRIVE_TYPE_RIGID);
+      g_ide_rigid2.set_image(&g_ide_imagefile2);
+      g_ide_device2 = &g_ide_rigid2;
+
+      // The "dual" device is the secondary drive, normal control logic applies to the primary drive.
+      g_isPrimary = true;
+      ide_protocol_init(g_ide_device, g_ide_device2);
+      return true;
+    }
+    else
+    {
+      dbgmsg("Secondary dual drive HDD image found, ",HD1_filename,", but no media for other device. Setting up as a single HDD on the secondary channel");
+      g_ide_imagefile.open_file(HD1_filename);
+      g_ide_imagefile.set_drive_type(DRIVE_TYPE_RIGID);
+      g_ide_rigid.set_image(&g_ide_imagefile);
+      g_ide_device = &g_ide_rigid;
+      device = std::move(std::make_unique<zuluide::status::RigidStatus>(zuluide::status::RigidStatus::Status::NoImage));
+      g_isPrimary = false;
+      ide_protocol_init(nullptr, g_ide_device); // Secondary device
+      return true;
+    }
   }
 
   // No dual drive image found
@@ -574,6 +600,54 @@ bool setupDualDrive()
 }
 #endif
 
+
+#ifdef ENABLE_DUAL_DEVICE
+// Check if a dual drive image exists
+static bool hasDualDriveImagesOnly()
+{
+  FsFile root = SD.open("/");
+  FsFile file;
+  bool found_hd0 = false;
+  bool found_hd1 = false;
+  bool found_valid_image = false;
+
+  while (file.openNext(&root, O_RDONLY))
+  {
+    char filename[MAX_FILE_PATH + 1];
+    if (file.getName(filename, sizeof(filename)) > MAX_FILE_PATH)
+    {
+      continue; // Too long filename
+    }
+
+    if (!file.isDir())
+    {
+      if (strncasecmp(filename, DUALDRIVE_IMAGE_PRIMARY, strlen(DUALDRIVE_IMAGE_PRIMARY)) == 0)
+      {
+        found_hd0 = true;
+      }
+      else if (strncasecmp(filename, DUALDRIVE_IMAGE_SECONDARY, strlen(DUALDRIVE_IMAGE_SECONDARY)) == 0)
+      {
+        found_hd1 = true;
+      }
+    }
+
+    if (zuluide::images::ImageIterator::fileIsValidImage(file, filename))
+    {
+      found_valid_image = true;
+    }
+  }
+  bool drive_images_only = false;
+  
+  drive_images_only = found_hd0 && found_hd1;
+  
+  if (!drive_images_only)
+    drive_images_only = found_hd0 && !found_valid_image;
+
+  if (!drive_images_only)
+    drive_images_only = found_hd1 && !found_valid_image;
+  return drive_images_only;
+}
+#endif
 /***
  * Configures the status controller. The status controller is used to
 */
@@ -643,6 +717,14 @@ void setupStatusController()
     device = std::move(std::make_unique<zuluide::status::RigidStatus>(zuluide::status::RigidStatus::Status::NoImage));
     break;
   default:
+#ifdef ENABLE_DUAL_DEVICE
+    if (hasDualDriveImagesOnly())
+    {
+      g_ide_device = nullptr;
+      break;
+    }
+#endif
+    // Defaults to CD-ROM
     g_ide_device = &g_ide_cdrom;
     g_ide_imagefile.set_drive_type(DRIVE_TYPE_CDROM);
     device = std::move(std::make_unique<zuluide::status::CDROMStatus>(zuluide::status::CDROMStatus::Status::NoImage, zuluide::status::CDROMStatus::DriveSpeed::Single));
@@ -656,7 +738,7 @@ void setupStatusController()
   bool ide_protocol_init_done = false;
 
 #ifdef ENABLE_DUAL_DEVICE
-  if (setupDualDrive())
+  if (setupDualDrive(device))
   {
     // Dual drive file name overrides DIP switch setting
     ide_protocol_init_done = true;
