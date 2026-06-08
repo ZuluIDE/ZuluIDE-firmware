@@ -24,4 +24,5 @@
 **/
 
 void usb_command_poll();
-void usb_command_handler(char *cmd);
+bool usb_has_factory_command_handler();
+void usb_factory_command_handler(char *cmd);

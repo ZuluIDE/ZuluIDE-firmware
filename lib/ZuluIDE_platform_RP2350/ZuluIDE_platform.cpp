@@ -775,7 +775,12 @@ void platform_reset_mcu()
     watchdog_reboot(0, 0, 2000);
 }
 
-void usb_command_handler(char *cmd)
+bool usb_has_factory_command_handler()
+{
+    return false;
+}
+
+void usb_factory_command_handler(char *cmd)
 {
 }
 

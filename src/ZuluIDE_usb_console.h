@@ -41,5 +41,4 @@ bool ideConsoleMenuActive();
 void ideConsoleMenuProcess(char c);
 
 // Enter the media management menu.
-// Called by usb_command_poll() when the user presses 'm'.
 void ideConsoleMenuEnter();

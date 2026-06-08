@@ -272,16 +272,18 @@ void ideConsoleMenuEnter()
     }
 
     s_state = MenuState::MainMenu;
-    show_main_menu();
 }
 
 void ideConsoleMenuProcess(char c)
 {
+    static bool first_run = true;
     switch (s_state)
     {
         // ----------------------------------------------------------------
         case MenuState::MainMenu:
         {
+            if (first_run)
+                show_main_menu();
             switch (c | 0x20)
             {
                 case 'm':
@@ -297,9 +299,11 @@ void ideConsoleMenuProcess(char c)
                     break;
 
                 default:
-                    show_main_menu();
+                    if (!first_run)
+                        show_main_menu();
                     break;
             }
+            first_run = false;
             break;
         }
 
@@ -413,7 +417,7 @@ void ideConsoleMenuProcess(char c)
 
                 case 'q':
                     logmsg("Exiting media menu.");
-                    s_state = MenuState::Inactive;
+                    s_state = MenuState::MainMenu;
                     break;
 
                 default:
@@ -442,7 +446,7 @@ void ideConsoleMenuProcess(char c)
                 s_num_len    = 0;
                 s_num_buf[0] = '\0';
                 logmsg("Exiting media menu.");
-                s_state      = MenuState::Inactive;
+                s_state      = MenuState::MainMenu;
                 return;
             }
 

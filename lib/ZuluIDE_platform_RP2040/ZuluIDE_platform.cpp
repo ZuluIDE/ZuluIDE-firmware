@@ -773,7 +773,11 @@ bool install_license(char *buf)
     }
 }
 
-void usb_command_handler(char *cmd)
+bool usb_has_factory_command_handler()
+{
+    return true;
+}
+void usb_factory_command_handler(char *cmd)
 {
     if (strncasecmp(cmd, "license ", 8) == 0)
     {
@@ -788,46 +792,6 @@ void usb_command_handler(char *cmd)
         else
         {
             install_license(p);
-        }
-    }
-}
-
-// Poll for commands sent through the USB serial port
-void usb_command_poll()
-{
-    static uint8_t rx_buf[64];
-    static int rx_len;
-
-    uint32_t available = Serial.available();
-    if (available > 0)
-    {
-        available = std::min<uint32_t>(available, sizeof(rx_buf) - rx_len);
-        Serial.readBytes(rx_buf + rx_len, available);
-        rx_len += available;
-    }
-
-    if (rx_len > 0)
-    {
-        char *first = (char*)rx_buf;
-        for (int i = 0; i < rx_len; i++)
-        {
-            if (rx_buf[i] == '\n' || rx_buf[i] == '\r')
-            {
-                // Got complete line
-                rx_buf[i] = '\0';
-                usb_command_handler(first);
-                rx_len = 0;
-            }
-            else if (isspace(*first))
-            {
-                first++;
-            }
-        }
-
-        if (rx_len == sizeof(rx_buf))
-        {
-            // Too long line, discard
-            rx_len = 0;
         }
     }
 }

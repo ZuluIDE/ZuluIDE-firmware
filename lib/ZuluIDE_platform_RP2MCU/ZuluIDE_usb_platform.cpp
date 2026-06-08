@@ -27,18 +27,17 @@
 #include <ZuluIDE_usb_console.h>
 #include <stdint.h>
 #include <SerialUSB.h>
+#include <ZuluIDE_log.h>
 #include "ZuluIDE_usb_platform.h"
 
 // Poll for commands sent through the USB serial port.
 // When the interactive media menu is open every incoming byte is fed
 // directly to the menu state machine.  Otherwise the existing line-buffer
-// logic handles special commands (e.g. "license <key>"), and a bare 'm'
-// activates the media management menu without requiring Enter.
+// logic handles special commands (e.g. "license <key>")
 void usb_command_poll()
 {
     static uint8_t rx_buf[64];
     static int rx_len;
-    static bool menu_shown = false;
 
     uint32_t available = Serial.available();
     if (available > 0)
@@ -50,6 +49,59 @@ void usb_command_poll()
 
     if (rx_len == 0) return;
 
+    // Initial mode: Display the menu if any key but `L` or whitespace is pressed,
+    // This is to enable accumulation of a full line for the usb_factory_command_handler()
+    if (!ideConsoleMenuActive())
+    {
+        if (usb_has_factory_command_handler())
+        {
+            char *first = reinterpret_cast<char *>(rx_buf);
+            bool trimmed = false;
+            for (int i = 0; i < rx_len; i++)
+            {
+                char c = static_cast<char>(rx_buf[i]);
+
+                while (!trimmed && isspace(static_cast<unsigned char>(c)))
+                {
+                    first++;
+                    i++;
+                    // If the input is all spaces, return
+                    if (i >= rx_len)
+                    {
+                        rx_len = 0;
+                        return;
+                    }
+                }
+
+                if (!trimmed)
+                    c = static_cast<char>(rx_buf[i]);
+                trimmed = true;
+
+
+                // Show main menu on first non-whitespace character (except 'l')
+                if (*first != 'l' && *first != 'L')
+                {
+                    ideConsoleMenuEnter();
+                    ideConsoleMenuProcess(static_cast<char>(rx_buf[i]));
+                    rx_len = 0;
+                    return;
+                }
+
+                if ((*first == 'l' || *first == 'L') && (c == '\n' || c == '\r'))
+                {
+                    rx_buf[i] = '\0';
+                    usb_factory_command_handler(first);
+                    rx_len = 0;
+                    return;
+                }
+            }
+        }
+        else
+        {
+            ideConsoleMenuEnter();
+        }
+    }
+
     // When the interactive console is active, feed every byte directly
     // to its state machine and skip the line-buffer logic entirely.
     if (ideConsoleMenuActive())
@@ -57,46 +109,13 @@ void usb_command_poll()
         for (int i = 0; i < rx_len; i++)
             ideConsoleMenuProcess(static_cast<char>(rx_buf[i]));
         rx_len = 0;
-        menu_shown = false;
         return;
     }
 
-    // Normal mode: scan for 'm'/'M' to enter the media menu immediately,
-    // or accumulate a full line for usb_command_handler().
-    char *first = reinterpret_cast<char *>(rx_buf);
-    for (int i = 0; i < rx_len; i++)
-    {
-        char c = static_cast<char>(rx_buf[i]);
-        if (c == 'm' || c == 'M')
-        {
-            ideConsoleMenuEnter();
-            rx_len = 0;
-            menu_shown = false;
-            return;
-        }
-        if (c == '\n' || c == '\r')
-        {
-            rx_buf[i] = '\0';
-            usb_command_handler(first);
-            rx_len = 0;
-            menu_shown = false;
-            return;
-        }
-        // Show main menu on first non-whitespace character (except 'l')
-        if (!menu_shown && !isspace(static_cast<unsigned char>(c)) && c != 'l' && c != 'L')
-        {
-            ideConsoleMenuEnter();
-            menu_shown = true;
-            rx_len = 0;
-            return;
-        }
-        if (isspace(static_cast<unsigned char>(c)))
-            first++;
-    }
+
 
     if (rx_len == sizeof(rx_buf))
     {
         rx_len = 0;
-        menu_shown = false;
     }
 }
