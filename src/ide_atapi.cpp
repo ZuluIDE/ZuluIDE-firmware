@@ -499,7 +499,7 @@ void IDEATAPIDevice::loaded_new_media()
     char filename[MAX_FILE_PATH + 1];
     if (m_image && m_image->get_image_name(filename, sizeof(filename)))
     {
-        logmsg("Device ", m_devconfig.dev_index, " loading media: \"", filename, "\"");
+        logmsg(get_type_name(), " loading media: \"", filename, "\"");
     }
 }
 
@@ -1675,31 +1675,33 @@ void IDEATAPIDevice::eject_media()
 
 void IDEATAPIDevice::insert_media(IDEImage *image)
 {
-    if (m_devinfo.removable)
+    if (!m_devinfo.removable)
+        return;
+
+    char filename[MAX_FILE_PATH + 1];
+
+    // Use the already-open image directly if one was provided.
+    if (image && image->get_image_name(filename, sizeof(filename)))
     {
-        zuluide::images::ImageIterator img_iterator;
-        char filename[MAX_FILE_PATH+1];
-
-        img_iterator.Reset();
-        if (!img_iterator.IsEmpty())
-        {
-            if (image && image->get_image_name(filename, sizeof(filename)))
-            {
-                if (!img_iterator.MoveToFile(filename))
-                    img_iterator.MoveNext();
-            }
-            else
-                img_iterator.MoveNext();
-
-            g_ide_imagefile.clear();
-            if (g_ide_imagefile.open_file(img_iterator.Get().GetFilename().c_str()))
-            {
-                set_image(&g_ide_imagefile);
-                loaded_new_media();
-            }
-        }
-        img_iterator.Cleanup();
+        set_image(image);
+        loaded_new_media();
+        return;
     }
+
+    // No open image provided; use the iterator to find and open one.
+    zuluide::images::ImageIterator img_iterator;
+    img_iterator.Reset();
+    if (!img_iterator.IsEmpty())
+    {
+        img_iterator.MoveNext();
+        g_ide_imagefile.clear();
+        if (g_ide_imagefile.open_file(img_iterator.Get().GetFilename().c_str()))
+        {
+            set_image(&g_ide_imagefile);
+            loaded_new_media();
+        }
+    }
+    img_iterator.Cleanup();
 }
 
 bool IDEATAPIDevice::insert_next_media(IDEImage *image)
@@ -1735,6 +1737,11 @@ bool IDEATAPIDevice::insert_next_media(IDEImage *image)
             g_ide_imagefile.clear();
             if (g_ide_imagefile.open_file(img_iterator.Get().GetFilename().c_str(), !m_devinfo.writable))
             {
+                // Set the image on the device before notifying ZuluControl.
+                // status_observer() will detect the file is already open and skip
+                // its own load_image() call, preventing a duplicate open and
+                // a duplicate loaded_new_media().
+                set_image(&g_ide_imagefile);
                 g_StatusController.LoadImage(img_iterator.Get());
                 g_previous_controller_status = g_StatusController.GetStatus();
                 loaded_new_media();

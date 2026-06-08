@@ -27,6 +27,7 @@
 #include "ZuluIDE_log.h"
 #include "ZuluIDE_config.h"
 #include <ZuluControl_platform.h>
+#include <ZuluIDE_usb_platform.h>
 #include <ZuluIDE.h>
 #include "ide_phy.h"
 #include <SdFat.h>
@@ -567,26 +568,31 @@ extern "C" void panic(const char *fmt, ...)
 // also starts calling this after 2 seconds.
 // This ensures that log messages get passed even if code hangs,
 // but does not unnecessarily delay normal execution.
+static uint32_t g_usb_logpos = 0;
+
 static void usb_log_poll()
 {
-    static uint32_t logpos = 0;
-
     if (Serial.availableForWrite())
     {
         // Retrieve pointer to log start and determine number of bytes available.
         uint32_t available = 0;
-        const char *data = log_get_buffer(&logpos, &available);
+        const char *data = log_get_buffer(&g_usb_logpos, &available);
                 // Limit to CDC packet size
         uint32_t len = available;
         if (len == 0) return;
         if (len > CFG_TUD_CDC_EP_BUFSIZE) len = CFG_TUD_CDC_EP_BUFSIZE;
-        
+
         // Update log position by the actual number of bytes sent
         // If USB CDC buffer is full, this may be 0
         uint32_t actual = 0;
         actual = Serial.write(data, len);
-        logpos -= available - actual;
+        g_usb_logpos -= available - actual;
     }
+}
+
+bool platform_usb_log_is_flushed()
+{
+    return g_usb_logpos >= log_get_buffer_len();
 }
 
 // Use ADC to implement supply voltage monitoring for the +3.0V rail.
@@ -769,48 +775,13 @@ void platform_reset_mcu()
     watchdog_reboot(0, 0, 2000);
 }
 
-void usb_command_handler(char *cmd)
+bool usb_has_factory_command_handler()
 {
+    return false;
 }
 
-// Poll for commands sent through the USB serial port
-void usb_command_poll()
+void usb_factory_command_handler(char *cmd)
 {
-    static uint8_t rx_buf[64];
-    static int rx_len;
-
-    uint32_t available = Serial.available();
-    if (available > 0)
-    {
-        available = std::min<uint32_t>(available, sizeof(rx_buf) - rx_len);
-        Serial.readBytes(rx_buf + rx_len, available);
-        rx_len += available;
-    }
-
-    if (rx_len > 0)
-    {
-        char *first = (char*)rx_buf;
-        for (int i = 0; i < rx_len; i++)
-        {
-            if (rx_buf[i] == '\n' || rx_buf[i] == '\r')
-            {
-                // Got complete line
-                rx_buf[i] = '\0';
-                usb_command_handler(first);
-                rx_len = 0;
-            }
-            else if (isspace(*first))
-            {
-                first++;
-            }
-        }
-
-        if (rx_len == sizeof(rx_buf))
-        {
-            // Too long line, discard
-            rx_len = 0;
-        }
-    }
 }
 
 // Pass forwards log messages from core1 code.

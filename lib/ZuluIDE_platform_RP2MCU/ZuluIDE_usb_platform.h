@@ -1,5 +1,5 @@
 /**
- * ZuluIDE™ - Copyright (c) 2024 Rabbit Hole Computing™
+ * ZuluIDE™ - Copyright (c) 2026 Rabbit Hole Computing™
  *
  * ZuluIDE™ firmware is licensed under the GPL version 3 or any later version. 
  *
@@ -23,30 +23,6 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
 **/
 
-// Implements ATAPI command handlers for emulating a generic removable drive
-
-#pragma once
-
-#include "ide_atapi.h"
-
-class IDERemovable: public IDEATAPIDevice
-{
-public:
-    virtual void initialize(int devidx);
-    virtual const char* get_type_name() const override { return "Removable"; }
-
-    virtual void print_device_config() override;
-
-    virtual void set_image(IDEImage *image);
-
-    virtual uint64_t capacity() override;
-
-protected:
-    virtual bool handle_atapi_command(const uint8_t *cmd) override;
-
-    virtual bool atapi_format_unit(const uint8_t *cmd);
-    virtual bool atapi_read_format_capacities(const uint8_t *cmd);
-    virtual bool atapi_verify(const uint8_t *cmd);
-
-    virtual size_t atapi_get_mode_page(uint8_t page_ctrl, uint8_t page_idx, uint8_t *buffer, size_t max_bytes) override;
-};
+void usb_command_poll();
+bool usb_has_factory_command_handler();
+void usb_factory_command_handler(char *cmd);

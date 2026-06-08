@@ -113,13 +113,18 @@ bool IDEZipDrive::handle_command(ide_registers_t *regs)
 
 void IDEZipDrive::eject_media()
 {
+    if (m_removable.ejected) return;
+    // Set ejected before calling SetIsCardPresent — that call fires status_observer()
+    // synchronously, which calls button_eject_media() → eject_media() again.
+    // Without this guard the recursion stack-overflows.
+    m_removable.ejected = true;
+
     char filename[MAX_FILE_PATH+1];
     if (m_image && m_image->get_image_name(filename, sizeof(filename)))
         logmsg("Device ejecting media: \"", filename, "\"");
     else
         logmsg("Eject requested, no media to eject");
     g_StatusController.SetIsCardPresent(false);
-    m_removable.ejected = true;
 }
 
 
@@ -151,7 +156,6 @@ void IDEZipDrive::insert_media(IDEImage *image)
         g_ide_imagefile.clear();
         if (g_ide_imagefile.open_file(img_iterator.Get().GetFilename().c_str()))
         {
-            logmsg("-- Device loading media: \"", img_iterator.Get().GetFilename().c_str(), "\"");
             set_image(&g_ide_imagefile);
             loaded_new_media();
         }

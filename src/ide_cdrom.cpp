@@ -1874,23 +1874,32 @@ void IDECDROMDevice::button_eject_media()
 void IDECDROMDevice::insert_media(IDEImage *image)
 {
     doStopAudio();
-    zuluide::images::ImageIterator img_iterator;
 
+    // Use the already-open image directly if one was provided
+    if (image && image->get_image_name(m_filename, sizeof(m_filename)))
+    {
+        set_image(image);
+        if (m_removable.prevent_removable)
+        {
+            eject_then_load_new_media();
+        }
+        else
+        {
+            set_esn_event(esn_event_t::CycleRemovalToNewMedia);
+            IDEATAPIDevice::loaded_new_media();
+        }
+        return;
+    }
+
+    // No open image provided; use the iterator to find and open one.
+    zuluide::images::ImageIterator img_iterator;
     img_iterator.Reset();
     if (!img_iterator.IsEmpty())
     {
-        if (image && image->get_image_name(m_filename, sizeof(m_filename)))
-        {
-            if (!img_iterator.MoveToFile(m_filename))
-                img_iterator.MoveNext();
-        }
-        else
-            img_iterator.MoveNext();
-
+        img_iterator.MoveNext();
         g_ide_imagefile.clear();
         if (g_ide_imagefile.open_file(img_iterator.Get().GetFilename().c_str(), true))
         {
-            logmsg("-- Device loading media: \"", img_iterator.Get().GetFilename().c_str(), "\"");
             set_image(&g_ide_imagefile);
             if (m_removable.prevent_removable)
             {

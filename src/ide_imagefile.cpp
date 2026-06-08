@@ -52,7 +52,6 @@ void IDEImageFile::clear()
     m_first_sector = 0;
     m_capacity = 0;
     m_read_only = false;
-
 }
 
 bool IDEImageFile::open_file(const char *filename, bool read_only)
