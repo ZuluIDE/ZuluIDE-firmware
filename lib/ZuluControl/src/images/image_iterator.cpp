@@ -336,6 +336,12 @@ bool ImageIterator::fileIsValidImage(FsFile& file, const char* fileName, bool wa
       if (warning) logmsg("-- Ignoring directory \"",fileName,"\", first character is not alphanumeric");
       return false;
     }
+
+    if (strncasecmp(fileName, "zulu", 4) == 0) {
+      // Ignore all files that start with "zulu"
+      return false;
+    }
+
     if (!folderContainsCueSheet(file))
     {
       if (warning) logmsg("-- Ignoring directory \"",fileName,"\", no .cue file found within or .cue filename exceeds max length ", MAX_FILE_PATH - 1);
