@@ -36,11 +36,14 @@
 #define ZULU_FW_VERSION FW_VER_NUM "-" FW_VER_SUFFIX
 
 // Configuration and log file paths
-#define CONFIGFILE  "zuluide.ini"
-#define LOGFILE     "zululog.txt"
-#define CRASHFILE   "zuluerr.txt"
-#define LICENSEFILE "zuluide.lic"
-#define LASTFILE    "zululast.txt"
+#define CONFIGFILE    "zuluide.ini"
+#define LOGFILE       "zululog.txt"
+#define LOGFILEPREV   "zululog_prev.txt"
+#define LOGFILEDIR    "zuluide_log"
+#define LOGFILEROTATE "zululog_rotate"
+#define CRASHFILE     "zuluerr.txt"
+#define LICENSEFILE   "zuluide.lic"
+#define LASTFILE      "zululast.txt"
 
 // File names used for firmware update from SD card
 #define DEF_STRINGFY(DEF) STRINGFY(DEF)
