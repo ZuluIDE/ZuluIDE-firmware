@@ -487,17 +487,22 @@ void init_logfile()
                                 // Write a copy of the LOGFILEPREV in the LOGFILEDIR directory
                                 while (true)
                                 {
-                                    size_t bytes_read = prev_log_file.readBytes((uint8_t*)g_ide_buffer, sizeof(g_ide_buffer));
-                                    if (bytes_read)
+                                    int bytes_read = prev_log_file.read(g_ide_buffer, sizeof(g_ide_buffer));
+                                    if (bytes_read < 0)
                                     {
-                                        size_t bytes_written = destination.write((uint8_t*)g_ide_buffer, bytes_read);
+                                        logmsg("Log rotation error reading ", LOGFILEPREV, " to buffer");
+                                        break;
+                                    }
+                                    if (bytes_read > 0)
+                                    {
+                                        size_t bytes_written = destination.write((void *)g_ide_buffer, bytes_read);
                                         if (bytes_written != bytes_read)
                                         {
-                                            logmsg("Log rotation error copying ", LOGFILEPREV, " to ", filename);
+                                            logmsg("Log rotation error writing ", LOGFILEPREV, " to ", filename);
                                             break;
                                         }
                                     }
-                                    else
+                                    if (bytes_read != sizeof(g_ide_buffer))
                                     {
                                         break;
                                     }
