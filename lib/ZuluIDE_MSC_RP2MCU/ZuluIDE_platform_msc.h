@@ -44,4 +44,10 @@ bool platform_run_msc();
 /* perform any cleanup tasks for the MSC-specific functionality */
 void platform_exit_msc();
 
+/* returns true while the MSC loop is running */
+bool platform_in_msc_mode();
+
+/* signal the MSC loop to exit on the next iteration */
+void platform_request_msc_exit();
+
 #endif

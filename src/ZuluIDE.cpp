@@ -1107,15 +1107,19 @@ void zuluide_init(void)
 
 #ifdef PLATFORM_MASS_STORAGE
   static bool check_mass_storage = true;
-  if (check_mass_storage && ini_getbool("IDE", "enable_usb_mass_storage", false, CONFIGFILE))
+  if (check_mass_storage)
   {
     check_mass_storage = false;
-    // perform checks to see if a computer is attached and return true if we should enter MSC mode.
-    if (platform_sense_msc())
+    bool forced_msc = platform_rebooted_into_msc();
+    if (forced_msc || ini_getbool("IDE", "enable_usb_mass_storage", false, CONFIGFILE))
     {
-      zuluide_msc_loop();
-      logmsg("Re-processing filenames and zuluide.ini config parameters");
-      zuluide_setup_sd_card();
+      // Enter MSC mode if forced by menu reboot or USB host is detected.
+      if (forced_msc || platform_sense_msc())
+      {
+        zuluide_msc_loop();
+        logmsg("Re-processing filenames and zuluide.ini config parameters");
+        zuluide_setup_sd_card();
+      }
     }
   }
 #endif

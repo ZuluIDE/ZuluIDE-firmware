@@ -72,6 +72,10 @@
 #define WATCHDOG_BUS_RESET_TIMEOUT 15000
 #define WATCHDOG_CRASH_TIMEOUT 30000
 
+// Magic number written to watchdog scratch[0] before a reboot to request
+// USB SD card reader mode.  Cleared by platform_rebooted_into_msc() on startup.
+#define REBOOT_INTO_MSC_MAGIC_NUM 0x5eeded
+
 // Prefix for command file to create new image (case-insensitive)
 #define CREATEFILE "create"
 

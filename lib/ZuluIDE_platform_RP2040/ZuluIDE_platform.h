@@ -100,8 +100,26 @@ int platform_get_device_id(void);
 // Setup soft watchdog if supported
 void platform_reset_watchdog();
 
-// Reset MCU
+// Reset MCU normally.
 void platform_reset_mcu();
+
+// Reset MCU into UF2 bootloader mode.
+void platform_reset_mcu_uf2();
+
+// Write MSC-mode magic to watchdog scratch[0] and reset MCU.
+// On the next boot platform_rebooted_into_msc() will return true.
+void platform_reset_mcu_msc();
+
+// Returns true (once) if this boot was requested for USB SD card reader mode.
+// Clears the scratch register so subsequent calls return false.
+bool platform_rebooted_into_msc();
+
+#ifdef PLATFORM_MASS_STORAGE
+// Returns true while the USB SD card reader loop is running.
+bool platform_in_msc_mode();
+// Signal the running MSC loop to exit on its next iteration.
+void platform_request_msc_exit();
+#endif
 
 // Poll function that is called every few milliseconds.
 // The SD card is free to access during this time, and pauses up to

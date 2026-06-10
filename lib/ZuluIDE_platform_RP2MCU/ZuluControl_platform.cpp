@@ -37,11 +37,65 @@ static void processStatusUpdate(const zuluide::status::SystemStatus &currentStat
      g_I2cServer.HandleUpdate(currentStatus);
 }
 
+static void recover_i2c_bus()
+{
+    // Temporarily take manual control of SCL/SDA to clock out any device
+    // that got stuck mid-transaction (e.g. due to an unexpected reset).
+    gpio_set_function(GPIO_I2C_SCL, GPIO_FUNC_SIO);
+    gpio_set_function(GPIO_I2C_SDA, GPIO_FUNC_SIO);
+    gpio_pull_up(GPIO_I2C_SCL);
+    gpio_pull_up(GPIO_I2C_SDA);
+    gpio_set_dir(GPIO_I2C_SCL, false);  // SCL: input to read current line state
+    if (!gpio_get(GPIO_I2C_SCL))
+    {
+        // A slave is clock-stretching (holding SCL low). Wait for it to release
+        // before we attempt to drive SCL ourselves.
+        logmsg("I2C SCL held low by slave, waiting up to 200ms for release");
+        for (int i = 0; i < 200 && !gpio_get(GPIO_I2C_SCL); i++)
+        {
+            busy_wait_us_32(1000);
+        }
+        if (!gpio_get(GPIO_I2C_SCL))
+            logmsg("I2C SCL still held low after timeout, proceeding anyway");
+    }
+    gpio_set_dir(GPIO_I2C_SCL, true);  // SCL: output
+    gpio_set_dir(GPIO_I2C_SDA, false);  // SDA: input
+    gpio_put(GPIO_I2C_SCL, 1);
+
+    // Toggle SCL up to 16 times until SDA is released (HIGH)
+    for (int i = 0; i < 16; i++)
+    {
+        gpio_put(GPIO_I2C_SCL, 0);
+        busy_wait_us_32(5);
+        gpio_put(GPIO_I2C_SCL, 1);
+        busy_wait_us_32(5);
+        if (gpio_get(GPIO_I2C_SDA))
+        {
+            logmsg("Cleared I2C on loop ", (int) i);
+            break;
+        }
+    }
+
+    // Issue a STOP condition: SDA low → SCL high → SDA high
+    gpio_set_dir(GPIO_I2C_SDA, true);
+    gpio_put(GPIO_I2C_SCL, 0);
+    busy_wait_us_32(5);
+    gpio_put(GPIO_I2C_SDA, 0);
+    busy_wait_us_32(5);
+    gpio_put(GPIO_I2C_SCL, 1);
+    busy_wait_us_32(5);
+    gpio_put(GPIO_I2C_SDA, 1);
+    busy_wait_us_32(5);
+    // Caller is responsible for re-initializing or closing the I2C peripheral.
+}
+
 uint8_t platform_check_for_controller()
 {
     static bool checked = false;
     static uint8_t controller_found = 0;
     if (checked) return controller_found;
+    recover_i2c_bus();
+    g_wire.begin();
     g_wire.setClock(100000);
     // Setting the drive strength seems to help the I2C bus with the Pico W controller and the controller OLED display
     // to communicate and handshake properly
@@ -98,6 +152,14 @@ void platform_set_device_control(zuluide::status::DeviceControlSafe* deviceContr
     g_I2cServer.SetDeviceControl(deviceControl);
  }
 
+
+void platform_close_i2c()
+{
+    // Release any clock-stretching slave and issue a STOP before closing,
+    // so the slave is not left mid-transaction after the MCU reboots.
+    recover_i2c_bus();
+    g_wire.end();
+}
 
 void platform_wifi_controller_connect()
 {

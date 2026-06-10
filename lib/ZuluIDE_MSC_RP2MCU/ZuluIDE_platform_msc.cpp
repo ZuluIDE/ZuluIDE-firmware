@@ -44,6 +44,9 @@
 // external global SD variable
 extern SdFs SD;
 
+// definition owned here so the library is self-contained for the bootloader link
+volatile MSC_LEDState MSC_LEDMode;
+
 static struct {
   bool    unitReady = false;
   uint8_t usbEpOut;
@@ -89,6 +92,16 @@ void platform_enter_msc() {
     USB.connect();
     g_MSC.usbRegistered = true;
   }
+}
+
+/* returns true while the MSC loop is running */
+bool platform_in_msc_mode() {
+  return g_MSC.unitReady;
+}
+
+/* signal the MSC loop to exit on the next iteration */
+void platform_request_msc_exit() {
+  g_MSC.unitReady = false;
 }
 
 /* perform any cleanup tasks for the MSC-specific functionality */

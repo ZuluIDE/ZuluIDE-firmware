@@ -31,12 +31,10 @@
 #include "ZuluIDE.h"
 #include "ZuluIDE_log.h"
 #include "ZuluIDE_msc.h"
+#include <ZuluIDE_usb_platform.h>
 
 // external global SD variable
 extern SdFs SD;
-
-// public globals
-volatile MSC_LEDState MSC_LEDMode;
 
 // card reader operation loop
 // assumption that SD card was enumerated and is working
@@ -56,6 +54,7 @@ void zuluide_msc_loop() {
   // led remains steady on
   while(platform_run_msc()) {
     platform_reset_watchdog(); // also sends log to USB serial
+    usb_command_poll();
 
     if ((uint32_t)(millis() - sd_card_check_time) > 5000) {
       sd_card_check_time = millis();

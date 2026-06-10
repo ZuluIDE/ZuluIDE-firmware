@@ -26,17 +26,20 @@
 #include "splash_controller.h"
 #include "std_display_controller.h"
 #include "ZuluIDE_log.h"
+#include <Arduino.h>
 
 using namespace zuluide::control;
 
-SplashController::SplashController(StdDisplayController* cntrlr) : UIControllerBase(cntrlr), isInitialized(false) {
+SplashController::SplashController(StdDisplayController* cntrlr) : UIControllerBase(cntrlr), startTime(0) {
 }
 
 void SplashController::SystemStatusUpdated(const zuluide::status::SystemStatus& status) {
-  controller->SetMode(Mode::Status);
+  if ((uint32_t)(millis() - startTime) >= 1500)
+    controller->SetMode(Mode::Status);
 }
 
 DisplayState SplashController::Reset() {
+  startTime = millis();
   SplashState state;
   return DisplayState(state);
 }

@@ -26,6 +26,10 @@
 #include "ZuluIDE_platform.h"
 #include "ZuluIDE_log.h"
 #include "ZuluIDE_config.h"
+#include <hardware/watchdog.h>
+#include <hardware/irq.h>
+#include <hardware/resets.h>
+#include <pico/bootrom.h>
 #include <ZuluIDE.h>
 #include "ide_phy.h"
 #include <SdFat.h>
@@ -701,9 +705,52 @@ void platform_reset_watchdog()
     usb_log_poll();
 }
 
+static void pre_reboot_cleanup()
+{
+    ide_phy_stop_transfers();
+    platform_close_i2c();
+    if (SD.card())
+        SD.card()->syncDevice();
+    delay(1000);
+}
+
 void platform_reset_mcu()
 {
-    watchdog_reboot(0, 0, 2000);
+    pre_reboot_cleanup();
+    watchdog_reboot(0, 0, 0);
+}
+
+void platform_reset_mcu_uf2()
+{
+    pre_reboot_cleanup();
+    irq_set_enabled(USBCTRL_IRQ, false);
+    reset_block(RESETS_RESET_USBCTRL_BITS);
+    unreset_block(RESETS_RESET_USBCTRL_BITS);
+    busy_wait_ms(3);
+    reset_usb_boot(0, 0);
+}
+
+void platform_reset_mcu_msc()
+{
+    pre_reboot_cleanup();
+    watchdog_hw->scratch[0] = REBOOT_INTO_MSC_MAGIC_NUM;
+    watchdog_reboot(0, 0, 0);
+}
+
+bool platform_rebooted_into_msc()
+{
+    static bool checked = false;
+    static bool result  = false;
+    if (!checked)
+    {
+        checked = true;
+        if (watchdog_hw->scratch[0] == REBOOT_INTO_MSC_MAGIC_NUM)
+        {
+            watchdog_hw->scratch[0] = 0;
+            result = true;
+        }
+    }
+    return result;
 }
 
 // Install FPGA license key to RP2040 flash

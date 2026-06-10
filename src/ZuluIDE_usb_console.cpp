@@ -105,14 +105,19 @@ enum class MenuState : uint8_t
     MainMenu,                 // Main menu with media selection and debug toggle
     MainMenuMediaConfirm,     // Waiting for 'y' confirmation on media menu entry
     MainMenuDebugConfirm,     // Waiting for 'y' confirmation on debug toggle
+    MainMenuRebootConfirm,    // Waiting for 'y' confirmation on normal reboot
+    MainMenuUF2Confirm,       // Waiting for 'y' confirmation on UF2 bootloader reboot
+    MainMenuMSCConfirm,       // Waiting for 'y' confirmation on USB SD card reader reboot
+    MainMenuExitMSCConfirm,   // Waiting for 'y' confirmation on exiting USB SD card reader mode
     ImageSelection,           // Image list and selection for primary device
     ImageSelectionList,       // Browsing enumerated images
 };
 
-static MenuState s_state      = MenuState::Inactive;
-static int       s_image_cnt  = 0;    // cached image count for ImageSelectionList
-static char      s_num_buf[4] = {};   // digit accumulator for image selection
-static uint8_t   s_num_len    = 0;
+static MenuState s_state            = MenuState::Inactive;
+static bool      s_menu_just_entered = false; // show menu once then re-process key
+static int       s_image_cnt        = 0;    // cached image count for ImageSelectionList
+static char      s_num_buf[4]       = {};   // digit accumulator for image selection
+static uint8_t   s_num_len          = 0;
 
 // -----------------------------------------------------------------------
 // Display helpers
@@ -123,10 +128,21 @@ static void show_main_menu()
     serial_println("");
     serial_println("  ZuluIDE Main Menu");
     serial_println("  ================================================");
-    serial_println("    'm' - Media Menu");
+#ifdef PLATFORM_MASS_STORAGE
+    if (!platform_in_msc_mode())
+#endif
+        serial_println("    'm' - Media Menu");
     serial_out("    'd' - debug logging  [");
     serial_out(g_log_debug ? "ON" : "OFF");
     serial_println("]");
+    serial_println("    'r' - reboot");
+    serial_println("    'u' - reboot into UF2 bootloader");
+#ifdef PLATFORM_MASS_STORAGE
+    if (!platform_in_msc_mode())
+        serial_println("    's' - reboot into USB SD card reader mode");
+    else
+        serial_println("    'x' - exit USB SD card reader mode");
+#endif
     serial_println("  ================================================");
 }
 
@@ -259,36 +275,44 @@ bool ideConsoleMenuActive()
 
 void ideConsoleMenuEnter()
 {
-    s_num_len    = 0;
-    s_num_buf[0] = '\0';
-    s_image_cnt  = 0;
-
-    const int count = zuluide_console_device_count();
-    if (count == 0)
-    {
-        serial_println("\r\n  No IDE device configured.");
-        s_state = MenuState::Inactive;
-        return;
-    }
-
-    s_state = MenuState::MainMenu;
+    s_num_len          = 0;
+    s_num_buf[0]       = '\0';
+    s_image_cnt        = 0;
+    s_state            = MenuState::MainMenu;
+    s_menu_just_entered = true;
 }
 
 void ideConsoleMenuProcess(char c)
 {
-    static bool first_run = true;
     switch (s_state)
     {
         // ----------------------------------------------------------------
         case MenuState::MainMenu:
         {
-            if (first_run)
+            bool just_entered = s_menu_just_entered;
+            s_menu_just_entered = false;
+            if (just_entered)
                 show_main_menu();
             switch (c | 0x20)
             {
                 case 'm':
-                    s_state = MenuState::MainMenuMediaConfirm;
-                    serial_println("  Enter Media Menu? Press 'y' to confirm or any other key to cancel:");
+#ifdef PLATFORM_MASS_STORAGE
+                    if (platform_in_msc_mode())
+                    {
+                        show_main_menu();
+                        break;
+                    }
+#endif
+                    if (zuluide_console_device_count() == 0)
+                    {
+                        serial_println("  No IDE device configured.");
+                        show_main_menu();
+                    }
+                    else
+                    {
+                        s_state = MenuState::MainMenuMediaConfirm;
+                        serial_println("  Enter Media Menu? Press 'y' to confirm or any other key to cancel:");
+                    }
                     break;
 
                 case 'd':
@@ -298,12 +322,47 @@ void ideConsoleMenuProcess(char c)
                     serial_println("? Press 'y' to confirm or any other key to cancel:");
                     break;
 
+                case 'r':
+                    s_state = MenuState::MainMenuRebootConfirm;
+                    serial_println("  Reboot? Press 'y' to confirm or any other key to cancel:");
+                    break;
+
+                case 'u':
+                    s_state = MenuState::MainMenuUF2Confirm;
+                    serial_println("  Reboot into UF2 bootloader? Press 'y' to confirm or any other key to cancel:");
+                    break;
+
+#ifdef PLATFORM_MASS_STORAGE
+                case 's':
+                    if (!platform_in_msc_mode())
+                    {
+                        s_state = MenuState::MainMenuMSCConfirm;
+                        serial_println("  Reboot into USB SD card reader mode? Press 'y' to confirm or any other key to cancel:");
+                    }
+                    else
+                    {
+                        show_main_menu();
+                    }
+                    break;
+
+                case 'x':
+                    if (platform_in_msc_mode())
+                    {
+                        s_state = MenuState::MainMenuExitMSCConfirm;
+                        serial_println("  Exit USB SD card reader mode? Press 'y' to confirm or any other key to cancel:");
+                    }
+                    else
+                    {
+                        show_main_menu();
+                    }
+                    break;
+#endif
+
                 default:
-                    if (!first_run)
+                    if (!just_entered)
                         show_main_menu();
                     break;
             }
-            first_run = false;
             break;
         }
 
@@ -319,8 +378,9 @@ void ideConsoleMenuProcess(char c)
             }
             else
             {
-                s_state = MenuState::MainMenu;
-                show_main_menu();
+                s_state             = MenuState::MainMenu;
+                s_menu_just_entered = true;
+                ideConsoleMenuProcess(c);
             }
             break;
         }
@@ -332,11 +392,89 @@ void ideConsoleMenuProcess(char c)
             {
                 g_log_debug = !g_log_debug;
                 logmsg("Debug logging ", g_log_debug ? "enabled." : "disabled.");
+                s_state             = MenuState::MainMenu;
+                s_menu_just_entered = true;
+                ideConsoleMenuProcess(c);
             }
-            s_state = MenuState::MainMenu;
-            show_main_menu();
+            else
+            {
+                s_state             = MenuState::MainMenu;
+                s_menu_just_entered = true;
+                ideConsoleMenuProcess(c);
+            }
             break;
         }
+
+        // ----------------------------------------------------------------
+        case MenuState::MainMenuRebootConfirm:
+        {
+            if (c == 'y' || c == 'Y')
+            {
+                logmsg("Rebooting...");
+                platform_reset_mcu();
+            }
+            else
+            {
+                s_state             = MenuState::MainMenu;
+                s_menu_just_entered = true;
+                ideConsoleMenuProcess(c);
+            }
+            break;
+        }
+
+        // ----------------------------------------------------------------
+        case MenuState::MainMenuUF2Confirm:
+        {
+            if (c == 'y' || c == 'Y')
+            {
+                logmsg("Rebooting into UF2 bootloader...");
+                platform_reset_mcu_uf2();
+            }
+            else
+            {
+                s_state             = MenuState::MainMenu;
+                s_menu_just_entered = true;
+                ideConsoleMenuProcess(c);
+            }
+            break;
+        }
+
+#ifdef PLATFORM_MASS_STORAGE
+        // ----------------------------------------------------------------
+        case MenuState::MainMenuMSCConfirm:
+        {
+            if (c == 'y' || c == 'Y')
+            {
+                logmsg("Rebooting into USB SD card reader mode...");
+                platform_reset_mcu_msc();
+            }
+            else
+            {
+                s_state             = MenuState::MainMenu;
+                s_menu_just_entered = true;
+                ideConsoleMenuProcess(c);
+            }
+            break;
+        }
+
+        // ----------------------------------------------------------------
+        case MenuState::MainMenuExitMSCConfirm:
+        {
+            if (c == 'y' || c == 'Y')
+            {
+                logmsg("Exiting USB SD card reader mode...");
+                platform_request_msc_exit();
+                s_state = MenuState::Inactive;
+            }
+            else
+            {
+                s_state             = MenuState::MainMenu;
+                s_menu_just_entered = true;
+                ideConsoleMenuProcess(c);
+            }
+            break;
+        }
+#endif
 
         // ----------------------------------------------------------------
         case MenuState::ImageSelection:

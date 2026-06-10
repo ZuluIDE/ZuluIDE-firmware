@@ -336,6 +336,12 @@ bool ImageIterator::fileIsValidImage(FsFile& file, const char* fileName, bool wa
       if (warning) logmsg("-- Ignoring directory \"",fileName,"\", first character is not alphanumeric");
       return false;
     }
+
+    if (strncasecmp(fileName, "zulu", 4) == 0) {
+      // Ignore all directories that start with "zulu"
+      return false;
+    }
+
     if (!folderContainsCueSheet(file))
     {
       if (warning) logmsg("-- Ignoring directory \"",fileName,"\", no .cue file found within or .cue filename exceeds max length ", MAX_FILE_PATH - 1);
@@ -386,6 +392,12 @@ bool ImageIterator::is_valid_filename(const char *name, bool warning)
     // Ignore all files that start with "zulu"
     return false;
   }
+
+  if (strncasecmp(name, "sniff", 5) == 0) {
+    // Ignore all files that start with "sniff"
+    return false;
+  }
+
 
   // Check file extension
   const char *extension = strrchr(name, '.');
