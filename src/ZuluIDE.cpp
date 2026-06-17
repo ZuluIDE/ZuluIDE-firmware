@@ -993,7 +993,7 @@ void loadFirstImage() {
       {
         // If a prefix is used to define the drive type, only load prefix images for the first image
         if (prefix[0] != '\0'
-          && imgIterator.Get().GetImageType() != Image::InferImageTypeFromImagePrefix(prefix)
+          && strncasecmp(imgIterator.Get().GetFilename().c_str(), prefix, 4) != 0
         )
         {
           continue;
