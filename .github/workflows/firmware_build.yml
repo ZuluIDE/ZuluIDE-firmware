@@ -11,7 +11,7 @@ jobs:
     
     steps:
       - name: Check out code from GitHub
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           path: ZuluIDE
           fetch-depth: "0"
@@ -41,7 +41,7 @@ jobs:
           utils/create_bin_package_zip.sh
 
       - name: Upload binaries into build artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           path: ZuluIDE/distrib/*
           name: ZuluIDE binaries
