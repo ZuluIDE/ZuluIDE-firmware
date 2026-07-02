@@ -170,7 +170,9 @@ void platform_wifi_controller_connect()
 
     }
     if (!g_I2cServer.WiFiSSIDSet()) {
-        // The I2C server responded but we cannot configure wifi. This may cause issues.
-        logmsg("-- An I2C client was detected WIFI SSID is not configured. This will cause problems if the I2C client needs WIFI configuration data.");
+        // The I2C server responded but we cannot configure wifi. This is an invalid configuration which must be communicated, so it can be corrected.
+        logmsg("WARNING: An I2C client was detected, but no Wi-Fi SSID/password settings are configured in zuluide.ini");
+        logmsg("These missing ini file parameters are required to successfully connect the i2c server via Wi-Fi");
+        logmsg("Visit https://www.ZuluIDE.com/manual for further information.");
     }
 }
