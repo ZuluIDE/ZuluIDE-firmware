@@ -33,7 +33,7 @@
 #include "i2c_server_src_type.h"
 #include <string>
 
-#define I2C_API_VERSION "3.2.1"
+#define I2C_API_VERSION "4.0.0"
 
 // Delay between reading the filenames off the SD card in milliseconds
 #ifndef I2C_FILENAME_TRANSFER_DELAY
@@ -52,6 +52,9 @@
 #define I2C_SERVER_RESET 0xF
 #define I2C_SERVER_STATIC_IP 0x10
 #define I2C_SERVER_IP_ADDRESS_ACK 0x11
+#define I2C_SERVER_SD_STATUS_CHANGE 0x13  // SD card presence changed; payload[0] = 0x00 not present, 0x01 present
+#define I2C_SERVER_SD_NOT_PRESENT 0x00
+#define I2C_SERVER_SD_PRESENT     0x01
 
 #define I2C_CLIENT_NOOP 0x0
 
@@ -214,6 +217,7 @@ namespace zuluide::i2c {
     TwoWire* wire;
     DeviceControlSafe* deviceControl;
     bool isSubscribed;
+    bool apiVersionSent;
     bool devControlSet;
     bool sendFilenames;
     bool sendFiles;
@@ -221,6 +225,7 @@ namespace zuluide::i2c {
     bool updateFilenameCache;
     bool isIterating;
     bool isPresent;
+    bool lastCardPresent;
     std::string status;
     std::string ssid;
     std::string password;

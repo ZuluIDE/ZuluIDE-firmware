@@ -44,8 +44,8 @@ using namespace zuluide::i2c;
 I2CServer::I2CServer(ImageRequestPipe<i2c_server_source_t>* image_request_pipe, ImageResponsePipe<i2c_server_source_t>* image_response_pipe) : 
   imageRequestPipe(image_request_pipe), imageResponsePipe(image_response_pipe),
   filenameTransferState(FilenameTransferState::Idle), deviceControl(nullptr),
-  isSubscribed(false), devControlSet(false), sendFilenames(false), sendFiles(false),
-  sendNextImage(false), updateFilenameCache(false), isIterating(false), isPresent(false), password(""), ip(""), netmask(""), gateway(""), remoteMajorVersion(0)
+  isSubscribed(false), apiVersionSent(false), devControlSet(false), sendFilenames(false), sendFiles(false),
+  sendNextImage(false), updateFilenameCache(false), isIterating(false), isPresent(false), lastCardPresent(false), password(""), ip(""), netmask(""), gateway(""), remoteMajorVersion(0)
 {
   imageResponsePipe->AddObserver([&](const ImageResponse<i2c_server_source_t>& t){HandleImageResponse(t);});
 }
@@ -88,17 +88,23 @@ bool writeLengthPrefacedString(TwoWire *wire, uint8_t reg, uint16_t length, cons
 }
 
 bool I2CServer::CheckForDevice() {
+  apiVersionSent = false;
   auto buf = "";
   isPresent = writeLengthPrefacedString(wire, I2C_SERVER_RESET, 0, buf);
+  if (isPresent) {
+    static const char ide_api_ver[] = I2C_API_VERSION " ZuluIDE";
+    if (writeLengthPrefacedString(wire, I2C_SERVER_API_VERSION, strlen(ide_api_ver), ide_api_ver)) {
+      apiVersionSent = true;
+    }
+  }
   return isPresent;
 }
 
 void I2CServer::HandleUpdate(const SystemStatus& current) {
-  static bool lastCardPresentStatus = false;
   bool card_present = current.IsCardPresent();
-  if (lastCardPresentStatus != card_present) {
+  if (lastCardPresent != card_present) {
     updateFilenameCache = card_present;
-    lastCardPresentStatus = card_present;
+    lastCardPresent = card_present;
     if (!card_present)
     {
       RequestCleanup(i2c_server_source_t::None);
@@ -106,6 +112,11 @@ void I2CServer::HandleUpdate(const SystemStatus& current) {
     else
     {
       RequestWiFiConnect(i2c_server_source_t::None);
+    }
+    if (isPresent)
+    {
+      const uint8_t sd_payload = card_present ? I2C_SERVER_SD_PRESENT : I2C_SERVER_SD_NOT_PRESENT;
+      writeLengthPrefacedString(wire, I2C_SERVER_SD_STATUS_CHANGE, 1, (const char*)&sd_payload);
     }
   }
 
@@ -380,7 +391,21 @@ void I2CServer::Poll() {
           logmsg("I2C client failed to send API version I2C server API verion. Please upgrade both devices to the latest firmware");
 
       }
-      writeLengthPrefacedString(wire, I2C_SERVER_API_VERSION, strlen(I2C_API_VERSION), I2C_API_VERSION);
+
+      if (apiVersionSent)
+      {
+        // Expected reply to our CheckForDevice() send — consume it, no write-back needed.
+        apiVersionSent = false;
+      }
+      else
+      {
+        // ZuluControl has reset and is requesting our version — write back to complete handshake.
+        isSubscribed = false;
+        updateFilenameCache = true;
+        static const char ide_api_ver[] = I2C_API_VERSION " ZuluIDE";
+        writeLengthPrefacedString(wire, I2C_SERVER_API_VERSION, strlen(ide_api_ver), ide_api_ver);
+      }
+
       delete[] buffer;
     }
     ExitLoggingSafe();
@@ -393,10 +418,15 @@ void I2CServer::Poll() {
     if (ReadInLength(wire) != 0) {
       logmsg("Length was not 0 for subscribe request.");
     }
-    
+
     logmsg("I2C Client subscribed to updates.");
-    isSubscribed = true;    
-    
+    isSubscribed = true;
+
+    // Push current SD card status so the client has it immediately on subscribe.
+    {
+      const uint8_t sd_payload = lastCardPresent ? I2C_SERVER_SD_PRESENT : I2C_SERVER_SD_NOT_PRESENT;
+      writeLengthPrefacedString(wire, I2C_SERVER_SD_STATUS_CHANGE, 1, (const char*)&sd_payload);
+    }
     // Send over the current status.
     writeLengthPrefacedString(wire, I2C_SERVER_SYSTEM_STATUS_JSON, status.length(), status.c_str());
     ExitLoggingSafe();
