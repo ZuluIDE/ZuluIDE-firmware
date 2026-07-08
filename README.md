@@ -150,6 +150,12 @@ wifi_static_netmask="255.255.255.0"
 wifi_static_gateway="192.168.1.1"
 ```
 
+The the ZuluControl-firmware's `zulucontrol.uf2` file can be placed on the root
+of the SD card, on power up the the expansion board's firmware will be updated.
+The LED will blink rapidly on the ZuluIDE to indicate the update is occurring.
+Check the `zululog.txt` file on the SD card or connect to the USB serial console
+to see that status of the update.
+
 Building
 --------
 This codebase uses [PlatformIO](https://platformio.org/).

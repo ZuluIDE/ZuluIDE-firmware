@@ -75,3 +75,7 @@ void platform_set_controller_image_response_pipe(zuluide::pipe::ImageResponsePip
  */
 void platform_set_input_interface(zuluide::control::InputReceiver* inputReceiver);
 
+/**
+   Upgrade ZuluControl-firmware over I2C
+ */
+void platform_i2c_upgrade_zulucontrol_fw(const char* filename);
