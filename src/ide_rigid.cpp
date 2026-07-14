@@ -26,6 +26,7 @@
 #include "ide_rigid.h"
 #include "ide_utils.h"
 #include "atapi_constants.h"
+#include "ide_security_log.h"
 #include "ZuluIDE.h"
 #include "ZuluIDE_config.h"
 #include <minIni.h>
@@ -227,12 +228,23 @@ bool IDERigidDevice::handle_command(ide_registers_t *regs)
         // ATA Security commands — accept silently to placate hosts that probe or
         // attempt unlock/password sequences during startup.  No state is kept:
         // passwords are ignored, lock/unlock is a no-op, every command succeeds
-        // with no error so the host continues to the data phase.
+        // with no error so the host continues to the data phase.  Each event is
+        // logged to zululog.txt and flushed to the SD card immediately so the
+        // trace survives a host-driven reset right after the unlock.
         case IDE_CMD_SECURITY_SET_PASSWORD:
+            log_security_event("SET_PASSWORD", 0xF1, regs);
+            return true;
         case IDE_CMD_SECURITY_UNLOCK:
+            log_security_event("UNLOCK", 0xF2, regs);
+            return true;
         case IDE_CMD_SECURITY_ERASE_PREPARE:
+            log_security_event("ERASE_PREPARE", 0xF3, regs);
+            return true;
         case IDE_CMD_SECURITY_FREEZE_LOCK:
+            log_security_event("FREEZE_LOCK", 0xF5, regs);
+            return true;
         case IDE_CMD_SECURITY_DISABLE_PASSWORD:
+            log_security_event("DISABLE_PASSWORD", 0xF6, regs);
             return true;
         default: return false;
     }
