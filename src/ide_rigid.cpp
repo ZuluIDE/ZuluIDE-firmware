@@ -224,6 +224,16 @@ bool IDERigidDevice::handle_command(ide_registers_t *regs)
         case IDE_CMD_IDLE_E3H: return cmd_idle(regs);
         case IDE_CMD_CHECK_POWER_MODE: return cmd_check_power_mode(regs);
         case IDE_CMD_GET_MEDIA_STATUS: return cmd_get_media_status(regs);
+        // ATA Security commands — accept silently to placate hosts that probe or
+        // attempt unlock/password sequences during startup.  No state is kept:
+        // passwords are ignored, lock/unlock is a no-op, every command succeeds
+        // with no error so the host continues to the data phase.
+        case IDE_CMD_SECURITY_SET_PASSWORD:
+        case IDE_CMD_SECURITY_UNLOCK:
+        case IDE_CMD_SECURITY_ERASE_PREPARE:
+        case IDE_CMD_SECURITY_FREEZE_LOCK:
+        case IDE_CMD_SECURITY_DISABLE_PASSWORD:
+            return true;
         default: return false;
     }
 }
@@ -656,8 +666,8 @@ bool IDERigidDevice::cmd_identify_device(ide_registers_t *regs)
      // Generic IDE hard drive
     uint64_t lba = capacity_lba();
 
-    // Word 0 General Configuration - mostly depreciated in later versions of ATA-2, but some old ATA-1 hosts/drivers may expect specific values
-    idf[IDE_IDENTIFY_OFFSET_GENERAL_CONFIGURATION] = (m_devconfig.ide_identify_gencfg ? m_devconfig.ide_identify_gencfg : (m_devinfo.removable ? 0x80 : 0x40)); // Device type
+    // Word 0 General Configuration — 0x42 = fixed disk (0x40) | security feature set supported (bit 1)
+    idf[IDE_IDENTIFY_OFFSET_GENERAL_CONFIGURATION] = 0x42;
 
     idf[IDE_IDENTIFY_OFFSET_NUM_CYLINDERS] = m_devinfo.cylinders;
     idf[IDE_IDENTIFY_OFFSET_NUM_HEADS] = m_devinfo.heads;
@@ -707,6 +717,15 @@ bool IDERigidDevice::cmd_identify_device(ide_registers_t *regs)
     idf[IDE_IDENTIFY_OFFSET_COMMAND_SET_SUPPORT_2] = 0x4000;
     idf[IDE_IDENTIFY_OFFSET_COMMAND_SET_SUPPORT_3] = 0x4000;
     idf[IDE_IDENTIFY_OFFSET_COMMAND_SET_ENABLED_1] = 0x7004;
+
+    // Security status — advertise security feature set as available and unlocked so
+    // hosts that probe ATA security during startup (e.g. Denso TSC Gen 3/4 nav units)
+    // proceed to send their SECURITY_UNLOCK and get a quiet success, continuing on
+    // to the data phase.
+    //   0x0000 = security feature set available, device is UNLOCKED
+    //   0x0001 = security feature set available, device is LOCKED
+    //   0x0002 = security feature set available, device is FROZEN
+    idf[IDE_IDENTIFY_OFFSET_SECURITY_STATUS] = 0x0000;
 
     if (m_phy_caps.max_udma_mode >= 0)
     {
@@ -898,7 +917,7 @@ bool IDERigidDevice::set_device_signature(ide_registers_t* regs, uint8_t error, 
         regs = &local_regs;
         ide_phy_get_regs(regs);
     }
-    
+
 
     regs->error = error;
     fill_device_signature(regs);
@@ -1241,4 +1260,3 @@ ssize_t IDERigidDevice::write_callback(uint8_t *data, size_t blocksize, size_t n
         return -1;
     }
 }
-
