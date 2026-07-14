@@ -232,20 +232,15 @@ bool IDERigidDevice::handle_command(ide_registers_t *regs)
         // logged to zululog.txt and flushed to the SD card immediately so the
         // trace survives a host-driven reset right after the unlock.
         case IDE_CMD_SECURITY_SET_PASSWORD:
-            log_security_event("SET_PASSWORD", 0xF1, regs);
-            return true;
+            return cmd_security_password(regs, "SET_PASSWORD", 0xF1);
         case IDE_CMD_SECURITY_UNLOCK:
-            log_security_event("UNLOCK", 0xF2, regs);
-            return true;
+            return cmd_security_password(regs, "UNLOCK", 0xF2);
         case IDE_CMD_SECURITY_ERASE_PREPARE:
-            log_security_event("ERASE_PREPARE", 0xF3, regs);
-            return true;
+            return cmd_security_ack(regs);
         case IDE_CMD_SECURITY_FREEZE_LOCK:
-            log_security_event("FREEZE_LOCK", 0xF5, regs);
-            return true;
+            return cmd_security_ack(regs);
         case IDE_CMD_SECURITY_DISABLE_PASSWORD:
-            log_security_event("DISABLE_PASSWORD", 0xF6, regs);
-            return true;
+            return cmd_security_password(regs, "DISABLE_PASSWORD", 0xF6);
         default: return false;
     }
 }
@@ -917,6 +912,72 @@ void IDERigidDevice::handle_event(ide_event_t evt)
 
         set_device_signature(nullptr, 0, true);
     }
+}
+
+// ---------------------------------------------------------------------------
+// ATA Security commands: DOWNSTREAM PATCH (local-only)
+// ---------------------------------------------------------------------------
+// These commands have a PIO data-out phase: the host writes 512 bytes
+// (32-byte password padded with zeros/repeats to 512).  We:
+//   1. Initiate the PIO data transfer (signal DRQ via start_read_buffer)
+//   2. Wait for the host to send data (blocking)
+//   3. Read and log the password bytes
+//   4. Return success (no actual state change)
+//
+// For commands with no data phase (FREEZE_LOCK, ERASE_PREPARE) we just ACK.
+
+bool IDERigidDevice::cmd_security_ack(ide_registers_t *regs)
+{
+    logmsg("[SECURITY] ACK");
+    regs->status = IDE_STATUS_DEVRDY | IDE_STATUS_DSC;
+    regs->error = 0;
+    ide_phy_set_regs(regs);
+    ide_phy_assert_irq(IDE_STATUS_DEVRDY | IDE_STATUS_DSC);
+    save_logfile(true);
+    return true;
+}
+
+bool IDERigidDevice::cmd_security_password(ide_registers_t *regs,
+                                           const char *name, uint8_t opcode)
+{
+    // Per ATA/ATAPI-6 § 8.22, SECURITY_SET_PASSWORD and SECURITY_UNLOCK
+    // transfer 512 bytes PIO data-out.  The first 32 bytes are the password;
+    // the rest is vendor-specific/padding.
+    static uint8_t password_buf[512];
+
+    ide_phy_start_read_buffer(512);
+
+    // Blocking read: wait for the host to write the password data
+    uint32_t start = millis();
+    while (!ide_phy_can_read_block())
+    {
+        if ((uint32_t)(millis() - start) > 10000)
+        {
+            logmsg("[SECURITY] ", name, " PIO read timeout");
+            ide_phy_stop_transfers();
+            save_logfile(true);
+            return false;  // host will get ABORT
+        }
+        if (ide_phy_is_command_interrupted())
+        {
+            dbgmsg("[SECURITY] ", name, " interrupted");
+            ide_phy_stop_transfers();
+            save_logfile(true);
+            return false;
+        }
+    }
+
+    ide_phy_read_block(password_buf, 512, false);
+    ide_phy_stop_transfers();
+
+    // Log the event with the full 32-byte password hex dump
+    log_security_event(name, opcode, regs, password_buf, 32);
+
+    regs->status = IDE_STATUS_DEVRDY | IDE_STATUS_DSC;
+    regs->error = 0;
+    ide_phy_set_regs(regs);
+    ide_phy_assert_irq(IDE_STATUS_DEVRDY | IDE_STATUS_DSC);
+    return true;
 }
 
 // Set non-packet device signature values to PHY registers
