@@ -35,7 +35,7 @@
 #include "i2c_server_src_type.h"
 #include <string>
 
-#define I2C_API_VERSION "4.0.0"
+#define I2C_API_VERSION "5.0.0"
 
 // Delay between reading the filenames off the SD card in milliseconds
 #ifndef I2C_FILENAME_TRANSFER_DELAY
