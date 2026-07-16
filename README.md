@@ -131,6 +131,25 @@ Project structure
 - **lib/ZuluIDE_platform_RP2040**: Platform-specific code for RP2040. Includes low level IDE bus access code.
 - **lib/minIni**: Ini config file access library
 
+ZuluControl-firmware
+--------------------
+For the latest see [ZuluControl-firmware](https://github.com/rabbitholecomputing/ZuluControl-firmware)
+
+When the ZuluIDE is hooked up to a WiFi enabled expansion board over I2C running ZuluControl-firmware,
+the ZuluIDE drive images can be controlled via a web interface.
+To initiate the support, the following settings are need in the `zuluide.ini` file under the
+`[UI]` section:
+```
+[UI]
+wifissid="MY_NETWORK_SSID" # SSID for the WIFI network
+wifipassword="MY_PASSWORD" # Password for the WIFI network.
+
+# Static IP configuration (optional, DHCP is the default)
+wifi_static_ip="192.168.1.42"
+wifi_static_netmask="255.255.255.0"
+wifi_static_gateway="192.168.1.1"
+```
+
 Building
 --------
 This codebase uses [PlatformIO](https://platformio.org/).

@@ -433,6 +433,103 @@ void init_logfile()
 {
     static bool first_open_after_boot = true;
 
+    if (first_open_after_boot)
+    {
+        // Rotate file to LOGFILEPREV
+        int log_rotate = ini_getl("IDE", "log_rotate", 1, CONFIGFILE);
+        if (log_rotate == 1 || log_rotate == 2)
+        {
+            FsFile prev_log_file = SD.open(LOGFILE, O_RDONLY);
+            if (prev_log_file.isOpen())
+            {
+                if (SD.exists(LOGFILEPREV))
+                {
+                    SD.remove(LOGFILEPREV);
+                }
+                prev_log_file.rename(LOGFILEPREV);
+                prev_log_file.close();
+            }
+        }
+
+        // Copy LOGFILEPREV to a numbered file in the LOGFILEDIR directory
+        if (log_rotate == 2)
+        {
+            // Attempt to open or create the log rotation directory
+            FsFile prev_log_file = SD.open(LOGFILEPREV, O_RDONLY);
+            if (prev_log_file.isOpen())
+            {
+                FsFile log_dir = SD.open(LOGFILEDIR, O_RDWR);
+                if (!log_dir.isOpen())
+                {
+                    SD.mkdir(LOGFILEDIR);
+                    log_dir = SD.open(LOGFILEDIR);
+                }
+
+                if (log_dir.isOpen() && log_dir.isDir())
+                {
+                    char filename[32] = {0};
+                    for (uint32_t i = 0; i <= 1000; i++)
+                    {
+                        if (i >= 1000)
+                        {
+                            logmsg("Rotation maximum reached, please delete files in the ", LOGFILEDIR, " directory");
+                            break;
+                        }
+                        else
+                        {
+                            // format file as LOGFILEROTATE(nnn).txt
+                            snprintf(filename, sizeof(filename), "%s(%03lu).txt", LOGFILEROTATE, i);
+                            if (log_dir.exists(filename))
+                                continue;
+
+                            // Create and copy the file
+                            FsFile destination;
+                            if (destination.open(&log_dir, filename, O_CREAT | O_WRONLY))
+                            {
+                                // Write a copy of the LOGFILEPREV in the LOGFILEDIR directory
+                                while (true)
+                                {
+                                    int bytes_read = prev_log_file.read(g_ide_buffer, sizeof(g_ide_buffer));
+                                    if (bytes_read < 0)
+                                    {
+                                        logmsg("Log rotation error reading ", LOGFILEPREV, " to buffer");
+                                        break;
+                                    }
+                                    if (bytes_read > 0)
+                                    {
+                                        size_t bytes_written = destination.write((void *)g_ide_buffer, bytes_read);
+                                        if (bytes_written != bytes_read)
+                                        {
+                                            logmsg("Log rotation error writing ", LOGFILEPREV, " to ", filename);
+                                            break;
+                                        }
+                                    }
+                                    if (bytes_read != sizeof(g_ide_buffer))
+                                    {
+                                        break;
+                                    }
+                                }
+                                destination.close();
+                                break;
+                            }
+                            else
+                            {
+                                logmsg("Log rotation could not create ", filename, " in ", LOGFILEDIR);
+                                break;
+                            }
+                        }
+                    }
+                }
+                else
+                {
+                    logmsg("Log rotation could not open ", LOGFILEDIR, " as a directory");
+                }
+                log_dir.close();
+            }
+            prev_log_file.close();
+        }
+    }
+
     bool truncate = first_open_after_boot;
     int flags = O_WRONLY | O_CREAT | (truncate ? O_TRUNC : O_APPEND);
     g_logfile = SD.open(LOGFILE, flags);
@@ -903,7 +1000,7 @@ void loadFirstImage() {
       {
         // If a prefix is used to define the drive type, only load prefix images for the first image
         if (prefix[0] != '\0'
-          && imgIterator.Get().GetImageType() != Image::InferImageTypeFromImagePrefix(prefix)
+          && strncasecmp(imgIterator.Get().GetFilename().c_str(), prefix, 4) != 0
         )
         {
           continue;

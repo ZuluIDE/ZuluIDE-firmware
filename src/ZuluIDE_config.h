@@ -31,16 +31,19 @@
 #include <ZuluIDE_platform.h>
 
 // Use variables for version number
-#define FW_VER_NUM      "2026.06.08"
+#define FW_VER_NUM      "2026.07.02"
 #define FW_VER_SUFFIX   "devel"
 #define ZULU_FW_VERSION FW_VER_NUM "-" FW_VER_SUFFIX
 
 // Configuration and log file paths
-#define CONFIGFILE  "zuluide.ini"
-#define LOGFILE     "zululog.txt"
-#define CRASHFILE   "zuluerr.txt"
-#define LICENSEFILE "zuluide.lic"
-#define LASTFILE    "zululast.txt"
+#define CONFIGFILE    "zuluide.ini"
+#define LOGFILE       "zululog.txt"
+#define LOGFILEPREV   "zululog_prev.txt"
+#define LOGFILEDIR    "zuluide_log"
+#define LOGFILEROTATE "zululog_rotate"
+#define CRASHFILE     "zuluerr.txt"
+#define LICENSEFILE   "zuluide.lic"
+#define LASTFILE      "zululast.txt"
 
 // File names used for firmware update from SD card
 #define DEF_STRINGFY(DEF) STRINGFY(DEF)

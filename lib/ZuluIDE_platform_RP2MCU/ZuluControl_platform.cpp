@@ -123,7 +123,7 @@ uint8_t platform_check_for_controller()
     recover_i2c_bus();
     g_wire.begin();
     g_wire.setClock(100000);
-    // Setting the drive strength seems to help the I2C bus with the Pico W controller and the controller OLED display
+    // Setting the drive strength seems to help the I2C bus with the ZuluControl and the controller OLED display
     // to communicate and handshake properly
     gpio_set_drive_strength(GPIO_I2C_SCL, GPIO_DRIVE_STRENGTH_12MA);
     gpio_set_drive_strength(GPIO_I2C_SDA, GPIO_DRIVE_STRENGTH_12MA);
@@ -258,7 +258,9 @@ void platform_wifi_controller_connect()
 
     }
     if (!g_I2cServer.WiFiSSIDSet()) {
-        // The I2C server responded but we cannot configure wifi. This may cause issues.
-        logmsg("-- An I2C client was detected WIFI SSID is not configured. This will cause problems if the I2C client needs WIFI configuration data.");
+        // The I2C server responded but we cannot configure wifi. This is an invalid configuration which must be communicated, so it can be corrected.
+        logmsg("WARNING: An I2C client was detected, but no Wi-Fi SSID/password settings are configured in zuluide.ini");
+        logmsg("These missing ini file parameters are required to successfully connect the i2c server via Wi-Fi");
+        logmsg("Visit https://www.ZuluIDE.com/manual for further information.");
     }
 }
