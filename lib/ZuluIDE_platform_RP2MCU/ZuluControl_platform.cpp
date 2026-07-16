@@ -1,3 +1,28 @@
+/**
+ * ZuluIDE™ - Copyright (c) 2026 Rabbit Hole Computing™
+ *
+ * ZuluIDE™ firmware is licensed under the GPL version 3 or any later version.
+ *
+ * https://www.gnu.org/licenses/gpl-3.0.html
+ * ----
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * Under Section 7 of GPL version 3, you are granted additional
+ * permissions described in the ZuluIDE Hardware Support Library Exception
+ * (GPL-3.0_HSL_Exception.md), as published by Rabbit Hole Computing™.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+**/
+
 #include "ZuluIDE_platform.h"
 #include "ZuluIDE_log.h"
 #include "ZuluIDE_config.h"
@@ -30,6 +55,10 @@ zuluide::pipe::ImageRequestPipe<zuluide::i2c::i2c_server_source_t> g_I2CServerIm
 zuluide::i2c::I2CServer g_I2cServer(&g_I2CServerImageRequestPipe, &g_I2CServerImageResponsePipe);
 zuluide::ObserverTransfer<zuluide::status::SystemStatus> *uiStatusController;
 
+// Force this definition to defined somewhere else
+// bootloader linker was linking to this function from this discarded object in the bootloader linker script
+extern template void logmsg(const char*, const char*);
+
 
 static void processStatusUpdate(const zuluide::status::SystemStatus &currentStatus) {
     // Notify the hardware UI of updates.
@@ -37,6 +66,55 @@ static void processStatusUpdate(const zuluide::status::SystemStatus &currentStat
 
     // Notify the I2C server of updates.
      g_I2cServer.HandleUpdate(currentStatus);
+}
+
+static void recover_i2c_bus()
+{
+    // Temporarily take manual control of SCL/SDA to clock out any device
+    // that got stuck mid-transaction (e.g. due to an unexpected reset).
+    gpio_set_function(GPIO_I2C_SCL, GPIO_FUNC_SIO);
+    gpio_set_function(GPIO_I2C_SDA, GPIO_FUNC_SIO);
+    gpio_pull_up(GPIO_I2C_SCL);
+    gpio_pull_up(GPIO_I2C_SDA);
+    gpio_set_dir(GPIO_I2C_SCL, false);  // SCL: input to read current line state
+    if (!gpio_get(GPIO_I2C_SCL))
+    {
+        // A slave is clock-stretching (holding SCL low). Wait for it to release
+        // before we attempt to drive SCL ourselves.
+        for (int i = 0; i < 200 && !gpio_get(GPIO_I2C_SCL); i++)
+        {
+            busy_wait_us_32(1000);
+        }
+
+    }
+    gpio_set_dir(GPIO_I2C_SCL, true);  // SCL: output
+    gpio_set_dir(GPIO_I2C_SDA, false);  // SDA: input
+    gpio_put(GPIO_I2C_SCL, 1);
+
+    // Toggle SCL up to 16 times until SDA is released (HIGH)
+    for (int i = 0; i < 16; i++)
+    {
+        gpio_put(GPIO_I2C_SCL, 0);
+        busy_wait_us_32(5);
+        gpio_put(GPIO_I2C_SCL, 1);
+        busy_wait_us_32(5);
+        if (gpio_get(GPIO_I2C_SDA))
+        {
+            break;
+        }
+    }
+
+    // Issue a STOP condition: SDA low → SCL high → SDA high
+    gpio_set_dir(GPIO_I2C_SDA, true);
+    gpio_put(GPIO_I2C_SCL, 0);
+    busy_wait_us_32(5);
+    gpio_put(GPIO_I2C_SDA, 0);
+    busy_wait_us_32(5);
+    gpio_put(GPIO_I2C_SCL, 1);
+    busy_wait_us_32(5);
+    gpio_put(GPIO_I2C_SDA, 1);
+    busy_wait_us_32(5);
+    // Caller is responsible for re-initializing or closing the I2C peripheral.
 }
 
 uint8_t platform_check_for_controller()
@@ -85,10 +163,11 @@ uint8_t platform_check_for_controller()
     bool hasI2CServer = g_I2cServer.CheckForDevice();
     logmsg(hasHardwareUI ? "Hardware UI found." : "Hardware UI not found.");
     logmsg(hasI2CServer ? "I2C server found" : "I2C server not found");
-    FsFile root = SD.open("/");
-    FsFile file;
+
     if (hasI2CServer)
     {
+        FsFile root = SD.open("/");
+        FsFile file;
         while (file.openNext(&root))
         {
             char filename[MAX_FILE_PATH];
@@ -149,6 +228,14 @@ void platform_set_device_control(zuluide::status::DeviceControlSafe* deviceContr
     g_I2cServer.SetDeviceControl(deviceControl);
  }
 
+
+void platform_close_i2c()
+{
+    // Release any clock-stretching slave and issue a STOP before closing,
+    // so the slave is not left mid-transaction after the MCU reboots.
+    recover_i2c_bus();
+    g_wire.end();
+}
 
 void platform_wifi_controller_connect()
 {

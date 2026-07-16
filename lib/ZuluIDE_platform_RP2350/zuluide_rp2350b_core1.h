@@ -31,6 +31,9 @@
 #define CORE1_REQ_START_DATAOUT_NOIRQ   0x0200
 #define CORE1_REQ_SET_REGS_DEV0         0x0400
 #define CORE1_REQ_SET_REGS_DEV1         0x0800
+// Request core1 (secure mode) to call reset_usb_boot(0,0) on behalf of
+// core0 which runs in ARM Non-Secure mode and cannot call it directly.
+#define CORE1_REQ_RESET_UF2             0x1000
 
 // This is set and cleared by core1 to indicate whether
 // it is busy handling previous requests.

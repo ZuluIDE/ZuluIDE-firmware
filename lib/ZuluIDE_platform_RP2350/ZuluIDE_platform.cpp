@@ -26,6 +26,10 @@
 #include "ZuluIDE_platform.h"
 #include "ZuluIDE_log.h"
 #include "ZuluIDE_config.h"
+#include <hardware/watchdog.h>
+#include <hardware/irq.h>
+#include <hardware/resets.h>
+#include <pico/bootrom.h>
 #include <ZuluControl_platform.h>
 #include <ZuluIDE_usb_platform.h>
 #include <ZuluIDE.h>
@@ -70,6 +74,7 @@ static uint8_t g_eject_buttons = 0;
 static bool g_sniffer_enabled;
 
 extern void platform_poll_input(); // From ZuluControl_platform.cpp
+extern void platform_reboot_poll(); // From ZuluIDE_reboot_platform.cpp
 
 //void mbed_error_hook(const mbed_error_ctx * error_context);
 
@@ -381,7 +386,6 @@ size_t platform_serial_write(uint8_t *buf, size_t len)
 
 
 extern uint32_t __StackTop;
-static void usb_log_poll();
 
 void platform_emergency_log_save()
 {
@@ -570,7 +574,7 @@ extern "C" void panic(const char *fmt, ...)
 // but does not unnecessarily delay normal execution.
 static uint32_t g_usb_logpos = 0;
 
-static void usb_log_poll()
+void usb_log_poll()
 {
     if (Serial.availableForWrite())
     {
@@ -770,9 +774,22 @@ void platform_reset_watchdog()
     usb_log_poll();
 }
 
-void platform_reset_mcu()
+
+
+void platform_reset_mcu_uf2()
 {
-    watchdog_reboot(0, 0, 2000);
+#ifdef ARM_NONSECURE_MODE
+    // Main firmware runs in ARM Non-Secure mode; reset_usb_boot requires Secure
+    // mode on RP2350 with TrustZone. Delegate to core1, which runs in Secure mode.
+    __atomic_or_fetch(&g_idecomm.requests, CORE1_REQ_RESET_UF2, __ATOMIC_ACQ_REL);
+    while (1) { __asm volatile("wfi"); }
+#else
+    irq_set_enabled(USBCTRL_IRQ, false);
+    reset_block(RESETS_RESET_USBCTRL_BITS);
+    unreset_block(RESETS_RESET_USBCTRL_BITS);
+    busy_wait_ms(3);
+    reset_usb_boot(0, 0);
+#endif
 }
 
 bool usb_has_factory_command_handler()
@@ -824,7 +841,7 @@ void platform_poll_input() {
     {
         // Process status update, if any exist.
         if (!uiStatusController->ProcessUpdate()) {
-            // If no updates happend, refresh the display (enables animation)
+            // If no updates happened, refresh the display (enables animation)
             display.Refresh();
         }
 
@@ -862,6 +879,7 @@ void platform_poll(bool only_from_main)
     if (only_from_main)
     {
         platform_poll_input();
+        platform_reboot_poll();
     }
 
 #ifdef ENABLE_AUDIO_OUTPUT

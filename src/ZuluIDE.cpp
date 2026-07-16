@@ -39,6 +39,7 @@
 #include "ide_rigid.h"
 #include "ide_imagefile.h"
 #include <ZuluControl_platform.h>
+#include <ZuluIDE_reboot_platform.h>
 #include "status/status_controller.h"
 #include <zuluide/status/cdrom_status.h>
 #include <zuluide/status/removable_status.h>
@@ -56,6 +57,7 @@
 #include "SerialUSB.h"
 
 #include <zip_parser.h>
+
 bool g_sdcard_present;
 extern SdFs SD;
 static FsFile g_logfile;
@@ -1204,15 +1206,22 @@ void zuluide_init(void)
 
 #ifdef PLATFORM_MASS_STORAGE
   static bool check_mass_storage = true;
-  if (check_mass_storage && ini_getbool("IDE", "enable_usb_mass_storage", false, CONFIGFILE))
+  if (check_mass_storage)
   {
     check_mass_storage = false;
-    // perform checks to see if a computer is attached and return true if we should enter MSC mode.
-    if (platform_sense_msc())
+    if (!platform_rebooted_standard())
     {
-      zuluide_msc_loop();
-      logmsg("Re-processing filenames and zuluide.ini config parameters");
-      zuluide_setup_sd_card();
+      bool forced_msc = platform_rebooted_into_msc();
+      if (forced_msc || ini_getbool("IDE", "enable_usb_mass_storage", false, CONFIGFILE))
+      {
+        // Enter MSC mode if forced by menu reboot or USB host is detected.
+        if (forced_msc || platform_sense_msc())
+        {
+          zuluide_msc_loop();
+          logmsg("Re-processing filenames and zuluide.ini config parameters");
+          zuluide_setup_sd_card();
+        }
+      }
     }
   }
 #endif
