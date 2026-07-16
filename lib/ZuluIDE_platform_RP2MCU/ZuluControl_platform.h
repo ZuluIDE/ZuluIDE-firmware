@@ -79,4 +79,3 @@ void platform_set_input_interface(zuluide::control::InputReceiver* inputReceiver
    Closes the I2C interface. Call during pre-reboot cleanup to release the bus cleanly.
  */
 void platform_close_i2c();
-

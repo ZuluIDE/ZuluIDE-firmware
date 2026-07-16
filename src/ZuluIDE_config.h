@@ -76,6 +76,12 @@
 // USB SD card reader mode.  Cleared by platform_rebooted_into_msc() on startup.
 #define REBOOT_INTO_MSC_MAGIC_NUM 0x5eeded
 
+// Magic number for standard reboot, bypassing auto MSC mode
+#define REBOOT_INTO_STD_MAGIC_NUM 0xd00d13
+
+// Amount of milliseconds to wait for DMA and other processes to finish before rebooting
+#define REBOOT_WAIT_TIME 3000
+
 // Prefix for command file to create new image (case-insensitive)
 #define CREATEFILE "create"
 

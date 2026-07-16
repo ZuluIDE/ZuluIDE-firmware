@@ -1,3 +1,28 @@
+/**
+ * ZuluIDE™ - Copyright (c) 2026 Rabbit Hole Computing™
+ *
+ * ZuluIDE™ firmware is licensed under the GPL version 3 or any later version.
+ *
+ * https://www.gnu.org/licenses/gpl-3.0.html
+ * ----
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * Under Section 7 of GPL version 3, you are granted additional
+ * permissions described in the ZuluIDE Hardware Support Library Exception
+ * (GPL-3.0_HSL_Exception.md), as published by Rabbit Hole Computing™.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
+**/
+
 #include "ZuluIDE_platform.h"
 #include "ZuluIDE_log.h"
 #include "ZuluIDE_config.h"
@@ -28,6 +53,10 @@ zuluide::pipe::ImageRequestPipe<zuluide::i2c::i2c_server_source_t> g_I2CServerIm
 zuluide::i2c::I2CServer g_I2cServer(&g_I2CServerImageRequestPipe, &g_I2CServerImageResponsePipe);
 zuluide::ObserverTransfer<zuluide::status::SystemStatus> *uiStatusController;
 
+// Force this definition to defined somewhere else
+// bootloader linker was linking to this function from this discarded object in the bootloader linker script
+extern template void logmsg(const char*, const char*);
+
 
 static void processStatusUpdate(const zuluide::status::SystemStatus &currentStatus) {
     // Notify the hardware UI of updates.
@@ -50,13 +79,11 @@ static void recover_i2c_bus()
     {
         // A slave is clock-stretching (holding SCL low). Wait for it to release
         // before we attempt to drive SCL ourselves.
-        logmsg("I2C SCL held low by slave, waiting up to 200ms for release");
         for (int i = 0; i < 200 && !gpio_get(GPIO_I2C_SCL); i++)
         {
             busy_wait_us_32(1000);
         }
-        if (!gpio_get(GPIO_I2C_SCL))
-            logmsg("I2C SCL still held low after timeout, proceeding anyway");
+
     }
     gpio_set_dir(GPIO_I2C_SCL, true);  // SCL: output
     gpio_set_dir(GPIO_I2C_SDA, false);  // SDA: input
@@ -71,7 +98,6 @@ static void recover_i2c_bus()
         busy_wait_us_32(5);
         if (gpio_get(GPIO_I2C_SDA))
         {
-            logmsg("Cleared I2C on loop ", (int) i);
             break;
         }
     }

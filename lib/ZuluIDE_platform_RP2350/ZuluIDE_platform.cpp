@@ -74,6 +74,7 @@ static uint8_t g_eject_buttons = 0;
 static bool g_sniffer_enabled;
 
 extern void platform_poll_input(); // From ZuluControl_platform.cpp
+extern void platform_reboot_poll(); // From ZuluIDE_reboot_platform.cpp
 
 //void mbed_error_hook(const mbed_error_ctx * error_context);
 
@@ -385,7 +386,6 @@ size_t platform_serial_write(uint8_t *buf, size_t len)
 
 
 extern uint32_t __StackTop;
-static void usb_log_poll();
 
 void platform_emergency_log_save()
 {
@@ -574,7 +574,7 @@ extern "C" void panic(const char *fmt, ...)
 // but does not unnecessarily delay normal execution.
 static uint32_t g_usb_logpos = 0;
 
-static void usb_log_poll()
+void usb_log_poll()
 {
     if (Serial.availableForWrite())
     {
@@ -774,24 +774,10 @@ void platform_reset_watchdog()
     usb_log_poll();
 }
 
-static void pre_reboot_cleanup()
-{
-    ide_phy_stop_transfers();
-    platform_close_i2c();
-    if (SD.card())
-        SD.card()->syncDevice();
-    delay(1000);
-}
 
-void platform_reset_mcu()
-{
-    pre_reboot_cleanup();
-    watchdog_reboot(0, 0, 0);
-}
 
 void platform_reset_mcu_uf2()
 {
-    pre_reboot_cleanup();
 #ifdef ARM_NONSECURE_MODE
     // Main firmware runs in ARM Non-Secure mode; reset_usb_boot requires Secure
     // mode on RP2350 with TrustZone. Delegate to core1, which runs in Secure mode.
@@ -804,29 +790,6 @@ void platform_reset_mcu_uf2()
     busy_wait_ms(3);
     reset_usb_boot(0, 0);
 #endif
-}
-
-void platform_reset_mcu_msc()
-{
-    pre_reboot_cleanup();
-    watchdog_hw->scratch[0] = REBOOT_INTO_MSC_MAGIC_NUM;
-    watchdog_reboot(0, 0, 0);
-}
-
-bool platform_rebooted_into_msc()
-{
-    static bool checked = false;
-    static bool result  = false;
-    if (!checked)
-    {
-        checked = true;
-        if (watchdog_hw->scratch[0] == REBOOT_INTO_MSC_MAGIC_NUM)
-        {
-            watchdog_hw->scratch[0] = 0;
-            result = true;
-        }
-    }
-    return result;
 }
 
 bool usb_has_factory_command_handler()
@@ -878,7 +841,7 @@ void platform_poll_input() {
     {
         // Process status update, if any exist.
         if (!uiStatusController->ProcessUpdate()) {
-            // If no updates happend, refresh the display (enables animation)
+            // If no updates happened, refresh the display (enables animation)
             display.Refresh();
         }
 
@@ -916,6 +879,7 @@ void platform_poll(bool only_from_main)
     if (only_from_main)
     {
         platform_poll_input();
+        platform_reboot_poll();
     }
 
 #ifdef ENABLE_AUDIO_OUTPUT

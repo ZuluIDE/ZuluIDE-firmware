@@ -27,6 +27,7 @@
 #include "ZuluIDE_platform.h"
 #include "ZuluIDE_config.h"
 #include "ZuluIDE_log.h"
+#include <ZuluIDE_reboot_platform.h>
 #include <zuluide/images/image_iterator.h>
 #include <string.h>
 #include <stdlib.h>
@@ -135,9 +136,14 @@ static void show_main_menu()
     serial_out("    'd' - debug logging  [");
     serial_out(g_log_debug ? "ON" : "OFF");
     serial_println("]");
-    serial_println("    'r' - reboot");
-    serial_println("    'u' - reboot into UF2 bootloader");
 #ifdef PLATFORM_MASS_STORAGE
+    if (!platform_in_msc_mode())
+    {
+#endif
+        serial_println("    'r' - reboot");
+        serial_println("    'u' - reboot into UF2 bootloader");
+#ifdef PLATFORM_MASS_STORAGE
+    }
     if (!platform_in_msc_mode())
         serial_println("    's' - reboot into USB SD card reader mode");
     else
@@ -323,11 +329,25 @@ void ideConsoleMenuProcess(char c)
                     break;
 
                 case 'r':
+#ifdef PLATFORM_MASS_STORAGE
+                    if (platform_in_msc_mode())
+                    {
+                        show_main_menu();
+                        break;
+                    }
+#endif
                     s_state = MenuState::MainMenuRebootConfirm;
                     serial_println("  Reboot? Press 'y' to confirm or any other key to cancel:");
                     break;
 
                 case 'u':
+#ifdef PLATFORM_MASS_STORAGE
+                    if (platform_in_msc_mode())
+                    {
+                        show_main_menu();
+                        break;
+                    }
+#endif
                     s_state = MenuState::MainMenuUF2Confirm;
                     serial_println("  Reboot into UF2 bootloader? Press 'y' to confirm or any other key to cancel:");
                     break;
@@ -411,7 +431,7 @@ void ideConsoleMenuProcess(char c)
             if (c == 'y' || c == 'Y')
             {
                 logmsg("Rebooting...");
-                platform_reset_mcu();
+                platform_start_reboot(reboot_cmd_t::NORMAL);
             }
             else
             {
@@ -428,7 +448,7 @@ void ideConsoleMenuProcess(char c)
             if (c == 'y' || c == 'Y')
             {
                 logmsg("Rebooting into UF2 bootloader...");
-                platform_reset_mcu_uf2();
+                platform_start_reboot(reboot_cmd_t::UF2);
             }
             else
             {
@@ -446,7 +466,7 @@ void ideConsoleMenuProcess(char c)
             if (c == 'y' || c == 'Y')
             {
                 logmsg("Rebooting into USB SD card reader mode...");
-                platform_reset_mcu_msc();
+                platform_start_reboot(reboot_cmd_t::MSC);
             }
             else
             {
