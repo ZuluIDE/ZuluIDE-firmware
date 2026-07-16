@@ -57,11 +57,8 @@ extern const char *g_platform_name;
 void platform_log(const char *s);
 void platform_emergency_log_save();
 
-// Timing and delay functions.
-// Arduino platform already provides these
-// unsigned long millis(void);
-// void delay(unsigned long ms);
-// void delayMicroseconds(unsigned long us);
+void usb_log_poll();
+
 
 // Initialize SD card and GPIO configuration
 void platform_init();
@@ -100,8 +97,16 @@ int platform_get_device_id(void);
 // Setup soft watchdog if supported
 void platform_reset_watchdog();
 
-// Reset MCU
-void platform_reset_mcu();
+// Reset MCU into UF2 bootloader mode.
+// Not defined in ZuluIDE_reboot_platform.cpp, because it is RP2040 specific
+void platform_reset_mcu_uf2();
+
+#ifdef PLATFORM_MASS_STORAGE
+// Returns true while the USB SD card reader loop is running.
+bool platform_in_msc_mode();
+// Signal the running MSC loop to exit on its next iteration.
+void platform_request_msc_exit();
+#endif
 
 // Poll function that is called every few milliseconds.
 // The SD card is free to access during this time, and pauses up to

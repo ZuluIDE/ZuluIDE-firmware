@@ -26,6 +26,10 @@
 #include "ZuluIDE_platform.h"
 #include "ZuluIDE_log.h"
 #include "ZuluIDE_config.h"
+#include <hardware/watchdog.h>
+#include <hardware/irq.h>
+#include <hardware/resets.h>
+#include <pico/bootrom.h>
 #include <ZuluIDE.h>
 #include "ide_phy.h"
 #include <SdFat.h>
@@ -393,7 +397,6 @@ size_t platform_serial_write(uint8_t *buf, size_t len)
 /* Crash handlers                        */
 /*****************************************/
 extern uint32_t __StackTop;
-static void usb_log_poll();
 
 void platform_emergency_log_save()
 {
@@ -500,7 +503,7 @@ void isr_hardfault(void)
 // but does not unnecessarily delay normal execution.
 static uint32_t g_usb_logpos = 0;
 
-static void usb_log_poll()
+void usb_log_poll()
 {
     if (Serial.availableForWrite())
     {
@@ -701,10 +704,6 @@ void platform_reset_watchdog()
     usb_log_poll();
 }
 
-void platform_reset_mcu()
-{
-    watchdog_reboot(0, 0, 2000);
-}
 
 // Install FPGA license key to RP2040 flash
 // buf is pointer to hex string with 26 bytes (encoding 13 bytes)
@@ -796,6 +795,16 @@ void usb_factory_command_handler(char *cmd)
     }
 }
 
+void platform_reset_mcu_uf2()
+{
+    irq_set_enabled(USBCTRL_IRQ, false);
+    reset_block(RESETS_RESET_USBCTRL_BITS);
+    unreset_block(RESETS_RESET_USBCTRL_BITS);
+    busy_wait_ms(3);
+    reset_usb_boot(0, 0);
+}
+
+extern void platform_reboot_poll();
 // Poll function that is called every few milliseconds.
 // Can be left empty or used for platform-specific processing.
 void platform_poll(bool only_from_main)
@@ -869,8 +878,10 @@ void platform_poll(bool only_from_main)
     usb_log_poll();
     usb_command_poll();
     if (only_from_main)
+    {
         g_I2CServerImageRequestPipe.ProcessUpdates();
-
+        platform_reboot_poll();
+    }
 #ifdef ENABLE_AUDIO_OUTPUT
     static bool update_volume = false;
     if (!update_volume && g_sdcard_present)

@@ -30,6 +30,7 @@
 #include "ui_controller_base.h"
 
 #include <functional>
+#include <stdint.h>
 
 namespace zuluide::control {
   class StdDisplayController;
@@ -43,6 +44,6 @@ namespace zuluide::control {
     virtual void SystemStatusUpdated(const zuluide::status::SystemStatus& status);
     virtual DisplayState Reset();
   private:
-    bool isInitialized;
+    uint32_t startTime;
   };
 }

@@ -103,13 +103,24 @@ int platform_get_device_id(void);
 // Setup soft watchdog if supported
 void platform_reset_watchdog();
 
-// Reset MCU with a delay
-void platform_reset_mcu();
+// Reset MCU into UF2 bootloader mode.
+// Not defined in ZuluIDE_reboot_platform.cpp, because it is RP2350 specific
+void platform_reset_mcu_uf2();
+
+#ifdef PLATFORM_MASS_STORAGE
+// Returns true while the USB SD card reader loop is running.
+bool platform_in_msc_mode();
+// Signal the running MSC loop to exit on its next iteration.
+void platform_request_msc_exit();
+#endif
 
 // Poll function that is called every few milliseconds.
 // The SD card is free to access during this time, and pauses up to
 // few milliseconds shouldn't disturb SCSI communication.
 void platform_poll(bool only_from_main = false);
+
+// Output log of USB serial console
+void usb_log_poll();
 
 // Set callback that will be called during data transfer to/from SD card.
 // This can be used to implement simultaneous transfer to SCSI bus.

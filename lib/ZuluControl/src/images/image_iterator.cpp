@@ -338,7 +338,7 @@ bool ImageIterator::fileIsValidImage(FsFile& file, const char* fileName, bool wa
     }
 
     if (strncasecmp(fileName, "zulu", 4) == 0) {
-      // Ignore all files that start with "zulu"
+      // Ignore all directories that start with "zulu"
       return false;
     }
 
@@ -392,6 +392,12 @@ bool ImageIterator::is_valid_filename(const char *name, bool warning)
     // Ignore all files that start with "zulu"
     return false;
   }
+
+  if (strncasecmp(name, "sniff", 5) == 0) {
+    // Ignore all files that start with "sniff"
+    return false;
+  }
+
 
   // Check file extension
   const char *extension = strrchr(name, '.');

@@ -1,19 +1,19 @@
 /**
- * ZuluIDE™ - Copyright (c) 2024 Rabbit Hole Computing™
+ * ZuluIDE™ - Copyright (c) 2026 Rabbit Hole Computing™
  *
- * ZuluIDE™ firmware is licensed under the GPL version 3 or any later version. 
+ * ZuluIDE™ firmware is licensed under the GPL version 3 or any later version.
  *
  * https://www.gnu.org/licenses/gpl-3.0.html
  * ----
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version. 
+ * (at your option) any later version.
  *
  * This program is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details. 
+ * GNU General Public License for more details.
  *
  * Under Section 7 of GPL version 3, you are granted additional
  * permissions described in the ZuluIDE Hardware Support Library Exception
@@ -23,23 +23,24 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
 **/
 
-#include "splash_controller.h"
-#include "std_display_controller.h"
-#include "ZuluIDE_log.h"
-#include <Arduino.h>
+#pragma once
 
-using namespace zuluide::control;
+enum class reboot_cmd_t
+{
+    NONE,
+    NORMAL,
+    MSC,
+    UF2
+};
 
-SplashController::SplashController(StdDisplayController* cntrlr) : UIControllerBase(cntrlr), startTime(0) {
-}
+// Basic reset of the MCU
+void platform_reset_mcu();
 
-void SplashController::SystemStatusUpdated(const zuluide::status::SystemStatus& status) {
-  if ((uint32_t)(millis() - startTime) >= 1500)
-    controller->SetMode(Mode::Status);
-}
+// Start the reboot process
+void platform_start_reboot(reboot_cmd_t mode);
 
-DisplayState SplashController::Reset() {
-  startTime = millis();
-  SplashState state;
-  return DisplayState(state);
-}
+// Check if the last reboot was for the mass storage controller mode
+bool platform_rebooted_into_msc();
+
+// Standard reboot should bypass auto MSC booting
+bool platform_rebooted_standard();
