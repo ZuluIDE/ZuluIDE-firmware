@@ -85,20 +85,34 @@ uint8_t platform_check_for_controller()
     bool hasI2CServer = g_I2cServer.CheckForDevice();
     logmsg(hasHardwareUI ? "Hardware UI found." : "Hardware UI not found.");
     logmsg(hasI2CServer ? "I2C server found" : "I2C server not found");
-    if (hasI2CServer && SD.exists(ZULUCONTROL_FW_FILE))
+    FsFile root = SD.open("/");
+    FsFile file;
+    if (hasI2CServer)
     {
-        logmsg("-- ZuluControl-firmware file found on SD card, attempting to upgrade firmware");
-        platform_i2c_upgrade_zulucontrol_fw(ZULUCONTROL_FW_FILE);
-    }
+        while (file.openNext(&root))
+        {
+            char filename[MAX_FILE_PATH];
+            file.getName(filename, sizeof(filename));
+            const char *extension = strrchr(filename, '.');
+            if (extension 
+                && strncasecmp(extension, ".uf2", 4) == 0
+                && strncasecmp(filename, ZULUCONTROL_UF2_PREFIX, sizeof(ZULUCONTROL_UF2_PREFIX) - 1) == 0)
+            {
+                file.close();
+                logmsg("ZuluControl-firmware UF2, \"", filename,"\", found on SD card, attempting to upgrade firmware");
+                platform_i2c_upgrade_zulucontrol_fw(filename);
+                break;
+            }
+        }
+        file.close();
+        root.close();
 
-    if (hasI2CServer && !ini_haskey("UI", "wifissid", CONFIGFILE))
-    {
-        logmsg("-- Warning: I2C server detected but no WiFi SSID configured.");
-        logmsg("-- Set with \"wifissid\" under \"[UI]\" section of ", CONFIGFILE, " and insert SD card");
-    }
+        if (!ini_haskey("UI", "wifissid", CONFIGFILE))
+        {
+            logmsg("-- Warning: I2C server detected but no WiFi SSID configured.");
+            logmsg("-- Set with \"wifissid\" under \"[UI]\" section of ", CONFIGFILE, " and insert SD card");
+        }
 
-    if(hasI2CServer)
-    {
         g_I2CServerImageRequestPipe.Reset();
         g_I2CServerImageResponsePipe.Reset();
         g_I2CServerImageRequestPipe.AddObserver([&](zuluide::pipe::ImageRequest<zuluide::i2c::i2c_server_source_t> t){g_I2CServerImageResponsePipe.HandleRequest(t);});
@@ -249,7 +263,7 @@ void platform_i2c_upgrade_zulucontrol_fw(const char* filename)
             // early-out below never fires for it -- EOF is only observable on
             // this following read, which correctly returns 0. That's a normal
             // way to finish, not an error.
-            logmsg("Finished sending ZuluControl-firmware file: ", filename, " (", (int)fwFile.size(), " bytes)");
+            logmsg("-- Finished sending ZuluControl-firmware file: ", filename, " (", (int)fwFile.size(), " bytes)");
             break;
         }
         if (bytesRead < 0)
@@ -257,7 +271,7 @@ void platform_i2c_upgrade_zulucontrol_fw(const char* filename)
             g_I2cServer.UpgradeZuluControlFwRequest(zuluide::i2c::I2CServer::UpgradeRequest::ABORT);
             fwFile.close();
             LED_OFF();
-            logmsg("Error reading ZuluControl-firmware file: ", filename);
+            logmsg("-- Error reading ZuluControl-firmware file: ", filename);
             return;
         }
 
@@ -322,12 +336,12 @@ void platform_i2c_upgrade_zulucontrol_fw(const char* filename)
         if ((uint32_t)(now - lastProgressLogTime) >= 2000) {
             lastProgressLogTime = now;
             uint32_t percent = (uint32_t)((uint64_t)totalBytesSent * 100 / fwFile.size());
-            logmsg("Bytes of ZuluControl-firmware sent to device: ", (int)totalBytesSent, "/",
+            logmsg("-- Bytes of UF2 file sent to device: ", (int)totalBytesSent, "/",
                    (int)fwFile.size(), " bytes total (", (int)percent, "%)");
         }
 
         if (bytesRead < (int)chunkSize) {
-            logmsg("Finished sending ZuluControl-firmware file: ", filename, " (", (int)fwFile.size(), " bytes)");
+            logmsg("-- Finished sending ZuluControl-firmware file: ", filename, " (", (int)fwFile.size(), " bytes)");
             break;
         }
 
@@ -351,7 +365,7 @@ void platform_i2c_upgrade_zulucontrol_fw(const char* filename)
     bool finishAcked = g_I2cServer.UpgradeZuluControlFwReadAck(
         &finishAckLen, &finishAckCrc, make_timeout_time_ms(3000));
     if (finishAcked && finishAckLen == I2C_CLIENT_ACK_SPECIAL_LEN && finishAckCrc == I2C_CLIENT_ACK_CRC_UPGRADE_COMPLETE) {
-        logmsg("ZuluControl-firmware update confirmed, connected device is rebooting. Removing file: ", filename);
+        logmsg("-- ZuluControl-firmware update confirmed, connected device is rebooting. Removing file: ", filename);
         SD.remove(filename);
         g_I2cServer.ForceIsPresent();
     } else {

@@ -45,7 +45,7 @@
 #define LICENSEFILE   "zuluide.lic"
 #define LASTFILE      "zululast.txt"
 
-#define ZULUCONTROL_FW_FILE "zulucontrol.uf2"
+#define ZULUCONTROL_UF2_PREFIX "zulucontrol"
 
 // File names used for firmware update from SD card
 #define DEF_STRINGFY(DEF) STRINGFY(DEF)
