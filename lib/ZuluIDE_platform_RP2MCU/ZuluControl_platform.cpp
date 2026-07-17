@@ -168,10 +168,10 @@ uint8_t platform_check_for_controller()
     {
         FsFile root = SD.open("/");
         FsFile file;
+        char *filename = new char[MAX_FILE_PATH+1];
         while (file.openNext(&root))
         {
-            char filename[MAX_FILE_PATH];
-            file.getName(filename, sizeof(filename));
+            file.getName(filename, MAX_FILE_PATH+1);
             const char *extension = strrchr(filename, '.');
             if (extension 
                 && strncasecmp(extension, ".uf2", 4) == 0
@@ -183,6 +183,8 @@ uint8_t platform_check_for_controller()
                 break;
             }
         }
+        delete[] filename;
+        filename = nullptr;
         file.close();
         root.close();
 
