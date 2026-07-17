@@ -193,9 +193,7 @@ Ignored List
 Any file or directory that begins with a non-alphanumeric character is ignored by the ZuluIDE firmware, as well as any file that starts with `zulu`.
 
 The following common compression extensions are ignored:
- ".tar", ".tgz", ".gz", ".bz2", ".tbz2", ".xz", ".zst", ".z", ".zip", ".zipx", ".rar", ".lzh", ".lha", ".lzo", ".lz4", ".arj", ".dmg", ".hqx", ".cpt", ".7z", ".s7z"
-
-
+ `.tar`, `.tgz`, `.gz`, `.bz2`, `.tbz2`, `.xz`, `.zst`, `.z`, `.zip`, `.zipx`, `.rar`, `.lzh`, `.lha`, `.lzo`, `.lz4`, `.arj`, `.dmg`, `.hqx`, `.cpt`, `.7z`, `.s7z`
 
 The following document extensions are ignored:
-".cue", ".txt", ".rtf", ".md", ".nfo", ".pdf", ".doc"
+`.cue`, `.txt`, `.rtf`, `.md`, `.nfo`, `.pdf`, `.doc`
