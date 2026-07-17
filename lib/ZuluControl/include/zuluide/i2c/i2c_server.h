@@ -26,6 +26,8 @@
 #pragma once
 
 #include <Wire.h>
+#include <hardware/i2c.h>
+#include <pico/time.h>
 #include <zuluide/status/system_status.h>
 #include <zuluide/status/device_control_safe.h>
 #include <zuluide/pipe/image_request_pipe.h>
@@ -33,7 +35,7 @@
 #include "i2c_server_src_type.h"
 #include <string>
 
-#define I2C_API_VERSION "4.0.0"
+#define I2C_API_VERSION "5.0.0"
 
 // Delay between reading the filenames off the SD card in milliseconds
 #ifndef I2C_FILENAME_TRANSFER_DELAY
@@ -42,6 +44,8 @@
 
 #define I2C_SERVER_API_VERSION  0x1
 #define I2C_SERVER_WIFI_CONNECT 0x2
+#define I2C_SERVER_UPDATE_FW_REQUEST 0x3   // Server requests the client to start, stop, or abort a firmware upgrade
+#define I2C_SERVER_UPDATE_FW_DATA 0x4      // Server sends a chunk of firmware data to the client
 #define I2C_SERVER_UPDATE_FILENAME_CACHE 0x8
 #define I2C_SERVER_IMAGE_FILENAME 0x9
 #define I2C_SERVER_SYSTEM_STATUS_JSON  0xA
@@ -53,12 +57,22 @@
 #define I2C_SERVER_STATIC_IP 0x10
 #define I2C_SERVER_IP_ADDRESS_ACK 0x11
 #define I2C_SERVER_SD_STATUS_CHANGE 0x13  // SD card presence changed; payload[0] = 0x00 not present, 0x01 present
+
 #define I2C_SERVER_SD_NOT_PRESENT 0x00
 #define I2C_SERVER_SD_PRESENT     0x01
+
+#define I2C_SERVER_FW_UPGRADE_START 0x00
+#define I2C_SERVER_FW_UPGRADE_FINISH 0x01
+#define I2C_SERVER_FW_UPGRADE_ABORT 0x02
+#define I2C_SERVER_FW_UPGRADE_RETRY 0x03
 
 #define I2C_CLIENT_NOOP 0x0
 
 #define I2C_CLIENT_API_VERSION 0x01
+#define I2C_CLIENT_UPDATE_FW_ACK 0x03
+#define I2C_CLIENT_ACK_SPECIAL_LEN 0xFFFF
+#define I2C_CLIENT_ACK_CRC_UPGRADE_COMPLETE 0x00000000
+
 #define I2C_CLIENT_FETCH_FILENAMES 0x09
 #define I2C_CLIENT_SUBSCRIBE_STATUS_JSON  0xA
 #define I2C_CLIENT_LOAD_IMAGE  0xB
@@ -71,6 +85,11 @@
 #define I2C_CLIENT_LOG_MSG 0x12
 
 #define CLIENT_ADDR 0x45
+
+#define I2C_UPGRADE_MAX_CHUNK 2048
+
+#define I2C_NORMAL_BUS_SPEED 100000
+#define I2C_FAST_BUS_SPEED 400000
 
 enum class State { 
                    WaitForAPIVersion,
@@ -120,8 +139,17 @@ namespace zuluide::i2c {
        Default constructor.
      */
     I2CServer(zuluide::pipe::ImageRequestPipe<i2c_server_source_t>* image_request_pipe, zuluide::pipe::ImageResponsePipe<i2c_server_source_t>* image_response_pipe);
-  
+
     void SetI2c(TwoWire* wire);
+
+    /**
+       Provides the raw pico-sdk i2c_inst_t backing the same bus as SetI2c's TwoWire
+       (Wire's own instance pointer is private, with no accessor), so the DMA-driven
+       firmware-upgrade transport can issue raw pico-sdk calls interleaved with Wire's
+       own blocking calls on the same peripheral. Must be called once, after SetI2c,
+       before any firmware upgrade is attempted.
+     */
+    void SetI2cRaw(i2c_inst_t* i2c);
 
     void SetDeviceControl(DeviceControlSafe* deviceControl);
     /**
@@ -129,7 +157,16 @@ namespace zuluide::i2c {
        subscribed to updates, a JSON representation of the system state is built
        and sent.
      */
+
+    /**
+     * CheckForDevice will bypass checking the I2C connection and assume
+     * there is a device, even if later I2C calls may fail while the I2C
+     * connection is being reset.
+     */
+    void ForceIsPresent();
+
     void HandleUpdate(const SystemStatus& current);
+
     /**
        Polls the I2C client to see if they have data (commands) they want to
        send to the server and also processes the requests.
@@ -157,7 +194,7 @@ namespace zuluide::i2c {
     void SetGateway(const std::string &value);
     /**
        Sends a reset command to the I2C client. Returns true if the send is
-       succesful, otherwise false.
+       successful, otherwise false.
      */
     bool CheckForDevice();
     /**
@@ -179,6 +216,40 @@ namespace zuluide::i2c {
         Requests I2C client to consume filenames from this I2C server
      */
     void UpdateFilenames();
+
+    enum UpgradeRequest
+    {
+      START = 0x0,
+      FINISH,
+      ABORT,
+      RETRY
+    };
+    /**
+      Send ZuluControl-firmware upgrade to start, finish, abort, or retry the upgrade
+      process. Always travels over the existing Wire transport, like every other
+      message in this protocol.
+     */
+    void UpgradeZuluControlFwRequest(UpgradeRequest request);
+
+    /**
+     * Sends a chunk of the ZuluControl-firmware via DMA (proven to work on the
+     * host's master-mode transmit side)
+     * Returns false on any I2C-level failure (NACK/timeout); *outSentCrc
+     * is only valid when this returns true.
+     */
+    bool UpgradeZuluControlFwSendChunk(const uint8_t* buffer, size_t length, uint32_t* outSentCrc, absolute_time_t until);
+
+    /**
+     * Reads the client's {length, crc32} ack for a previously sent chunk, over the
+     * same Wire-based request/response mechanism used for every other client
+     * response (see Poll()). The client's core0 needs a moment after the chunk
+     * transaction completes to dequeue it, compute the CRC, and enqueue the ack --
+     * until then, its request handler replies I2C_CLIENT_NOOP (its normal "nothing
+     * queued yet" response). So this polls, retrying on NOOP, until either the ack
+     * arrives or `until` is reached. Returns false on I2C-level failure (NACK) or
+     * on timeout.
+     */
+    bool UpgradeZuluControlFwReadAck(uint16_t* outLength, uint32_t* outCrc, absolute_time_t until);
 
     /**
      * Observer that handles responses. Called from notifyObservers which should be run on the core without SD access
@@ -212,9 +283,10 @@ namespace zuluide::i2c {
 
   private:
     zuluide::pipe::ImageRequestPipe<i2c_server_source_t>* imageRequestPipe;
-    zuluide::pipe::ImageResponsePipe<i2c_server_source_t>* imageResponsePipe;  
+    zuluide::pipe::ImageResponsePipe<i2c_server_source_t>* imageResponsePipe;
     enum class FilenameTransferState {Idle, Start, Sending, Received} filenameTransferState;
     TwoWire* wire;
+    i2c_inst_t* i2cRaw;
     DeviceControlSafe* deviceControl;
     bool isSubscribed;
     bool apiVersionSent;
@@ -225,6 +297,7 @@ namespace zuluide::i2c {
     bool updateFilenameCache;
     bool isIterating;
     bool isPresent;
+    bool forcePresent;
     bool lastCardPresent;
     std::string status;
     std::string ssid;

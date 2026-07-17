@@ -32,6 +32,7 @@
 #include <ide_protocol.h>
 #include "zuluide/i2c/i2c_server.h"
 #include "zuluide/i2c/i2c_server_src_type.h"
+#include "zuluide/i2c/i2c_master_dma.h"
 
 
 #ifndef BUFFER_LENGTH
@@ -41,17 +42,24 @@
 using namespace zuluide::pipe;
 using namespace zuluide::i2c;
 
-I2CServer::I2CServer(ImageRequestPipe<i2c_server_source_t>* image_request_pipe, ImageResponsePipe<i2c_server_source_t>* image_response_pipe) : 
+
+
+I2CServer::I2CServer(ImageRequestPipe<i2c_server_source_t>* image_request_pipe, ImageResponsePipe<i2c_server_source_t>* image_response_pipe) :
   imageRequestPipe(image_request_pipe), imageResponsePipe(image_response_pipe),
-  filenameTransferState(FilenameTransferState::Idle), deviceControl(nullptr),
+  filenameTransferState(FilenameTransferState::Idle), i2cRaw(nullptr), deviceControl(nullptr),
   isSubscribed(false), apiVersionSent(false), devControlSet(false), sendFilenames(false), sendFiles(false),
-  sendNextImage(false), updateFilenameCache(false), isIterating(false), isPresent(false), lastCardPresent(false), password(""), ip(""), netmask(""), gateway(""), remoteMajorVersion(0)
+  sendNextImage(false), updateFilenameCache(false), isIterating(false), isPresent(false), forcePresent(false), lastCardPresent(false), password(""), ip(""), netmask(""), gateway(""), remoteMajorVersion(0)
 {
   imageResponsePipe->AddObserver([&](const ImageResponse<i2c_server_source_t>& t){HandleImageResponse(t);});
 }
 
 void I2CServer::SetI2c(TwoWire* wireValue) {
   wire = wireValue;
+}
+
+void I2CServer::SetI2cRaw(i2c_inst_t* i2c) {
+  i2cRaw = i2c;
+  I2CMasterDmaInit(i2cRaw);
 }
 
 void I2CServer::SetDeviceControl(DeviceControlSafe* devControl) 
@@ -69,28 +77,61 @@ bool writeLengthPrefacedString(TwoWire *wire, uint8_t reg, uint16_t length, cons
   uint8_t low = length & 0xFF;
   wire->write(high);
   wire->write(low);
-  if (wire->endTransmission() != 0) {
+  uint8_t wire_status = wire->endTransmission();
+
+  if (wire_status != 0) {
+    dbgmsg("-- I2C transmission error: ", (int)wire_status);
     return false;
   }
   // Break the string into BUFFER_LENGTH sized transmissions.
   // Larger values for BUFFER_LENGTH have not worked.
   for (int pos = 0; pos < length; pos += BUFFER_LENGTH) {
 #ifndef CONTROL_CROSS_CORE_QUEUE
-    ide_protocol_poll();
+     ide_protocol_poll();
 #endif
     wire->beginTransmission(CLIENT_ADDR);
     int toSend = (pos + BUFFER_LENGTH) < length ? BUFFER_LENGTH : length - pos;
     wire->write(buffer + pos, toSend);
-    wire->endTransmission();
+    wire_status = wire->endTransmission();
+
+    if (wire_status != 0)
+    {
+      logmsg("-- I2C data transmission error: ", (int)wire_status);
+      return false;
+    }
   }
 
   return true;
 }
 
+extern uint32_t g_i2c_bus_speed;
 bool I2CServer::CheckForDevice() {
   apiVersionSent = false;
   auto buf = "";
-  isPresent = writeLengthPrefacedString(wire, I2C_SERVER_RESET, 0, buf);
+  if (forcePresent)
+  {
+    writeLengthPrefacedString(wire, I2C_SERVER_RESET, 0, buf);
+    isPresent = true;
+  }
+  else
+  {
+    isPresent = writeLengthPrefacedString(wire, I2C_SERVER_RESET, 0, buf);
+  }
+  if (!isPresent && g_i2c_bus_speed != I2C_NORMAL_BUS_SPEED)
+  {
+    wire->setClock(I2C_NORMAL_BUS_SPEED);
+    isPresent =  writeLengthPrefacedString(wire, I2C_SERVER_RESET, 0, buf);
+    if (isPresent)
+    {
+      g_i2c_bus_speed = I2C_NORMAL_BUS_SPEED;
+      logmsg("I2C successfully fell back to normal bus speed (100kHz)");
+    }
+    else
+    {
+      wire->setClock(g_i2c_bus_speed);
+    }
+  }
+
   if (isPresent) {
     static const char ide_api_ver[] = I2C_API_VERSION " ZuluIDE";
     if (writeLengthPrefacedString(wire, I2C_SERVER_API_VERSION, strlen(ide_api_ver), ide_api_ver)) {
@@ -98,6 +139,10 @@ bool I2CServer::CheckForDevice() {
     }
   }
   return isPresent;
+}
+
+void I2CServer::ForceIsPresent() {
+  forcePresent = true;
 }
 
 void I2CServer::HandleUpdate(const SystemStatus& current) {
@@ -123,6 +168,82 @@ void I2CServer::HandleUpdate(const SystemStatus& current) {
   status = current.ToJson();
   if (isSubscribed)
     writeLengthPrefacedString(wire, I2C_SERVER_SYSTEM_STATUS_JSON, status.length(), status.c_str());
+}
+
+static bool WireAvailableTimeout(TwoWire *wire, uint32_t timeout = 50)
+{
+  uint32_t start = millis();
+  while((uint32_t)(millis() - start) < timeout)
+  {
+    if (wire->available())
+      return true;
+  }
+  return false;
+}
+
+static uint16_t ReadInLength(TwoWire *wire) {
+  // Read in the length.
+  if (!WireAvailableTimeout(wire))
+    return 0;
+  int value = wire->read();
+  uint16_t length = (value < 0) ? 0 : value;
+  length = length << 8;
+  if (!WireAvailableTimeout(wire))
+    return 0;
+  value = wire->read();
+  length |= (value < 0) ? 0 : value;
+  return length;
+}
+
+void I2CServer::UpgradeZuluControlFwRequest(UpgradeRequest request)
+{
+  uint8_t requestByte = (uint8_t)request;
+  writeLengthPrefacedString(wire, I2C_SERVER_UPDATE_FW_REQUEST, 1, (const char*)&requestByte);
+}
+
+bool I2CServer::UpgradeZuluControlFwSendChunk(const uint8_t* chunk, size_t length, uint32_t* outSentCrc, absolute_time_t until)
+{
+  return I2CMasterDmaSendChunk(CLIENT_ADDR, I2C_SERVER_UPDATE_FW_DATA, chunk, (uint16_t)length, outSentCrc, until);
+}
+
+bool I2CServer::UpgradeZuluControlFwReadAck(uint16_t* outLength, uint32_t* outCrc, absolute_time_t until)
+{
+  while (true) {
+    wire->requestFrom(CLIENT_ADDR, 3);
+    if (WireAvailableTimeout(wire)) {
+      uint8_t requestType = wire->read();
+      if (requestType == I2C_CLIENT_UPDATE_FW_ACK) {
+        uint16_t payloadLen = ReadInLength(wire);
+        if (payloadLen == 6) {  // [len_hi][len_lo][crc32: 4 bytes]
+          uint8_t buffer[6];
+          bool ok = true;
+          for (int pos = 0; pos < 6 && ok;) {
+            int toRecv = (pos + BUFFER_LENGTH < 6) ? BUFFER_LENGTH : 6 - pos;
+            wire->requestFrom(CLIENT_ADDR, toRecv);
+            while (toRecv > 0) {
+              if (!WireAvailableTimeout(wire)) { ok = false; break; }
+              buffer[pos++] = wire->read();
+              toRecv--;
+            }
+          }
+          if (ok) {
+            if (outLength) *outLength = ((uint16_t)buffer[0] << 8) | buffer[1];
+            if (outCrc) *outCrc = ((uint32_t)buffer[2] << 24) | ((uint32_t)buffer[3] << 16) |
+                                  ((uint32_t)buffer[4] << 8) | buffer[5];
+            return true;
+          }
+        }
+      }
+      // Anything else (most commonly I2C_CLIENT_NOOP, the client's normal reply
+      // when its core0 hasn't dequeued/processed the chunk and enqueued the ack
+      // yet) just means "not ready" -- fall through and retry.
+    }
+
+    if (absolute_time_diff_us(get_absolute_time(), until) < 0) {
+      return false;
+    }
+    sleep_us(200);
+  }
 }
 
 void I2CServer::HandleImageResponse(const ImageResponse<i2c_server_source_t>& response)
@@ -259,14 +380,6 @@ void I2CServer::RequestReset(const i2c_server_source_t source)
       imageRequestPipe->RequestImageSafe(reset);
 }
 
-static uint16_t ReadInLength(TwoWire *wire) {
-  // Read in the length.
-  uint16_t length = wire->read();
-  length = length << 8;
-  length |= wire->read();
-  return length;
-}
-
 void I2CServer::Poll() {
   if (!devControlSet || !isPresent) {
     return;
@@ -327,14 +440,13 @@ void I2CServer::Poll() {
     }
   }
 
-  wire->requestFrom(CLIENT_ADDR, 1);
+  wire->requestFrom(CLIENT_ADDR, 3);
   uint8_t requestType = wire->read();
 
   switch (requestType) {
   case I2C_CLIENT_API_VERSION:
   {
     EnterLoggingSafe();
-    wire->requestFrom(CLIENT_ADDR, 2);
     uint16_t length = ReadInLength(wire);
     if (length > 0)
     {
@@ -342,17 +454,20 @@ void I2CServer::Poll() {
       char* buffer = new char[length + 1];
       memset(buffer, 0, length + 1);
 
-      for (int pos = 0; pos < length;)
+      bool i2c_read_timeout = false;
+      for (int pos = 0; pos < length && !i2c_read_timeout;)
       {
         int toRecv = pos + BUFFER_LENGTH < length ? BUFFER_LENGTH : length - pos;
 
         wire->requestFrom(CLIENT_ADDR, toRecv);
         while (toRecv > 0) {
-          while (wire->available() == 0) {
-#ifndef CONTROL_CROSS_CORE_QUEUE
-            ide_protocol_poll();
-#endif
+          if (!WireAvailableTimeout(wire)) {
+            i2c_read_timeout = true;
+            break;
           }
+#ifndef CONTROL_CROSS_CORE_QUEUE
+          ide_protocol_poll();
+#endif
           buffer[pos++] = wire->read();
           toRecv--;
         }
@@ -414,7 +529,6 @@ void I2CServer::Poll() {
 
   case I2C_CLIENT_SUBSCRIBE_STATUS_JSON: {
     EnterLoggingSafe();
-    wire->requestFrom(CLIENT_ADDR, 2);
     if (ReadInLength(wire) != 0) {
       logmsg("Length was not 0 for subscribe request.");
     }
@@ -434,7 +548,6 @@ void I2CServer::Poll() {
   }
 
   case I2C_CLIENT_LOAD_IMAGE: {
-    wire->requestFrom(CLIENT_ADDR, 2);
     uint16_t length = ReadInLength(wire);
 
     if (length > 0) {
@@ -442,16 +555,19 @@ void I2CServer::Poll() {
       char* buffer = new char[length + 1];
       memset(buffer, 0, length + 1);
 
-      for (int pos = 0; pos < length;) {        
+      bool i2c_read_timeout = false;
+      for (int pos = 0; pos < length && !i2c_read_timeout;) {
         int toRecv = pos + BUFFER_LENGTH < length ? BUFFER_LENGTH : length - pos;
 
         wire->requestFrom(CLIENT_ADDR, toRecv);
         while (toRecv > 0) {
-          while (wire->available() == 0) {
-#ifndef CONTROL_CROSS_CORE_QUEUE
-            ide_protocol_poll();
-#endif
+          if (!WireAvailableTimeout(wire)) {
+            i2c_read_timeout = true;
+            break;
           }
+#ifndef CONTROL_CROSS_CORE_QUEUE
+          ide_protocol_poll();
+#endif
           buffer[pos++] = wire->read();
           toRecv--;
         }
@@ -479,7 +595,6 @@ void I2CServer::Poll() {
 
   case I2C_CLIENT_EJECT_IMAGE: {
 
-    wire->requestFrom(CLIENT_ADDR, 2);
     if (ReadInLength(wire) != 0) {
       EnterLoggingSafe();
       logmsg("Length was not 0 for eject image request.");
@@ -491,7 +606,6 @@ void I2CServer::Poll() {
   }
 
   case I2C_CLIENT_FETCH_FILENAMES: {
-    wire->requestFrom(CLIENT_ADDR, 2);
     EnterLoggingSafe();
     if (ReadInLength(wire) != 0) {
       logmsg("Length was not 0 for fetch filenames request.");
@@ -504,7 +618,6 @@ void I2CServer::Poll() {
   }
   
   case I2C_CLIENT_FETCH_IMAGES_JSON: {
-    wire->requestFrom(CLIENT_ADDR, 2);
     EnterLoggingSafe();
     if (ReadInLength(wire) != 0) {
       logmsg("Length was not 0 for fetch images request.");
@@ -517,7 +630,6 @@ void I2CServer::Poll() {
   }
 
   case I2C_CLIENT_FETCH_ITR_IMAGE: {
-    wire->requestFrom(CLIENT_ADDR, 2);
     EnterLoggingSafe();
     if (ReadInLength(wire) != 0) {
       logmsg("Length was not 0 for fetch iterate image request.");
@@ -531,7 +643,6 @@ void I2CServer::Poll() {
   }
 
   case I2C_CLIENT_FETCH_SSID: {
-    wire->requestFrom(CLIENT_ADDR, 2);
     EnterLoggingSafe();
     if (ReadInLength(wire) != 0) {
       logmsg("Length was not 0 for fetch ssid request.");
@@ -556,7 +667,6 @@ void I2CServer::Poll() {
   }
 
   case I2C_CLIENT_FETCH_SSID_PASS: {
-    wire->requestFrom(CLIENT_ADDR, 2);
     EnterLoggingSafe();
     if (ReadInLength(wire) != 0) {
       logmsg("Length was not 0 for fetch ssid pass request.");
@@ -568,11 +678,11 @@ void I2CServer::Poll() {
   }
 
   case I2C_CLIENT_NOOP: {
+    uint16_t length = ReadInLength(wire);
     break;
   }
 
   case I2C_CLIENT_IP_ADDRESS: {
-    wire->requestFrom(CLIENT_ADDR, 2);
     uint16_t length = ReadInLength(wire);
 
     if (length > 0) {
@@ -580,16 +690,19 @@ void I2CServer::Poll() {
       char* buffer = new char[length + 1];
       memset(buffer, 0, length + 1);
 
-      for (int pos = 0; pos < length;) {        
+      bool i2c_read_timeout = false;
+      for (int pos = 0; pos < length && !i2c_read_timeout;) {
         int toRecv = ((BUFFER_LENGTH < length - pos) ? BUFFER_LENGTH : length - pos);
 
         wire->requestFrom(CLIENT_ADDR, toRecv);
         while (toRecv > 0) {
-          while (wire->available() == 0) {
-#ifndef CONTROL_CROSS_CORE_QUEUE
-            ide_protocol_poll();
-#endif
+          if (!WireAvailableTimeout(wire)) {
+            i2c_read_timeout = true;
+            break;
           }
+#ifndef CONTROL_CROSS_CORE_QUEUE
+          ide_protocol_poll();
+#endif
           buffer[pos++] = wire->read();
           toRecv--;
         }
@@ -606,7 +719,6 @@ void I2CServer::Poll() {
   }
 
   case I2C_CLIENT_LOG_MSG: {
-    wire->requestFrom(CLIENT_ADDR, 2);
     uint16_t payload_length = ReadInLength(wire); 
     EnterLoggingSafe();
     if ( payload_length > 0) {
@@ -614,16 +726,19 @@ void I2CServer::Poll() {
       char* buffer = new char[payload_length+1];
       memset(buffer, '\0', payload_length+1);
 
-      for (int pos = 0; pos < payload_length;) {        
+      bool i2c_read_timeout = false;
+      for (int pos = 0; pos < payload_length && !i2c_read_timeout;) {
         int toRecv = (BUFFER_LENGTH < payload_length - pos) ? BUFFER_LENGTH : payload_length - pos;
 
         wire->requestFrom(CLIENT_ADDR, toRecv);
         while (toRecv > 0) {
-          while (wire->available() == 0) {
-#ifndef CONTROL_CROSS_CORE_QUEUE
-            ide_protocol_poll();
-#endif
+          if (!WireAvailableTimeout(wire)) {
+            i2c_read_timeout = true;
+            break;
           }
+#ifndef CONTROL_CROSS_CORE_QUEUE
+          ide_protocol_poll();
+#endif
           buffer[pos] = wire->read();
           pos++;
           toRecv--;
