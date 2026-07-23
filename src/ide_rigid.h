@@ -156,6 +156,10 @@ protected:
     virtual bool cmd_check_power_mode(ide_registers_t *regs);
     virtual bool cmd_get_media_status(ide_registers_t *regs);
 
+    // ATA Security command handlers (local fork, not for upstream)
+    virtual bool cmd_security_ack(ide_registers_t *regs);
+    virtual bool cmd_security_password(ide_registers_t *regs, const char *name, uint8_t opcode);
+
     // Helper methods
     // convert lba to cylinder, head, sector values
     void lba2chs(const uint32_t lba, uint16_t &cylinder, uint8_t &head, uint8_t &sector);
