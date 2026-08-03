@@ -318,6 +318,17 @@ void platform_disable_led(void)
     logmsg("Disabling status LED");
 }
 
+bool platform_is_led_enabled()
+{
+    return !g_led_disabled;
+}
+
+void platform_enable_led()
+{
+    g_led_disabled = false;
+    logmsg("Enabling status LED");
+}
+
 void platform_init_eject_button(uint8_t eject_button)
 {
     if (eject_button & 1)
