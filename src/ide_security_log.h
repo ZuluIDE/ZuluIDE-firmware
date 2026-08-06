@@ -1,12 +1,26 @@
 /**
- * ZuluIDE™ - Copyright (c) 2026 (local fork)
+ * ZuluIDE™ - Copyright (c) 2026 Rabbit Hole Computing™
  *
- * Local-only utility: log ATA security command activity to zululog.txt on the
- * SD card, then flush immediately. This is meant for debugging ATA-Security
- * probing sequences on hosts like the Denso TSC Gen 3/4 nav module.
+ * ZuluIDE™ firmware is licensed under the GPL version 3 or any later version.
  *
- * Not for upstream submission — this is a diagnostic aid added on a local
- * branch only. See /CODE/zuluide/README-ata-compliance.md for context.
+ * https://www.gnu.org/licenses/gpl-3.0.html
+ * ----
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * Under Section 7 of GPL version 3, you are granted additional
+ * permissions described in the ZuluIDE Hardware Support Library Exception
+ * (GPL-3.0_HSL_Exception.md), as published by Rabbit Hole Computing™.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <https://www.gnu.org/licenses/>.
 **/
 
 #pragma once
@@ -15,11 +29,7 @@
 #include <stddef.h>
 #include <ide_phy.h>
 
-// Force the SD card log buffer to be flushed to zululog.txt right now.
-// Defined in ZuluIDE.cpp — declared here so ide_rigid.cpp can call it.
-extern void save_logfile(bool always);
-
-// Log an ATA security command event to zululog.txt and flush the log to
+// Log an ATA security command event to the debug log and flush the log to
 // disk immediately. Includes the command opcode, IDE register state, and
 // (for SECURITY_UNLOCK) the 32-byte password the host sent.
 void log_security_event(const char *event, uint8_t opcode, ide_registers_t *regs,

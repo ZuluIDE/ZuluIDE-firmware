@@ -28,6 +28,12 @@
 #include "atapi_constants.h"
 #include "ide_security_log.h"
 #include "ZuluIDE.h"
+
+// Forward declaration for load_image function defined in ZuluIDE.cpp
+namespace zuluide { namespace images { class Image; } }
+void load_image(const zuluide::images::Image& toLoad, bool insert = true);
+// Forward declaration — defined in ZuluIDE.cpp
+extern void save_logfile(bool always);
 #include "ZuluIDE_config.h"
 #include <minIni.h>
 extern uint8_t g_ide_signals;
