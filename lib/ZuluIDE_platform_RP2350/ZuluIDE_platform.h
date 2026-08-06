@@ -86,6 +86,8 @@ void platform_write_led_override(bool state);
 
 // Disable the status LED
 void platform_disable_led(void);
+void platform_enable_led(void);
+bool platform_is_led_enabled(void);
 
 void platform_init_eject_button(uint8_t eject_button);
 

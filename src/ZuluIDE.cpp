@@ -1156,8 +1156,9 @@ static void zuluide_reload_config()
 #endif
   }
 
-  if (ini_getbool("IDE", "DisableStatusLED", false, CONFIGFILE))
+  if (ini_getbool("IDE", "disable_status_led", false, CONFIGFILE))
   {
+      dbgmsg("-- Disabling status LED");
       platform_disable_led();
   }
 

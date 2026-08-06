@@ -154,6 +154,17 @@ void ide_protocol_poll()
 
     if (evt != IDE_EVENT_NONE)
     {
+        static bool check_disabled_led_once = false;
+        if (!check_disabled_led_once && evt == IDE_EVENT_CMD )
+        {
+            if (!platform_is_led_enabled() && ini_getbool("IDE", "reenable_led_after_bus_activity", false, CONFIGFILE))
+            {
+                dbgmsg("-- Re-enabling status LED after bus activity");
+                platform_enable_led();
+            }
+            check_disabled_led_once = true;
+        }
+
         LED_ON();
 
         if (evt == IDE_EVENT_CMD)
