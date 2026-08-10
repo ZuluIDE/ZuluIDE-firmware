@@ -998,12 +998,18 @@ void loadFirstImage() {
     {
       while(imgIterator.MoveNext())
       {
-        // If a prefix is used to define the drive type, only load prefix images for the first image
-        if (prefix[0] != '\0'
-          && strncasecmp(imgIterator.Get().GetFilename().c_str(), prefix, 4) != 0
-        )
+        // Compare by inferred drive type rather  than by an exact 4-char prefix string,
+        // so every recognized alias for a type is accepted (e.g. the "zipd" and the
+        //  other options "z100"/"z250").
+        if (prefix[0] != '\0')
         {
-          continue;
+          Image::ImageType prefix_type =
+            Image::InferImageTypeFromImagePrefix(imgIterator.Get().GetFilename().c_str());
+          if (prefix_type == Image::ImageType::unknown
+            || Image::ToDriveType(prefix_type) != g_ide_imagefile.get_drive_type())
+          {
+            continue;
+          }
         }
         logmsg("Loading first image ", imgIterator.Get().GetFilename().c_str());
         g_StatusController.LoadImage(imgIterator.Get());
