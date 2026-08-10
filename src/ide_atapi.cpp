@@ -1686,7 +1686,7 @@ void IDEATAPIDevice::eject_media()
         }
         else
         {
-            logmsg("Device ejecting media, image already cleared");
+            dbgmsg("Device ejecting media, image already cleared");
         }
         m_removable.ejected = true;
         clear_eject_deferred();

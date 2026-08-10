@@ -204,24 +204,24 @@ uint8_t platform_check_for_controller()
 }
 
 void platform_set_status_controller(zuluide::ObserverTransfer<zuluide::status::SystemStatus> *statusController) {
-    logmsg("Initialized platform controller with the status controller.");
+    dbgmsg("Initialized platform controller with the status controller.");
     display.init(&g_wire);
     statusController->AddObserver(processStatusUpdate);
     uiStatusController = statusController;
 }
 
 void platform_set_controller_image_response_pipe(zuluide::pipe::ImageResponsePipe<zuluide::control::select_controller_source_t> *imageRequestPipe) {
-    logmsg("Initialized platform with filename request pipe");
+    dbgmsg("Initialized platform with filename request pipe");
     g_controllerImageResponsePipe = imageRequestPipe;
 }
 
 void platform_set_display_controller(zuluide::Observable<zuluide::control::DisplayState>& displayController) {
-    logmsg("Initialized platform controller with the display controller.");
+    dbgmsg("Initialized platform controller with the display controller.");
     displayController.AddObserver([&] (auto current) -> void {display.HandleUpdate(current);}); 
 }
 
 void platform_set_input_interface(zuluide::control::InputReceiver* inputReceiver) {
-    logmsg("Initialized platform controller with input receiver.");
+    dbgmsg("Initialized platform controller with input receiver.");
     g_rotary_input.SetReceiver(inputReceiver);
     g_rotary_input.StartSendingEvents();
 }
