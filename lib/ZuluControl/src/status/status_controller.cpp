@@ -164,9 +164,15 @@ bool StatusController::IsPreventRemovable()
 
 void StatusController::SetIsDeferred(bool defer)
 {
+  if (status.IsDeferred() == defer)
+    return;
+
   status.SetIsDeferred(defer);
-  if (!defer)
-    notifyObservers();
+  // Notify in both directions so the UI and the web interface can show a
+  // pending load/eject, not just its completion. Setting the flag often
+  // happens from inside an observer callback (e.g. load_image() or
+  // button_eject_media()); status_observer() guards against re-entry.
+  notifyObservers();
 }
 
 bool StatusController::IsDeferred()

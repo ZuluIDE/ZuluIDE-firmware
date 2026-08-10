@@ -496,6 +496,10 @@ void IDEATAPIDevice::loaded_new_media()
     m_removable.ejected = false;
     set_not_ready(true);
 
+    // Media is now loaded, so any pending deferred load has been satisfied.
+    m_removable.is_load_deferred = false;
+    g_StatusController.SetIsDeferred(false);
+
     char filename[MAX_FILE_PATH + 1];
     if (m_image && m_image->get_image_name(filename, sizeof(filename)))
     {
@@ -1645,12 +1649,29 @@ void IDEATAPIDevice::eject_button_poll(bool immediate)
     }
 }
 
+void IDEATAPIDevice::set_eject_deferred()
+{
+    dbgmsg("Ejection deferred, host is preventing media from being ejected");
+    m_removable.deferred_image_name[0] = '\0';
+    m_removable.is_load_deferred = true;
+    g_StatusController.SetIsDeferred(true);
+}
+
+void IDEATAPIDevice::clear_eject_deferred()
+{
+    if (m_removable.is_load_deferred && m_removable.deferred_image_name[0] == '\0')
+    {
+        m_removable.is_load_deferred = false;
+        g_StatusController.SetIsDeferred(false);
+    }
+}
+
 void IDEATAPIDevice::button_eject_media()
 {
  if (!m_removable.prevent_removable || m_removable.ignore_prevent_removal)
         eject_media();
     else
-        dbgmsg("Attempted to eject media but host has set drive to prevent removable");
+        set_eject_deferred();
 }
 
 void IDEATAPIDevice::eject_media()
@@ -1668,6 +1689,7 @@ void IDEATAPIDevice::eject_media()
             logmsg("Device ejecting media, image already cleared");
         }
         m_removable.ejected = true;
+        clear_eject_deferred();
     }
     else
         dbgmsg("---- Eject request ignored or delayed");

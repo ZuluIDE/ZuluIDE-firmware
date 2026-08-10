@@ -114,9 +114,9 @@ bool IDEZipDrive::handle_command(ide_registers_t *regs)
 void IDEZipDrive::eject_media()
 {
     if (m_removable.ejected) return;
-    // Set ejected before calling SetIsCardPresent — that call fires status_observer()
-    // synchronously, which calls button_eject_media() → eject_media() again.
-    // Without this guard the recursion stack-overflows.
+    // Set ejected before calling into the StatusController -- the eject fires
+    // status_observer() synchronously, which calls button_eject_media() -> eject_media()
+    // again. Without this guard the recursion stack-overflows.
     m_removable.ejected = true;
 
     char filename[MAX_FILE_PATH+1];
@@ -124,14 +124,20 @@ void IDEZipDrive::eject_media()
         logmsg("Device ejecting media: \"", filename, "\"");
     else
         logmsg("Eject requested, no media to eject");
-    g_StatusController.SetIsCardPresent(false);
+    clear_eject_deferred();
+    g_StatusController.EjectImage();
 }
 
 
 void IDEZipDrive::button_eject_media()
 {
     if (m_removable.prevent_removable)
+    {
+        // Report the eject request to the host, and show it as pending on the
+        // display and web interface until the host lets the media go.
         m_zip_disk_info.button_pressed = true;
+        set_eject_deferred();
+    }
     else
         eject_media();
 }
@@ -566,8 +572,8 @@ bool IDEZipDrive::atapi_start_stop_unit(const uint8_t *cmd)
                     }
                     else
                     {
-                        g_StatusController.SetIsDeferred(false);
-                        m_removable.is_load_deferred = false;
+                        // Deferred eject: the host is now letting the media go,
+                        // eject_media() clears the deferred state.
                         m_zip_disk_info.button_pressed = false;
                         eject_media();
                     }
