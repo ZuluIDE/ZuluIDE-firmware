@@ -1862,6 +1862,7 @@ void IDECDROMDevice::button_eject_media()
             if (!m_removable.ejected)
             {
                 set_esn_event(esn_event_t::MEjectRequest);
+                set_eject_deferred();
             }
         }
     }

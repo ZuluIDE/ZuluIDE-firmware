@@ -95,6 +95,16 @@ public:
     virtual inline void set_load_first_image_cb(void (*load_image_cb)()) override {m_removable.load_first_image_cb = load_image_cb;}
 
 protected:
+    // Records that a user requested an eject the host is currently preventing, and
+    // reports it so the display and web interface can show the pending eject.
+    // A deferred eject is a deferred load with no image name, see the deferred
+    // handling in IDEZipDrive::atapi_start_stop_unit().
+    void set_eject_deferred();
+
+    // Clears a pending deferred eject once the media has actually been ejected.
+    // Leaves a deferred load alone, that is completed by loading the image.
+    void clear_eject_deferred();
+
     IDEImage *m_image;
 
     // Device type info is filled in by subclass
