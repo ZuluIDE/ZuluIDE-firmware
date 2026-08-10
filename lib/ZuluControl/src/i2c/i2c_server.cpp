@@ -533,7 +533,7 @@ void I2CServer::Poll() {
       logmsg("Length was not 0 for subscribe request.");
     }
 
-    logmsg("I2C Client subscribed to updates.");
+    dbgmsg("I2C Client subscribed to updates.");
     isSubscribed = true;
 
     // Push current SD card status so the client has it immediately on subscribe.
