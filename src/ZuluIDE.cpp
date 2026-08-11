@@ -900,6 +900,8 @@ void setupStatusController()
 }
 
 void loadFirstImage() {
+  if (!g_sdcard_present) return;
+  
   bool quiet = ini_getbool("IDE", "quiet_image_parsing", 0, CONFIGFILE);
   if (!quiet) logmsg("Parsing images on the SD card");
   zuluide::images::ImageIterator imgIterator;
