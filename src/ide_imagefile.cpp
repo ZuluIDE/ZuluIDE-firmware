@@ -93,7 +93,7 @@ bool IDEImageFile::open_file(FsVolume *volume, const char *filename, bool read_o
 
 // Open a single image file from m_folder.
 // If m_is_folder is false, this is used only for opening the initial image.
-bool IDEImageFile::internal_open(const char *filename)
+bool IDEImageFile::internal_open(const char *filename, bool quiet)
 {
     m_file.open(&m_folder, filename, m_read_only ? O_RDONLY : O_RDWR);
 
@@ -114,20 +114,20 @@ bool IDEImageFile::internal_open(const char *filename)
 
     if (m_file.getContainerFormat() == ZuluContainerFs::Container::None)
     {
-        dbgmsg("No container metadata found, treating as a normal image");
+        if (!quiet) dbgmsg("No container metadata found, treating as a normal image");
     }
     else
     {
-        logmsg("Image is a ", m_file.getContainerNameCstr(), " container");
+        if (!quiet) logmsg("Image is a ", m_file.getContainerNameCstr(), " container");
     }
 
     m_capacity = m_file.size();
-    dbgmsg("Image file ", filename, " size ", (int64_t)m_capacity);
+    if (!quiet) dbgmsg("Image file ", filename, " size ", (int64_t)m_capacity);
 
     uint32_t begin = 0, end = 0;
     if (m_file.contiguousRange(&begin, &end))
     {
-        dbgmsg("Image file ", filename, " is contiguous, sectors ", (int64_t)begin, " to ", (int64_t)end);
+        if (!quiet) dbgmsg("Image file ", filename, " is contiguous, sectors ", (int64_t)begin, " to ", (int64_t)end);
         m_first_sector = begin;
         m_contiguous = true;
     }
@@ -135,7 +135,7 @@ bool IDEImageFile::internal_open(const char *filename)
     {
         if (!m_is_folder || g_log_debug)
         {
-            logmsg("Image file ", filename, " is not contiguous, access will be slower");
+            if (!quiet) logmsg("Image file ", filename, " is not contiguous, access will be slower");
         }
     }
 
@@ -209,7 +209,7 @@ bool IDEImageFile::select_image(const char *filename)
         return false;
     }
 
-    return internal_open(filename);
+    return internal_open(filename, true);
 }
 
 void IDEImageFile::set_drive_type(drive_type_t type)

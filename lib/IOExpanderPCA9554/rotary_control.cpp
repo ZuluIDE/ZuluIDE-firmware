@@ -84,7 +84,8 @@ uint8_t RotaryControl::getValue() {
 
 void RotaryControl::SetTicks(uint8_t ticks) {
   number_of_ticks = ticks;
-  logmsg("Rotary encoder set to ", (int) number_of_ticks, " ticks before registering a rotation");
+  if (ticks > 1)
+    logmsg("Rotary encoder set to ", (int) number_of_ticks, " ticks before registering a rotation");
 }
 
 void RotaryControl::SetI2c(TwoWire* i2c) {

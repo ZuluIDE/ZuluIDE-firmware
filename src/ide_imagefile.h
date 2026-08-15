@@ -174,7 +174,7 @@ protected:
     char m_prefix[5];
     drive_type_t m_drive_type;
 
-    bool internal_open(const char *filename);
+    bool internal_open(const char *filename, bool quiet = false);
 
     struct sd_cb_state_t {
         IDEImage::Callback *callback;
