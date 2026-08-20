@@ -215,6 +215,22 @@ bool IDERigidDevice::handle_command(ide_registers_t *regs)
         case IDE_CMD_WRITE_SECTORS_WOUT_RETRY: [[fallthrough]];
         case IDE_CMD_WRITE_SECTORS: return cmd_write(regs, false, false);
         case IDE_CMD_WRITE_MULTIPLE: return cmd_write(regs, false, true);
+        case IDE_CMD_READ_SECTORS_EXT: return cmd_read(regs, false, false, false);
+        case IDE_CMD_READ_DMA_EXT: [[fallthrough]];
+        case IDE_CMD_READ_MULTIPLE_EXT: [[fallthrough]];
+        case IDE_CMD_READ_VERIFY_SECTORS_EXT:
+            return cmd_read(regs,
+                            regs->command == IDE_CMD_READ_DMA_EXT,
+                            regs->command == IDE_CMD_READ_VERIFY_SECTORS_EXT,
+                            regs->command == IDE_CMD_READ_MULTIPLE_EXT);
+        case IDE_CMD_WRITE_SECTORS_EXT: return cmd_write(regs, false, false);
+        case IDE_CMD_WRITE_DMA_EXT: [[fallthrough]];
+        case IDE_CMD_WRITE_MULTIPLE_EXT:
+            return cmd_write(regs,
+                             regs->command == IDE_CMD_WRITE_DMA_EXT,
+                             regs->command == IDE_CMD_WRITE_MULTIPLE_EXT);
+        case IDE_CMD_FLUSH_CACHE_EXT:
+            return cmd_flush_cache(regs);
         case IDE_CMD_FLUSH_CACHE: return cmd_flush_cache(regs);
         case IDE_CMD_READ_BUFFER: return cmd_read_buffer(regs);
         case IDE_CMD_WRITE_BUFFER: return cmd_write_buffer(regs);
@@ -380,7 +396,7 @@ bool IDERigidDevice::cmd_read(ide_registers_t *regs, bool dma_transfer, bool ver
 
     if (is_lba_mode(regs))
     {
-        lba |= 0xF & (regs->device << 24);
+        lba |= (regs->device & 0xF) << 24;
         lba |= regs->lba_high << 16;
         lba |= regs->lba_mid << 8;
         lba |= regs->lba_low;
@@ -393,12 +409,24 @@ bool IDERigidDevice::cmd_read(ide_registers_t *regs, bool dma_transfer, bool ver
         sector = regs->lba_low;
         lba = (cylinder * m_devinfo.heads + head) * m_devinfo.sectors_per_track + (sector - 1);
     }
+    
+    // Log MBR reads (LBA 0) for debugging
+    if (lba == 0)
+    {
+        dbgmsg("=== MBR READ REQUEST: LBA=0, sector_count=", (int)sector_count, " ===");
+        m_current_read_lba = 0;
+    }
+    else
+    {
+        m_current_read_lba = lba;
+    }
+    
     // access out of bounds
     if (lba >= capacity_lba())
     {
         logmsg("Read access out of bounds, lba = ", (int64_t)lba, ", capacity ", (int64_t)capacity_lba());
         lba = capacity_lba();
-        regs->device = 0xF & (lba << 24);
+        regs->device = ((lba >> 24) & 0xF) | (regs->device & ~0xF);
         regs->lba_high = lba << 16;
         regs->lba_mid = lba << 8;
         regs->lba_low = lba;
@@ -418,6 +446,10 @@ bool IDERigidDevice::cmd_read(ide_registers_t *regs, bool dma_transfer, bool ver
     {
         uint32_t sector_size = m_devinfo.bytes_per_sector;
         bool status = true;
+        uint64_t file_offset = (uint64_t)lba * sector_size;
+
+        dbgmsg("cmd_read: LBA=", (int64_t)lba, " sector_size=", (int)sector_size,
+               " file_offset=", (int64_t)file_offset, " sector_count=", (int)sector_count);
 
         if (is_multiple)
         {
@@ -427,7 +459,7 @@ bool IDERigidDevice::cmd_read(ide_registers_t *regs, bool dma_transfer, bool ver
 
             if (block_count > 0)
             {
-                status = m_image->read((uint64_t)lba * sector_size, block_size, block_count, this);
+                status = m_image->read(file_offset, block_size, block_count, this);
                 lba += block_count * multi_mode;
             }
 
@@ -437,12 +469,12 @@ bool IDERigidDevice::cmd_read(ide_registers_t *regs, bool dma_transfer, bool ver
             if (status && sector_count > block_count * multi_mode)
             {
                 block_size = (sector_count - block_count * multi_mode) * sector_size;
-                status = m_image->read((uint64_t)lba * sector_size, block_size, 1, this);
+                status = m_image->read(file_offset, block_size, 1, this);
             }
         }
         else
         {
-            status = m_image->read((uint64_t)lba * sector_size, sector_size, sector_count, this);
+            status = m_image->read(file_offset, sector_size, sector_count, this);
         }
 
         if (status)
@@ -463,6 +495,7 @@ bool IDERigidDevice::cmd_read(ide_registers_t *regs, bool dma_transfer, bool ver
                 // For PIO DATA IN transfer there is no interrupt after the last block
                 regs->status = IDE_STATUS_DEVRDY | IDE_STATUS_DSC;
                 ide_phy_set_regs(regs);
+                ide_phy_assert_irq(IDE_STATUS_DEVRDY | IDE_STATUS_DSC);
             }
         }
         else
@@ -495,7 +528,7 @@ bool IDERigidDevice::cmd_write(ide_registers_t *regs, bool dma_transfer, bool is
 
     if (is_lba_mode(regs))
     {
-        lba |= 0xF & (regs->device) << 24;
+        lba |= (regs->device & 0xF) << 24;
         lba |= regs->lba_high << 16;
         lba |= regs->lba_mid << 8;
         lba |= regs->lba_low;
@@ -1261,7 +1294,6 @@ bool IDERigidDevice::ata_recv_data_block(uint8_t *data, uint16_t blocksize)
 ssize_t IDERigidDevice::read_callback(const uint8_t *data, size_t blocksize, size_t num_blocks)
 {
     platform_poll();
-
     return ata_send_data(data, blocksize, num_blocks);
 }
 

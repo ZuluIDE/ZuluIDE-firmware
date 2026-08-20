@@ -261,7 +261,21 @@ bool IDEImageFile::writable()
 
 bool IDEImageFile::read(uint64_t startpos, size_t blocksize, size_t num_blocks, Callback *callback)
 {
-    if (!m_file.seek(startpos)) return false;
+    dbgmsg("IDEImageFile::read: startpos=", (int64_t)startpos, " blocksize=", (int)blocksize,
+           " num_blocks=", (int)num_blocks, " contiguous=", (int)m_contiguous);
+
+    if (!m_file.seek(startpos))
+    {
+        logmsg("IDEImageFile::read: seek failed to position ", (int64_t)startpos);
+        return false;
+    }
+
+    uint64_t actual_pos = m_file.position();
+    if (actual_pos != startpos)
+    {
+        logmsg("IDEImageFile::read: seek mismatch! requested=", (int64_t)startpos,
+               " actual=", (int64_t)actual_pos);
+    }
 
     assert(blocksize <= m_buffer_size);
 

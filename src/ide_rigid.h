@@ -130,6 +130,9 @@ protected:
         bool reinsert_media_after_eject;
     } m_removable;
 
+    // Track current read LBA for debugging
+    uint32_t m_current_read_lba = 0xFFFFFFFF;
+
     // Buffer used for responses, ide_phy code benefits from this being aligned to 32 bits
     // Enough for any inquiry/mode response and for up to one CD sector.
     union {
