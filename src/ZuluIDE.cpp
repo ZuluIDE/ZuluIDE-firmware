@@ -582,8 +582,7 @@ drive_type_t searchForDriveType() {
 
 #ifdef ENABLE_DUAL_DEVICE
 // Find images for configuration of dual drive mode.
-// The images are called "HD0.*" and "HD1.*" so we need to find out the file extension.
-// If this returns true, ide_protocol_init() has already been called.
+// The images are prefixed with "HD0" and "HD1" 
 bool setupDualDrive(std::unique_ptr<zuluide::status::IDeviceStatus> &device)
 {
   FsFile root = SD.open("/");

@@ -53,10 +53,10 @@
 #define FIRMWARE_NAME_PREFIX DEF_STRINGFY(BUILD_ENV)
 #define FIRMWARE_PREFIX "ZuluIDE-FW"
 
-// Filename for image when in dual device mode
+// Filename prefix for image when in dual device mode
 // File extension can be anything
-#define DUALDRIVE_IMAGE_PRIMARY   "HD0."
-#define DUALDRIVE_IMAGE_SECONDARY "HD1."
+#define DUALDRIVE_IMAGE_PRIMARY   "HD0"
+#define DUALDRIVE_IMAGE_SECONDARY "HD1"
 
 // Maximum path length for files on SD card
 #define MAX_FILE_PATH 256
