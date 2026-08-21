@@ -32,8 +32,13 @@
 
 // Use variables for version number
 #define FW_VER_NUM      "2026.08.20"
-#define FW_VER_SUFFIX   "release"
-#define ZULU_FW_VERSION FW_VER_NUM "-" FW_VER_SUFFIX
+#define FW_VER_SUFFIX   "dev"
+#define FW_VER_BUILD    "8"
+#if FW_VER_BUILD
+# define ZULU_FW_VERSION FW_VER_NUM "-" FW_VER_SUFFIX "." FW_VER_BUILD
+#else
+# define ZULU_FW_VERSION FW_VER_NUM "-" FW_VER_SUFFIX
+#endif
 
 // Configuration and log file paths
 #define CONFIGFILE    "zuluide.ini"
