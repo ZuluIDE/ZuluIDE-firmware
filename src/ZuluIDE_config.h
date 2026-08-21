@@ -33,7 +33,7 @@
 // Use variables for version number
 #define FW_VER_NUM      "2026.08.20"
 #define FW_VER_SUFFIX   "dev"
-#define FW_VER_BUILD    "8"
+// #define FW_VER_BUILD    "1"
 #if FW_VER_BUILD
 # define ZULU_FW_VERSION FW_VER_NUM "-" FW_VER_SUFFIX "." FW_VER_BUILD
 #else
