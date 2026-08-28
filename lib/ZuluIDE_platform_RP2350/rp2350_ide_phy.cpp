@@ -89,6 +89,36 @@ static ide_phy_capabilities_t g_ide_phy_capabilities = {
     .max_udma_mode = 2,
 };
 
+// Core1 uses atomic operations to access .requests and .events.
+// When IDE_PIO->irq_force is set, core1 will respond to interrupt handler as
+// soon as any higher priority IDE bus accesses are handled. The handler will
+// process any pending requests in this order:
+//
+//  1. CORE1_REQ_SET_REGS       (Used for setting registers of active device)
+//  2. CORE1_REQ_SET_REGS_DEV0  (Used for setting boot signature per-device)
+//  3. CORE1_REQ_SET_REGS_DEV1  (Used for setting boot signature per-device)
+//  4. CORE1_REQ_ASSERT_IRQ     (Set status and assert IRQ line)
+//
+//  5. CORE1_REQ_STOP_TRANSFERS (Stop data transfers, overrides any pending START_DATA requests)
+//  6. CORE1_REQ_START_DATAIN   (Start PIO or UDMA data in transfer, set status, assert IRQ)
+//  7. CORE1_REQ_START_DATAOUT  (Start PIO or UDMA data out transfer, set status, assert IRQ)
+//  8. CORE1_REQ_START_DATAOUT_NOIRQ (Start PIO or UDMA data out transfer, set status but do not assert IRQ)
+//
+//  9. CORE1_REQ_SET_SIGNALS    (Set the low-speed DASP/PDIAG signals)
+// 10. CORE1_REQ_GET_SIGNALS    (Read DASP/PDIAG signal states)
+//
+// 11. CORE1_REQ_CHANGE_PIO_MODE  (Update PIO mode from g_idecomm.pio_mode)
+// 12. CORE1_REQ_PRINT_DEBUG    (Print core1 debug information such as RP2350 DMA and PIO regs)
+//
+// The processing order ensures that e.g. CORE1_REQ_SET_REGS and CORE1_REQ_START_DATAIN can
+// be queued and will be processed in correct order. In IDE protocol, the device should change
+// register values only when the status is busy, and host will read them only after status is
+// set to not-busy
+//
+// In general core1 processes requests within 1µs. The CORE1_REQ_BUSY indicates a state where
+// the request bit has been cleared from g_idecomm.requests but the interrupt handler has not
+// yet fully completed. New requests can be queued also during this state.
+
 static void ide_phy_post_request(uint32_t request)
 {
     __atomic_or_fetch(&g_idecomm.requests, request, __ATOMIC_ACQ_REL);
