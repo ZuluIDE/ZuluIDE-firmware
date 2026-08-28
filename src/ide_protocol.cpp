@@ -224,7 +224,12 @@ void ide_protocol_poll()
 
             if (!device)
             {
-                dbgmsg("-- Command was for a device that is not present - reporting failure");
+                // NOTE: The IDE PHY only sets IDE_EVENT_CMD if the selected device is enabled in
+                // g_ide_config. Getting here would mean that host changed registers again
+                // before we got around to handling the command. This shouldn't normally happen.
+                // Reporting error to host is more likely to result in quick recovery rather than
+                // host hanging waiting for a response that is never coming.
+                logmsg("-- Command was for a device that is not present - reporting failure");
                 regs.error = IDE_ERROR_ABORT;
                 ide_phy_set_regs(&regs);
                 ide_phy_assert_irq(IDE_STATUS_DEVRDY | IDE_STATUS_DSC | IDE_STATUS_ERR);
