@@ -15,15 +15,31 @@ jobs:
         with:
           path: ZuluIDE
           fetch-depth: "0"
-      
+
+      - name: Install PlatformIO Core
+        run: pip install --upgrade platformio
+
       - name: Install dependencies
         run: |
           sudo apt-get update
           sudo apt-get install zip
 
-      - name: Install platformio
+      - name: Cache PlatformIO
+        uses: actions/cache@v6
+        with:
+          path: |
+            ~/.cache/pip
+            ~/.platformio/.cache
+          key: ${{ runner.os }}-pio
+
+      - name: Install Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: '3.14'
+
+      - name: Install platformio       
         run: |
-          sudo pip install platformio
+          pip install --upgrade platformio
       
       - name: Build firmware
         run: |
