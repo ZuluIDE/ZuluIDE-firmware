@@ -1781,7 +1781,15 @@ void IDEATAPIDevice::sd_card_inserted()
         && m_removable.reinsert_media_after_sd_insert
         && m_removable.ejected)
     {
-        insert_next_media(m_image);
+
+        if (m_image && m_image->get_image_name(m_filename, sizeof(m_filename)) && m_filename[0] != '\0')
+        {
+            loaded_new_media();
+        }
+        else
+        {
+            insert_next_media(m_image);
+        }
     }
 }
 

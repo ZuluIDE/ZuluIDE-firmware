@@ -967,10 +967,10 @@ void loadFirstImage() {
         {
           if (!quiet) logmsg("-- Loading last used image: \"", last_used_filename, "\"");
 
-          g_StatusController.LoadImage(imgIterator.Get());
-          g_previous_controller_status = g_StatusController.GetStatus();
           g_loadedFirstImage = true;
           load_image(imgIterator.Get(), false);
+          g_StatusController.LoadImage(imgIterator.Get());
+          g_previous_controller_status = g_StatusController.GetStatus();
           success = true;
         }
       }
@@ -1013,10 +1013,11 @@ void loadFirstImage() {
           }
         }
         logmsg("Loading first image ", imgIterator.Get().GetFilename().c_str());
-        g_StatusController.LoadImage(imgIterator.Get());
-        g_previous_controller_status = g_StatusController.GetStatus();
+
         g_loadedFirstImage = true;
         load_image(imgIterator.Get(), false);
+        g_StatusController.LoadImage(imgIterator.Get());
+        g_previous_controller_status = g_StatusController.GetStatus();
         break;
       }
 
