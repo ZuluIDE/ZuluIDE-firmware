@@ -155,7 +155,7 @@ void IDERigidDevice::post_image_setup()
     if (!found_chs)
     {
         uint32_t difference = lba - (m_devinfo.cylinders * m_devinfo.heads * m_devinfo.sectors_per_track);
-        logmsg("-- Reported CHS has ", (int64_t) difference, " less blocks than the image's LBA capacity which does not exactly fit in any CHS combination");
+        logmsg("-- Reported CHS has ", (int64_t) difference, " fewer blocks than the image's LBA capacity which does not exactly fit in any CHS combination");
     }
     m_devinfo.writable = true;
 
