@@ -142,7 +142,6 @@ void platform_init()
     gpio_conf(IDE_CABLESEL,     GPIO_FUNC_SIO, false, false, false, false, false);
 
     delay(10); // 10 ms delay to let pull-ups do their work
-    mutex_init(&logMutex);
 
     bool dbglog = !gpio_get(DIP_DBGLOG);
     g_dip_cable_sel = !gpio_get(DIP_CABLESEL);
@@ -151,6 +150,47 @@ void platform_init()
 
     // Disable CTRL IN mux for now
     gpio_put(CTRL_IN_SEL, true);
+
+    // Use dip switches and cable select to see if device is set to 1
+    bool is_dev_1 = g_dip_cable_sel ? g_cable_sel_state : g_dip_drive_id;
+
+    // IDE bus control signals
+    //        pin             function       pup   pdown  out    state fast
+    gpio_conf(IDE_DATASEL,    GPIO_FUNC_SIO, false, false, true,  true, true);
+    gpio_conf(IDE_DATADIR,    GPIO_FUNC_SIO, false, false, true,  false, true);
+
+    // set_signals is initialized here instead of in core1
+    g_idecomm.set_signals = 0;
+    // Fast Device 1 DASP negation based on dip switches
+    if (is_dev_1)
+    {
+        g_idecomm.set_signals = IDE_SIGNAL_DASP;
+        platform_set_dasp_on_boot(true);
+        //        pin             function       pup   pdown  out    state fast
+        // Assert nDASP to GND
+        gpio_conf(IDE_DASP,       GPIO_FUNC_SIO, false, false, true,  false, true);
+        gpio_conf(CTRL_LOAD,      GPIO_FUNC_SIO, false, false, true,  true, true);
+        gpio_conf(CTRL_nEN,       GPIO_FUNC_SIO, false, false, true,  false,  true);
+        // Save asserted DASP and then switch DASP MCU pin to input
+        gpio_conf(CTRL_LOAD,      GPIO_FUNC_SIO, false, false, true,  false, true);
+        gpio_conf(IDE_DASP,       GPIO_FUNC_SIO, false, false, false, false, true);
+    }
+    else
+    {
+        //        pin             function       pup   pdown  out    state fast
+        gpio_conf(CTRL_LOAD,      GPIO_FUNC_SIO, false, false, true,  false, true);
+        gpio_conf(CTRL_nEN,       GPIO_FUNC_SIO, false, false, true,  true,  true);
+    }
+
+    gpio_conf(CTRL_IN_SEL,    GPIO_FUNC_SIO, false, false, true,  true,  true);
+
+    // IDE bus data signals
+    for (int i = 0; i < 16; i++)
+    {
+        gpio_conf(IDE_D0 + i, GPIO_FUNC_SIO, false, false, false, false, true);
+    }
+
+    mutex_init(&logMutex);
 
     /* Initialize logging to SWO pin (UART0) */
     gpio_conf(SWO_PIN,        GPIO_FUNC_UART_AUX,false,false, true,  false, true);
@@ -198,14 +238,10 @@ void platform_init()
 
     // IDE bus control signals
     //        pin             function       pup   pdown  out    state fast
-    gpio_conf(CTRL_LOAD,      GPIO_FUNC_SIO, false, false, true,  false, true);
-    gpio_conf(CTRL_nEN,       GPIO_FUNC_SIO, false, false, true,  true,  true);
-    gpio_conf(CTRL_IN_SEL,    GPIO_FUNC_SIO, false, false, true,  true,  true);
-    gpio_conf(IDE_DATASEL,    GPIO_FUNC_SIO, false, false, true,  true, true);
-    gpio_conf(IDE_DATADIR,    GPIO_FUNC_SIO, false, false, true,  false, true);
     gpio_conf(IDE_IORDY_OUT,  GPIO_FUNC_SIO, false, false, true,  false, true);
     gpio_conf(IDE_IORDY_EN,   GPIO_FUNC_SIO, false, false, true,  true,  true);
     gpio_conf(IDE_IOCS16,     GPIO_FUNC_SIO, false, false, true,  true,  true);
+
 
     // IDE bus status signals
     gpio_conf(IDE_RST,        GPIO_FUNC_SIO, false, false, false, false, true);
@@ -218,11 +254,6 @@ void platform_init()
     gpio_conf(IDE_CS1,        GPIO_FUNC_SIO, false, false, false, false, true);
     gpio_conf(IDE_DMACK,      GPIO_FUNC_SIO, false, false, false, false, true);
 
-    // IDE bus data signals
-    for (int i = 0; i < 16; i++)
-    {
-        gpio_conf(IDE_D0 + i, GPIO_FUNC_SIO, false, false, false, false, true);
-    }
 
     // Improve DIOR -> IORDY speed by maximizing IORDY drive strength and
     // by minimizing DIOR input latency by disabling schmitt trigger.
@@ -282,6 +313,21 @@ void platform_late_init()
       USB.begin();
 }
 
+static bool g_fast_dasp_asserted = false;
+bool platform_is_dasp_on_boot()
+{
+    return g_fast_dasp_asserted;
+}
+void platform_set_dasp_on_boot(bool value)
+{
+    g_fast_dasp_asserted = value;
+}
+
+
+void platform_assert_intr(bool value)
+{
+    gpio_conf(GPIO_EXT_INTERRUPT, GPIO_FUNC_SIO, false, false, true,  value, true);
+}
 void platform_write_led(bool state)
 {
     if (g_led_disabled || g_led_blinking) return;
