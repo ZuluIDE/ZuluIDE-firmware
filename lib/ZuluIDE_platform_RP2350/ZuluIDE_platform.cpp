@@ -142,7 +142,6 @@ void platform_init()
     gpio_conf(IDE_CABLESEL,     GPIO_FUNC_SIO, false, false, false, false, false);
 
     delay(10); // 10 ms delay to let pull-ups do their work
-    mutex_init(&logMutex);
 
     bool dbglog = !gpio_get(DIP_DBGLOG);
     g_dip_cable_sel = !gpio_get(DIP_CABLESEL);
@@ -160,9 +159,13 @@ void platform_init()
     gpio_conf(IDE_DATASEL,    GPIO_FUNC_SIO, false, false, true,  true, true);
     gpio_conf(IDE_DATADIR,    GPIO_FUNC_SIO, false, false, true,  false, true);
 
+    // set_signals is initialized here instead of in core1
+    g_idecomm.set_signals = 0;
     // Fast Device 1 DASP negation based on dip switches
     if (is_dev_1)
     {
+        g_idecomm.set_signals = IDE_SIGNAL_DASP;
+        platform_set_dasp_on_boot(true);
         //        pin             function       pup   pdown  out    state fast
         // Assert nDASP to GND
         gpio_conf(IDE_DASP,       GPIO_FUNC_SIO, false, false, true,  false, true);
@@ -186,6 +189,8 @@ void platform_init()
     {
         gpio_conf(IDE_D0 + i, GPIO_FUNC_SIO, false, false, false, false, true);
     }
+
+    mutex_init(&logMutex);
 
     /* Initialize logging to SWO pin (UART0) */
     gpio_conf(SWO_PIN,        GPIO_FUNC_UART_AUX,false,false, true,  false, true);
@@ -308,6 +313,21 @@ void platform_late_init()
       USB.begin();
 }
 
+static bool g_fast_dasp_asserted = false;
+bool platform_is_dasp_on_boot()
+{
+    return g_fast_dasp_asserted;
+}
+void platform_set_dasp_on_boot(bool value)
+{
+    g_fast_dasp_asserted = value;
+}
+
+
+void platform_assert_intr(bool value)
+{
+    gpio_conf(GPIO_EXT_INTERRUPT, GPIO_FUNC_SIO, false, false, true,  value, true);
+}
 void platform_write_led(bool state)
 {
     if (g_led_disabled || g_led_blinking) return;

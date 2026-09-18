@@ -295,8 +295,16 @@ void ide_protocol_poll()
                     ide_phy_set_regs(&regs);
                 }
 
-                g_ide_signals = 0;
-                ide_phy_set_signals(0); // Release DASP and PDIAG
+                if (platform_is_dasp_on_boot())
+                {
+                    // keep DASP asserted from device 1 boot dip switches
+                    ide_phy_set_signals(IDE_SIGNAL_DASP);
+                }
+                else
+                {
+                    ide_phy_set_signals(0); // Release DASP and PDIAG
+                }
+
                 g_last_reset_time = millis();
                 g_last_reset_event = evt;
 
@@ -382,6 +390,7 @@ void ide_protocol_poll()
             else if (time_passed > 31000 || evt == IDE_EVENT_CMD)
             {
                 // Release DASP after first command or 31 secs
+                platform_set_dasp_on_boot(false); // turn off after first release
                 g_ide_signals = IDE_SIGNAL_PDIAG;
                 ide_phy_set_signals(g_ide_signals);
                 g_last_reset_event = IDE_EVENT_NONE;
