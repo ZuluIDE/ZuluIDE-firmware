@@ -194,13 +194,22 @@ void platform_init()
     gpio_conf(DIP_CABLESEL,     GPIO_FUNC_SIO, false, false, false, false, false);
     gpio_conf(DIP_DRIVE_ID,     GPIO_FUNC_SIO, false, false, false, false, false);
     gpio_conf(DIP_DBGLOG,       GPIO_FUNC_SIO, false, false, false, false, false);
+    gpio_conf(IDE_CSEL_IN,     GPIO_FUNC_SIO, false,false, false, false, false);
+
 
     delay(10); // 10 ms delay to let pull-ups do their work
-    mutex_init(&logMutex);
 
     bool dbglog = !gpio_get(DIP_DBGLOG);
     g_dip_cable_sel = !gpio_get(DIP_CABLESEL);
     g_dip_drive_id = !gpio_get(DIP_DRIVE_ID);
+    bool ide_cable_sel_state =  gpio_get(IDE_CSEL_IN);
+
+    bool secondary_device = g_dip_cable_sel ? ide_cable_sel_state : g_dip_drive_id;
+
+    if (secondary_device)
+        platform_set_dasp_on_boot(true);
+
+    mutex_init(&logMutex);
 
     /* Initialize logging to SWO pin (UART0) */
     gpio_conf(SWO_PIN,        GPIO_FUNC_UART,false,false, true,  false, true);
@@ -259,7 +268,6 @@ void platform_init()
     gpio_conf(FPGA_QSPI_D3,   GPIO_FUNC_SIO, true, false, true,  false, true);
 
     // IDE initialization status signals
-    gpio_conf(IDE_CSEL_IN,    GPIO_FUNC_SIO, false,false, false, false, false);
     gpio_conf(IDE_PDIAG_IN,   GPIO_FUNC_SIO, false,false, false, false, false);
     gpio_conf(IDE_DASP_IN,    GPIO_FUNC_SIO, false,false, false, false, false);
 
@@ -292,6 +300,17 @@ void platform_late_init()
 void platform_poll_input() {
   g_rotary_input.Poll();
 }
+
+static bool g_fast_dasp_asserted = false;
+bool platform_is_dasp_on_boot()
+{
+    return g_fast_dasp_asserted;
+}
+void platform_set_dasp_on_boot(bool value)
+{
+    g_fast_dasp_asserted = value;
+}
+
 
 void platform_write_led(bool state)
 {

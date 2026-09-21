@@ -69,6 +69,11 @@ void platform_minimal_init();
 // Initialization for main application, not used for bootloader
 void platform_late_init();
 
+
+// Determine if DASP has been asserted on boot
+bool platform_is_dasp_on_boot();
+void platform_set_dasp_on_boot(bool value);
+
 // Write the status LED through the mux
 void platform_write_led(bool state);
 #define LED_ON()  platform_write_led(true)

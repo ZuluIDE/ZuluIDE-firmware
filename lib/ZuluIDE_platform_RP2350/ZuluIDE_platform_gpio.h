@@ -111,6 +111,9 @@
 #define DIP_DBGLOG   IDE_D12
 #define IDE_CABLESEL IDE_D15
 
+// CTRL OUT
+#define IDE_DASP IDE_D14
+
 // Serial output pin
 #define SWO_PIN 46
 
