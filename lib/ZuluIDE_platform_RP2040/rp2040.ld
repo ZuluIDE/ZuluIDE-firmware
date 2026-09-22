@@ -49,7 +49,12 @@ SECTIONS
         *(.eh_frame*)
         . = ALIGN(4);
         /* Putting these objects in SRAM to increase IDE throughput */
-        EXCLUDE_FILE (*libZuluIDE_platform_RP2040.a:rp2040*.cpp.o  *libSdFat.a: *ide*cpp.o *ZuluIDE*cpp.o) *(.text .text*)
+        EXCLUDE_FILE (
+            *libZuluIDE_platform_RP2040.a:rp2040*.cpp.o
+            *libSdFat.a: 
+            *ide*cpp.o 
+            *ZuluIDE.cpp.o
+            ) *(.text .text*)
         /* *(.text .text*) */
     } > FLASH
     .rodata : {
