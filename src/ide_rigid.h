@@ -120,7 +120,7 @@ protected:
         int udma_mode;  // Negotiated udma mode, or negative if not enabled
         bool dma_requested; // Host requests to use DMA transfer for current command
         int crc_errors; // CRC errors in latest transfer
-        unsigned char multiple_mode_sectors;  // Number of sectors configured, or 0 for disabled
+        uint8_t multiple_mode_sectors;  // Number of sectors configured, or 0 for disabled
     } m_ata_state;
 
     struct

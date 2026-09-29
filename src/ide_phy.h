@@ -63,6 +63,8 @@ struct ide_phy_config_t {
     // IOCS16 signaling for PIO data transfer implementation is not completely to spec on the V2
     // Not all systems care so this allows the user to disabled it, if the current implementation is an issue
     bool disable_iocs16;
+    //  If true, skip BSY status between buffer PIO data-in commands, false for standard behaviour
+    bool no_bsy_on_reads;
 };
 
 // Reset the IDE phy
@@ -153,6 +155,7 @@ struct ide_phy_capabilities_t
     int min_pio_cycletime_no_iordy;
     int min_pio_cycletime_with_iordy;
     int max_udma_mode; // -1 if UDMA not supported
+    uint8_t max_set_multiple = 8; // currently  IDECOMM_MAX_BLOCK_PAYLOAD / 512 (standard blocksize for rigid)
 };
 
 const ide_phy_capabilities_t *ide_phy_get_capabilities();

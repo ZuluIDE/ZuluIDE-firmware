@@ -85,8 +85,8 @@ static ide_phy_capabilities_t g_ide_phy_capabilities = {
     .max_pio_mode = 3,
     .min_pio_cycletime_no_iordy = 240,
     .min_pio_cycletime_with_iordy = 180,
-
     .max_udma_mode = 2,
+    .max_set_multiple = 8, // currently  IDECOMM_MAX_BLOCK_PAYLOAD / 512 (standard blocksize for rigid)
 };
 
 // Core1 uses atomic operations to access .requests and .events.
@@ -207,6 +207,7 @@ void ide_phy_config(const ide_phy_config_t* config)
     g_idecomm.atapi_dev1           = config->atapi_dev1;
     g_idecomm.disable_iordy        = config->disable_iordy;
     g_idecomm.enable_packet_intrq  = config->enable_packet_intrq;
+    g_idecomm.no_bsy_on_reads    = config->no_bsy_on_reads;
     g_idecomm.cpu_freq_hz = clock_get_hz(clk_sys);
     phyregs.state_irqreq = 0;
     phyregs.state_datain = 0;

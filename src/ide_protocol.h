@@ -126,6 +126,7 @@ protected:
         int max_udma_mode;
         int max_pio_mode;
         int max_blocksize;
+        uint8_t max_set_multiple;
         // Response to IDENTIFY PACKET DEVICE/IDENTIFY DEVICE
         char ata_model[40];
         char ata_revision[8];

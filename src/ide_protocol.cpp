@@ -102,6 +102,7 @@ static void do_phy_config()
                                  || ((g_ide_devices[1] != NULL) && (g_ide_devices[1]->atapi_intrq_default_on()));
     g_ide_config.enable_packet_intrq = ini_getbool("IDE", "atapi_intrq", default_intrq, CONFIGFILE);
     g_ide_config.disable_iocs16 = ini_getbool("IDE", "disable_iocs16", false, CONFIGFILE);
+    g_ide_config.no_bsy_on_reads = ini_getbool("IDE", "no_bsy_on_reads", false, CONFIGFILE);
 
     if (g_ide_config.enable_dev0 && g_ide_config.enable_dev1_zeros)
     {
@@ -565,6 +566,7 @@ void IDEDevice::initialize(int devidx)
     m_phy_caps = *ide_phy_get_capabilities();
     m_devconfig.max_pio_mode = ini_getl("IDE", "max_pio", 3, CONFIGFILE);
     m_devconfig.max_udma_mode = ini_getl("IDE", "max_udma", 2, CONFIGFILE);
+    m_devconfig.max_set_multiple = ini_getl("IDE", "max_set_multiple", 8, CONFIGFILE);
     m_devconfig.max_blocksize = ini_getl("IDE", "max_blocksize", m_phy_caps.max_blocksize, CONFIGFILE);
     m_devconfig.ide_sectors = ini_getl("IDE", "sectors", 0, CONFIGFILE);
     m_devconfig.ide_heads = ini_getl("IDE", "heads", 0, CONFIGFILE);
@@ -578,6 +580,7 @@ void IDEDevice::initialize(int devidx)
     m_phy_caps.max_udma_mode = std::min(m_phy_caps.max_udma_mode, m_devconfig.max_udma_mode);
     m_phy_caps.max_pio_mode = std::min(m_phy_caps.max_pio_mode, m_devconfig.max_pio_mode);
     m_phy_caps.max_blocksize = std::min<int>(m_phy_caps.max_blocksize, m_devconfig.max_blocksize);
+    m_phy_caps.max_set_multiple = std::min(m_phy_caps.max_set_multiple, m_devconfig.max_set_multiple);
 }
 
 void IDEDevice::post_image_setup()

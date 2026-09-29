@@ -74,8 +74,9 @@ extern struct idecomm_t {
     bool atapi_dev0; // Automatically read command for ATAPI PACKET on device 0
     bool atapi_dev1; // Automatically read command for ATAPI PACKET on device 1
     bool disable_iordy; // Disable IORDY in PIO mode 
+    bool no_bsy_on_reads; // If true, skip BSY status between buffer PIO data-in commands, false for standard behaviour
 
-   // Enables INTRQ between the initial ATA PACKET command and receiving the ATAPI command
+    // Enables INTRQ between the initial ATA PACKET command and receiving the ATAPI command
     bool enable_packet_intrq;
 
     // For IOCS16 handling, the IDE register address is transferred to a state machine in
