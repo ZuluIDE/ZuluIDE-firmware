@@ -120,6 +120,9 @@ public:
     virtual void set_loaded_without_media(bool no_media) = 0;
     virtual void set_load_first_image_cb(void (*load_image_cb)()) = 0;
 
+    // A general polling function for changes in state that need to be handled outside of command handling
+    virtual void poll() = 0;
+
 protected:
     struct {
         int dev_index;

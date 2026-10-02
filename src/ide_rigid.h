@@ -89,6 +89,9 @@ public:
     virtual inline void eject_then_load_new_media() override {;}
 
     virtual inline void set_load_first_image_cb(void (*load_image_cb)()) override {;}
+
+    virtual void poll() override;
+
 protected:
     IDEImage *m_image;
 
@@ -105,6 +108,9 @@ protected:
         uint8_t current_sectors;
         uint8_t current_heads;
         uint16_t current_cylinders;
+        uint32_t seek_delay_ms;
+        uint32_t seek_start_time_ms;
+        bool seek_executed;
     } m_devinfo;
 
     enum ata_data_state_t {
