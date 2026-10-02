@@ -438,6 +438,7 @@ bool IDERigidDevice::cmd_read(ide_registers_t *regs, bool dma_transfer, bool ver
     {
         // Report verify OK as long as the location is within range.
         regs->error = 0;
+        regs->sector_count = 0;
         ide_phy_set_regs(regs);
         ide_phy_assert_irq(IDE_STATUS_DEVRDY | IDE_STATUS_DSC);
         return true;
@@ -493,9 +494,9 @@ bool IDERigidDevice::cmd_read(ide_registers_t *regs, bool dma_transfer, bool ver
             else
             {
                 // For PIO DATA IN transfer there is no interrupt after the last block
+                regs->sector_count = 0;
                 regs->status = IDE_STATUS_DEVRDY | IDE_STATUS_DSC;
                 ide_phy_set_regs(regs);
-                ide_phy_assert_irq(IDE_STATUS_DEVRDY | IDE_STATUS_DSC);
             }
         }
         else
@@ -582,6 +583,7 @@ bool IDERigidDevice::cmd_write(ide_registers_t *regs, bool dma_transfer, bool is
     {
         // Both DMA and PIO DATA OUT assert IRQ when the write command completes
         regs->error = 0;
+        regs->sector_count = 0;
         ide_phy_set_regs(regs);
         ide_phy_assert_irq(IDE_STATUS_DEVRDY | IDE_STATUS_DSC);
     }
