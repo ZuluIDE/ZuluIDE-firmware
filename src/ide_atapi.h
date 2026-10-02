@@ -94,6 +94,9 @@ public:
     virtual void set_loaded_without_media(bool no_media) override;
     virtual inline void set_load_first_image_cb(void (*load_image_cb)()) override {m_removable.load_first_image_cb = load_image_cb;}
 
+    // Not used currently
+    virtual void poll() override {;};
+
 protected:
     // Records that a user requested an eject the host is currently preventing, and
     // reports it so the display and web interface can show the pending eject.

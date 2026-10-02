@@ -76,6 +76,7 @@ void IDERigidDevice::initialize(int devidx)
     memset(&m_ata_state, 0, sizeof(m_ata_state));
     memset(&m_removable, 0, sizeof(m_removable));
     m_devinfo.bytes_per_sector = 512;
+    m_devinfo.seek_delay_ms = ini_getl("IDE", "seek_delay", 1, CONFIGFILE);
 }
 
 void IDERigidDevice::print_device_config()
@@ -189,6 +190,19 @@ void IDERigidDevice::insert_media(IDEImage *image)
 bool IDERigidDevice::handle_command(ide_registers_t *regs)
 {
     delay(m_devconfig.access_delay);
+
+    if (m_devinfo.seek_executed)
+    {
+        regs->status = IDE_STATUS_BSY;
+        ide_phy_set_regs(regs);
+        uint32_t elapsed = millis() - m_devinfo.seek_start_time_ms;
+        if (elapsed < m_devinfo.seek_delay_ms)
+        {
+            delay(m_devinfo.seek_delay_ms - elapsed);
+        }
+        dbgmsg("-- Seek delay completed, continuing command");
+        m_devinfo.seek_executed = false;
+    }
 
     switch (regs->command)
     {
@@ -347,7 +361,14 @@ bool IDERigidDevice::cmd_set_features(ide_registers_t *regs)
 bool IDERigidDevice::cmd_seek(ide_registers_t *regs)
 {
     // always return expected value
-    ide_phy_assert_irq(IDE_STATUS_DEVRDY | IDE_STATUS_DSC);
+    if (m_devinfo.seek_delay_ms == 0)
+    {
+        ide_phy_assert_irq(IDE_STATUS_DEVRDY | IDE_STATUS_DSC);
+        return true;
+    }
+    ide_phy_assert_irq(IDE_STATUS_BSY);
+    m_devinfo.seek_start_time_ms = millis();
+    m_devinfo.seek_executed = true;
     return true;
 }
 
@@ -945,7 +966,7 @@ void IDERigidDevice::handle_event(ide_event_t evt)
         {
             m_ata_state.udma_mode = -1;
         }
-
+        m_devinfo.seek_executed = false;
         set_device_signature(nullptr, 0, true);
     }
 }
@@ -1280,6 +1301,25 @@ bool IDERigidDevice::ata_recv_data_block(uint8_t *data, uint16_t blocksize)
     return true;
 }
 
+void IDERigidDevice::poll()
+{
+    // Set DSC (disk seek complete) after delay to simulate hdd seek time.
+    if (m_devinfo.seek_executed && (uint32_t)(millis() - m_devinfo.seek_start_time_ms) >= m_devinfo.seek_delay_ms)
+    {
+        m_devinfo.seek_executed = false;
+        ide_registers_t regs = {0};
+        ide_phy_get_regs(&regs);
+        if (regs.status & IDE_STATUS_BSY)
+        {
+            ide_phy_assert_irq(IDE_STATUS_DEVRDY | IDE_STATUS_DSC);
+            dbgmsg("-- IDERigidDevice::poll() seek completed set");
+        }
+        else
+        {
+            dbgmsg("-- IDERigidDevice::poll() seek completed but status reg wasn't BSY, current status: ", (int)regs.status);
+        }
+    }
+}
 
 // IDEImage implementation calls this when new data is available from file.
 // This will send the data to IDE bus.

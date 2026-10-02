@@ -1303,6 +1303,15 @@ void zuluide_main_loop(void)
     if (g_sniffer_mode != SNIFFER_PASSIVE)
     {
       ide_protocol_poll();
+
+      if (g_ide_device)
+      {
+        g_ide_device->poll();
+      }
+      if (g_ide_device2)
+      {
+        g_ide_device2->poll();
+      }
     }
 
 #ifdef PLATFORM_HAS_SNIFFER
