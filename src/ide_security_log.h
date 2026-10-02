@@ -32,5 +32,4 @@
 // Log an ATA security command event to the debug log and flush the log to
 // disk immediately. Includes the command opcode, IDE register state, and
 // (for SECURITY_UNLOCK) the 32-byte password the host sent.
-void log_security_event(const char *event, uint8_t opcode, ide_registers_t *regs,
-                        const uint8_t *password_data = nullptr, size_t password_len = 0);
+bool log_security_event(ide_registers_t *regs, const uint8_t *password_data = nullptr, size_t password_len = 0);

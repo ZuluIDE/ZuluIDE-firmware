@@ -253,21 +253,11 @@ bool IDERigidDevice::handle_command(ide_registers_t *regs)
         // with no error so the host continues to the data phase.  Each event is
         // logged to zululog.txt and flushed to the SD card immediately so the
         // trace survives a host-driven reset right after the unlock.
-        case IDE_CMD_SECURITY_SET_PASSWORD:
-            log_security_event("SET_PASSWORD", 0xF1, regs);
-            return true;
-        case IDE_CMD_SECURITY_UNLOCK:
-            log_security_event("UNLOCK", 0xF2, regs);
-            return true;
-        case IDE_CMD_SECURITY_ERASE_PREPARE:
-            log_security_event("ERASE_PREPARE", 0xF3, regs);
-            return true;
-        case IDE_CMD_SECURITY_FREEZE_LOCK:
-            log_security_event("FREEZE_LOCK", 0xF5, regs);
-            return true;
-        case IDE_CMD_SECURITY_DISABLE_PASSWORD:
-            log_security_event("DISABLE_PASSWORD", 0xF6, regs);
-            return true;
+        case IDE_CMD_SECURITY_SET_PASSWORD:     [[fallthrough]];
+        case IDE_CMD_SECURITY_UNLOCK:           [[fallthrough]];
+        case IDE_CMD_SECURITY_ERASE_PREPARE:    [[fallthrough]];
+        case IDE_CMD_SECURITY_FREEZE_LOCK:      [[fallthrough]];
+        case IDE_CMD_SECURITY_DISABLE_PASSWORD: return log_security_event(regs);
         default: return false;
     }
 }
