@@ -325,6 +325,14 @@ bool IDERigidDevice::cmd_set_features(ide_registers_t *regs)
     {
         dbgmsg("-- Enable read look-ahead --");
     }
+    else if (feature == IDE_SET_FEATURE_ENABLE_WRITE_CACHE)
+    {
+        dbgmsg("-- Enable write cache");
+    }
+    else if (feature == IDE_SET_FEATURE_DISABLE_WRITE_CACHE)
+    {
+        dbgmsg("-- Disable write cache");
+    }
     else
     {
         dbgmsg("-- Unknown SET_FEATURE: ", feature);
