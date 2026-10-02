@@ -76,6 +76,7 @@ void IDERigidDevice::initialize(int devidx)
     memset(&m_ata_state, 0, sizeof(m_ata_state));
     memset(&m_removable, 0, sizeof(m_removable));
     m_devinfo.bytes_per_sector = 512;
+    m_devinfo.seek_delay_ms = ini_getl("IDE", "seek_delay", 1, CONFIGFILE);
 }
 
 void IDERigidDevice::print_device_config()
@@ -191,6 +192,19 @@ bool IDERigidDevice::handle_command(ide_registers_t *regs)
 {
     delay(m_devconfig.access_delay);
 
+    if (m_devinfo.seek_executed)
+    {
+        regs->status = IDE_STATUS_BSY;
+        ide_phy_set_regs(regs);
+        uint32_t elapsed = millis() - m_devinfo.seek_start_time_ms;
+        if (elapsed < m_devinfo.seek_delay_ms)
+        {
+            delay(m_devinfo.seek_delay_ms - elapsed);
+        }
+        dbgmsg("-- Seek delay completed, continuing command");
+        m_devinfo.seek_executed = false;
+    }
+
     switch (regs->command)
     {
         // Device reset command is only for ATAPI devices, make
@@ -254,21 +268,11 @@ bool IDERigidDevice::handle_command(ide_registers_t *regs)
         // with no error so the host continues to the data phase.  Each event is
         // logged to zululog.txt and flushed to the SD card immediately so the
         // trace survives a host-driven reset right after the unlock.
-        case IDE_CMD_SECURITY_SET_PASSWORD:
-            log_security_event("SET_PASSWORD", 0xF1, regs);
-            return true;
-        case IDE_CMD_SECURITY_UNLOCK:
-            log_security_event("UNLOCK", 0xF2, regs);
-            return true;
-        case IDE_CMD_SECURITY_ERASE_PREPARE:
-            log_security_event("ERASE_PREPARE", 0xF3, regs);
-            return true;
-        case IDE_CMD_SECURITY_FREEZE_LOCK:
-            log_security_event("FREEZE_LOCK", 0xF5, regs);
-            return true;
-        case IDE_CMD_SECURITY_DISABLE_PASSWORD:
-            log_security_event("DISABLE_PASSWORD", 0xF6, regs);
-            return true;
+        case IDE_CMD_SECURITY_SET_PASSWORD:     [[fallthrough]];
+        case IDE_CMD_SECURITY_UNLOCK:           [[fallthrough]];
+        case IDE_CMD_SECURITY_ERASE_PREPARE:    [[fallthrough]];
+        case IDE_CMD_SECURITY_FREEZE_LOCK:      [[fallthrough]];
+        case IDE_CMD_SECURITY_DISABLE_PASSWORD: return log_security_event(regs);
         default: return false;
     }
 }
@@ -340,6 +344,14 @@ bool IDERigidDevice::cmd_set_features(ide_registers_t *regs)
     {
         dbgmsg("-- Enable read look-ahead --");
     }
+    else if (feature == IDE_SET_FEATURE_ENABLE_WRITE_CACHE)
+    {
+        dbgmsg("-- Enable write cache");
+    }
+    else if (feature == IDE_SET_FEATURE_DISABLE_WRITE_CACHE)
+    {
+        dbgmsg("-- Disable write cache");
+    }
     else
     {
         dbgmsg("-- Unknown SET_FEATURE: ", feature);
@@ -362,7 +374,14 @@ bool IDERigidDevice::cmd_set_features(ide_registers_t *regs)
 bool IDERigidDevice::cmd_seek(ide_registers_t *regs)
 {
     // always return expected value
-    ide_phy_assert_irq(IDE_STATUS_DEVRDY | IDE_STATUS_DSC);
+    if (m_devinfo.seek_delay_ms == 0)
+    {
+        ide_phy_assert_irq(IDE_STATUS_DEVRDY | IDE_STATUS_DSC);
+        return true;
+    }
+    ide_phy_assert_irq(IDE_STATUS_BSY);
+    m_devinfo.seek_start_time_ms = millis();
+    m_devinfo.seek_executed = true;
     return true;
 }
 
@@ -443,6 +462,7 @@ bool IDERigidDevice::cmd_read(ide_registers_t *regs, bool dma_transfer, bool ver
     {
         // Report verify OK as long as the location is within range.
         regs->error = 0;
+        regs->sector_count = 0;
         ide_phy_set_regs(regs);
         ide_phy_assert_irq(IDE_STATUS_DEVRDY | IDE_STATUS_DSC);
         return true;
@@ -482,9 +502,9 @@ bool IDERigidDevice::cmd_read(ide_registers_t *regs, bool dma_transfer, bool ver
             else
             {
                 // For PIO DATA IN transfer there is no interrupt after the last block
+                regs->sector_count = 0;
                 regs->status = IDE_STATUS_DEVRDY | IDE_STATUS_DSC;
                 ide_phy_set_regs(regs);
-                // ide_phy_assert_irq(IDE_STATUS_DEVRDY | IDE_STATUS_DSC);
             }
         }
         else
@@ -555,6 +575,7 @@ bool IDERigidDevice::cmd_write(ide_registers_t *regs, bool dma_transfer, bool is
     {
         // Both DMA and PIO DATA OUT assert IRQ when the write command completes
         regs->error = 0;
+        regs->sector_count = 0;
         ide_phy_set_regs(regs);
         ide_phy_assert_irq(IDE_STATUS_DEVRDY | IDE_STATUS_DSC);
     }
@@ -999,7 +1020,7 @@ void IDERigidDevice::handle_event(ide_event_t evt)
         {
             m_ata_state.udma_mode = -1;
         }
-
+        m_devinfo.seek_executed = false;
         set_device_signature(nullptr, 0, true);
     }
 }
@@ -1334,6 +1355,25 @@ bool IDERigidDevice::ata_recv_data_block(uint8_t *data, uint16_t blocksize)
     return true;
 }
 
+void IDERigidDevice::poll()
+{
+    // Set DSC (disk seek complete) after delay to simulate hdd seek time.
+    if (m_devinfo.seek_executed && (uint32_t)(millis() - m_devinfo.seek_start_time_ms) >= m_devinfo.seek_delay_ms)
+    {
+        m_devinfo.seek_executed = false;
+        ide_registers_t regs = {0};
+        ide_phy_get_regs(&regs);
+        if (regs.status & IDE_STATUS_BSY)
+        {
+            ide_phy_assert_irq(IDE_STATUS_DEVRDY | IDE_STATUS_DSC);
+            dbgmsg("-- IDERigidDevice::poll() seek completed set");
+        }
+        else
+        {
+            dbgmsg("-- IDERigidDevice::poll() seek completed but status reg wasn't BSY, current status: ", (int)regs.status);
+        }
+    }
+}
 
 // IDEImage implementation calls this when new data is available from file.
 // This will send the data to IDE bus.
