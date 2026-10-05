@@ -61,6 +61,7 @@
 bool g_sdcard_present;
 extern SdFs SD;
 static FsFile g_logfile;
+bool g_log_to_sd = true;
 
 static uint32_t g_ide_buffer[IDE_BUFFER_SIZE / 4];
 
@@ -404,6 +405,9 @@ static void firmware_update()
 
 void save_logfile(bool always = false)
 {
+    if (!g_log_to_sd || !g_logfile.isOpen())
+      return;
+
     if(!mutex_try_enter(platform_get_log_mutex(), 0)) {
       return;
     }
@@ -435,6 +439,17 @@ void init_logfile()
 
     if (first_open_after_boot)
     {
+        static bool read_setting = false;
+        if  (!read_setting)
+        {
+          g_log_to_sd = ini_getbool("IDE", "log_to_sd", 1, CONFIGFILE);
+          read_setting = true;
+        }
+
+        if (!g_log_to_sd)
+        {
+          return;
+        }
         // Rotate file to LOGFILEPREV
         int log_rotate = ini_getl("IDE", "log_rotate", 1, CONFIGFILE);
         if (log_rotate == 1 || log_rotate == 2)
@@ -531,6 +546,7 @@ void init_logfile()
     }
 
     bool truncate = first_open_after_boot;
+
     int flags = O_WRONLY | O_CREAT | (truncate ? O_TRUNC : O_APPEND);
     g_logfile = SD.open(LOGFILE, flags);
     if (!g_logfile.isOpen())
