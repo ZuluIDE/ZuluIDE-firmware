@@ -59,6 +59,8 @@ extern void       zuluide_console_eject(int dev_idx);
 extern bool       zuluide_console_insert(int dev_idx);
 extern bool       zuluide_console_load_next(int dev_idx);
 
+// From ZuluIDE.cpp
+extern bool g_log_to_sd;
 // -----------------------------------------------------------------------
 // Direct serial output — bypasses the log buffer so menu text never
 // appears in zululog.txt.
@@ -106,6 +108,7 @@ enum class MenuState : uint8_t
     MainMenu,                 // Main menu with media selection and debug toggle
     MainMenuMediaConfirm,     // Waiting for 'y' confirmation on media menu entry
     MainMenuDebugConfirm,     // Waiting for 'y' confirmation on debug toggle
+    MainMenuLogToSDConfirm,   // Waiting for 'y' confirmation on log to SD card toggle
     MainMenuRebootConfirm,    // Waiting for 'y' confirmation on normal reboot
     MainMenuUF2Confirm,       // Waiting for 'y' confirmation on UF2 bootloader reboot
     MainMenuMSCConfirm,       // Waiting for 'y' confirmation on USB SD card reader reboot
@@ -135,6 +138,10 @@ static void show_main_menu()
         serial_println("    'm' - Media Menu");
     serial_out("    'd' - debug logging  [");
     serial_out(g_log_debug ? "ON" : "OFF");
+    serial_println("]");
+
+    serial_out("    'l' - toggle logging to SD card [");
+    serial_out(g_log_to_sd ? "ON" : "OFF");
     serial_println("]");
 #ifdef PLATFORM_MASS_STORAGE
     if (!platform_in_msc_mode())
@@ -328,6 +335,12 @@ void ideConsoleMenuProcess(char c)
                     serial_println("? Press 'y' to confirm or any other key to cancel:");
                     break;
 
+                case 'l':
+                    s_state = MenuState::MainMenuLogToSDConfirm;
+                    serial_out("  Toggle logging to SD card to ");
+                    serial_out(g_log_to_sd ? "OFF" : "ON");
+                    serial_println("? Press 'y' to confirm or any other key to cancel:");
+                    break;
                 case 'r':
 #ifdef PLATFORM_MASS_STORAGE
                     if (platform_in_msc_mode())
@@ -424,7 +437,25 @@ void ideConsoleMenuProcess(char c)
             }
             break;
         }
-
+        //-----------------------------------------------------------------
+        case MenuState::MainMenuLogToSDConfirm:
+        {
+            if (c == 'y' || c == 'Y')
+            {
+                g_log_to_sd = !g_log_to_sd;
+                logmsg("Log to SD card ", g_log_to_sd ? "enabled." : "disabled.");
+                s_state             = MenuState::MainMenu;
+                s_menu_just_entered = true;
+                ideConsoleMenuProcess(c);
+            }
+            else
+            {
+                s_state             = MenuState::MainMenu;
+                s_menu_just_entered = true;
+                ideConsoleMenuProcess(c);
+            }
+            break;
+        }
         // ----------------------------------------------------------------
         case MenuState::MainMenuRebootConfirm:
         {
