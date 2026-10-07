@@ -1224,10 +1224,11 @@ void zuluide_init(void)
 {
   platform_init();
   platform_late_init();
-  zuluide_setup_sd_card();
-  zuluide_reload_config();
   USB.begin();
   Serial.begin(115200);
+  zuluide_setup_sd_card();
+  zuluide_reload_config();
+
 
 #ifdef PLATFORM_MASS_STORAGE
   static bool check_mass_storage = true;
