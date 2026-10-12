@@ -2,7 +2,17 @@ name: Build ZuluIDE firmware
 
 on:
   push:
+    paths-ignore:
+      - '**/*.md'
+      - '**/*.txt'
+  pull_request:
+    paths-ignore:
+      - '**/*.md'
+      - '**/*.txt'
   workflow_dispatch:
+    paths-ignore:
+      - '**/*.md'
+      - '**/*.txt'
 
 jobs:
   build_firmware:
