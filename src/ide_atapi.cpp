@@ -1574,9 +1574,11 @@ size_t IDEATAPIDevice::atapi_get_configuration(uint8_t return_type, uint16_t fea
 
         for (int i = 0; i < m_devinfo.num_profiles; i++)
         {
-            write_be16(&buffer[4 + i * 4], m_devinfo.profiles[i]);
-            buffer[2] = is_medium_present() ? 1 : 0;
-            buffer[3] = 0;
+            // Profile descriptor: profile number, CurrentP flag, reserved
+            uint8_t *profile = &buffer[4 + i * 4];
+            write_be16(&profile[0], m_devinfo.profiles[i]);
+            profile[2] = (is_medium_present() && m_devinfo.profiles[i] == m_devinfo.current_profile) ? 1 : 0;
+            profile[3] = 0;
         }
 
         return 4 + m_devinfo.num_profiles * 4;
