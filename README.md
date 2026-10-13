@@ -38,11 +38,11 @@ The name of the folder is used as the name when switching images in alphabetical
 
 Red Book CD audio playback emulation
 -------------------------
-CD Audio playback emulation is fully functional. The RP2350 microcontroller generates digital i2s audio which is sent to an optional DAC "hat" plug-in board, which uses a [PCM5100A DAC](https://www.ti.com/product/PCM5100A), which converts the digital audio signal to stereo line-level audio via a standard MPC-2 CD-ROM audio connector (LGGR).
+CD Audio playback emulation is fully functional. The RP2350 microcontroller generates digital i2s audio which is sent to either an on-board DAC (For ZuluIDE V2 Hybrid), or an optional add-on "hat" plug-in board (for ZuluIDE Compact), which uses a [PCM5100A DAC](https://www.ti.com/product/PCM5100A), which converts the digital audio signal to stereo line-level audio via a standard MPC-2 CD-ROM audio connector (LGGR).
 
 Cycling Images
 --------------
-All versions of ZuluIDE V2 and later revisions of ZuluSCSI Compact RP2040 have a hardware eject button on the board, along with a pin header that can be used for attaching a switch, which will simulate an eject, and move to the next image alphabetically, if you are not using the hardware control board.
+All versions of ZuluIDE V2 and later revisions of ZuluIDE Compact RP2040 have a hardware eject button on the board, along with a pin header that can be used for attaching a switch, which will simulate an eject, and move to the next image alphabetically, if you are not using the hardware control board.
 
 You can also cycle through images by sending the eject command from within an operating system. This will load the next valid image file in alphabetic order.
 
@@ -73,7 +73,9 @@ The status led will blink continuously when card is not present, then blink once
 
 Programming & bootloader
 ------------------------
-For RP2040-based boards, the USB programming uses `.uf2` format file that can be copied to the virtual USB drive that shows up in USB bootloader mode, which is enabled with DIP switch.
+Under normal circumstances, updating ZuluIDE firmware is as [easy as copying the latest universal firmware `.zip` file]([url](https://github.com/ZuluIDE/ZuluIDE-firmware/releases/latest)) to the root of your SD card
+
+For ZuluIDE RP2040 & ZuluIDE V2 based boards, to manually flash firmware via the UF2 method, using USB 
 
 - There is a custom SD-card bootloader that loads new firmware from SD card on boot.
 - The firmware file name must be e.g. `ZuluIDE.bin` or `ZuluIDEv1_0_2023-xxxxx.bin`.
@@ -143,8 +145,6 @@ Any file or directory that begins with a non-alphanumeric character is ignored b
 
 The following common compression extensions are ignored:
  ".tar", ".tgz", ".gz", ".bz2", ".tbz2", ".xz", ".zst", ".z", ".zip", ".zipx", ".rar", ".lzh", ".lha", ".lzo", ".lz4", ".arj", ".dmg", ".hqx", ".cpt", ".7z", ".s7z"
-
-
 
 The following document extensions are ignored:
 ".cue", ".txt", ".rtf", ".md", ".nfo", ".pdf", ".doc"
