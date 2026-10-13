@@ -31,7 +31,7 @@
 #include <ZuluIDE_platform.h>
 
 // Use variables for version number
-#define FW_VER_NUM      "2026.10.02"
+#define FW_VER_NUM      "2026.10.13"
 #define FW_VER_SUFFIX   "devel"
 // #define FW_VER_BUILD    "1"
 #if FW_VER_BUILD
@@ -49,8 +49,6 @@
 #define CRASHFILE     "zuluerr.txt"
 #define LICENSEFILE   "zuluide.lic"
 #define LASTFILE      "zululast.txt"
-#define RAWIDENTFILE  "zulu_ident_device.bin"
-#define RAWIDENTPACKETFILE "zulu_ident_packet_device.bin"
 #define ZULUCONTROL_UF2_PREFIX "zulucontrol"
 
 // File names used for firmware update from SD card

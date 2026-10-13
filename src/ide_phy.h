@@ -63,8 +63,6 @@ struct ide_phy_config_t {
     // IOCS16 signaling for PIO data transfer implementation is not completely to spec on the V2
     // Not all systems care so this allows the user to disabled it, if the current implementation is an issue
     bool disable_iocs16;
-    //  If true, skip BSY status between buffer PIO data-in commands, false for standard behaviour
-    bool no_bsy_on_reads;
 };
 
 // Reset the IDE phy
@@ -121,6 +119,18 @@ void ide_phy_start_write(uint32_t blocklen, int udma_mode = -1);
 bool ide_phy_can_write_block();
 void ide_phy_write_block(const uint8_t *buf, uint32_t blocklen);
 bool ide_phy_is_write_finished();
+
+// ATA version of start_write() for PIO data in transfers (e.g. READ SECTORS) that tracks
+// transferred sectors. After each block the PHY decrements the sector count register by
+// sectors_per_block, and after the last of total_sectors it sets status to DEVRDY | DSC
+// instead of BSY. Not all PHYs support tracking, they fall back to ide_phy_start_write().
+void ide_phy_start_ata_write(uint32_t blocklen, int udma_mode, uint32_t total_sectors, uint32_t sectors_per_block);
+
+// Returns true if the PHY tracked the sectors of the transfer started with ide_phy_start_ata_write()
+// and has already set the final status (DEVRDY | DSC) and sector count itself after the last sector.
+// The host may then already be writing registers for the next command, so the device implementation
+// must not call ide_phy_set_regs() to complete the command.
+bool ide_phy_is_ata_write_complete();
 
 void ide_phy_start_read(uint32_t blocklen, int udma_mode = -1);
 bool ide_phy_can_read_block();

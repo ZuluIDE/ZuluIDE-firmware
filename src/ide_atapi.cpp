@@ -1438,7 +1438,7 @@ bool IDEATAPIDevice::atapi_read(const uint8_t *cmd)
     if (lba + transfer_len > capacity_lba())
     {
         logmsg("-- Host attempted read at LBA ", (int64_t)lba, "+", (int64_t)transfer_len,
-            ", beyond capacity ", (int64_t)capacity_lba());
+            ", beyond capacity ", (int64_t)capacity_lba(), ", packet ", bytearray(cmd, 12));
         return atapi_cmd_error(ATAPI_SENSE_ILLEGAL_REQ, ATAPI_ASC_LBA_OUT_OF_RANGE);
     }
 
@@ -1508,7 +1508,7 @@ bool IDEATAPIDevice::atapi_write(const uint8_t *cmd)
     if (lba + transfer_len > capacity_lba())
     {
         logmsg("-- Host attempted write at LBA ", (int64_t)lba, "+", (int64_t)transfer_len,
-            ", beyond capacity ", (int64_t)capacity_lba());
+            ", beyond capacity ", (int64_t)capacity_lba(), ", packet ", bytearray(cmd, 12));
         return atapi_cmd_error(ATAPI_SENSE_ILLEGAL_REQ, ATAPI_ASC_LBA_OUT_OF_RANGE);
     }
 

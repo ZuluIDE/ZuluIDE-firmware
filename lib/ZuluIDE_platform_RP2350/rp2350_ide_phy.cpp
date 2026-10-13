@@ -76,6 +76,13 @@ static struct {
     bool pio_iocs16_claimed;
 
     uint32_t bufferidx; // Index of next buffer in g_idebuffers to use
+
+    // Core1 command sequence number of the command being handled,
+    // used to tag register updates sent to core1.
+    uint32_t cmd_seq;
+
+    // Core1 is tracking sectors of the current PIO data-in transfer
+    bool datain_tracking;
 } g_ide_phy;
 
 static ide_phy_capabilities_t g_ide_phy_capabilities = {
@@ -128,6 +135,59 @@ static void ide_phy_post_request(uint32_t request)
 static void ide_phy_clear_event(uint32_t event)
 {
     __atomic_fetch_and(&g_idecomm.events, ~event, __ATOMIC_ACQ_REL);
+}
+
+// Take the command sequence number of the command or reset that is now being handled.
+// Must be called after the corresponding event has been cleared, so that a newer command
+// sets the event again and gets handled next.
+static void ide_phy_update_cmd_seq()
+{
+    g_ide_phy.cmd_seq = __atomic_load_n(&g_idecomm.cmd_seq, __ATOMIC_ACQUIRE);
+}
+
+// Check if host has written a new command or reset after the one core0 is handling.
+// Transfers of the old command must then not be set up, core1 may already be receiving
+// the ATAPI packet of the new command.
+static bool ide_phy_new_command_pending()
+{
+    return __atomic_load_n(&g_idecomm.cmd_seq, __ATOMIC_ACQUIRE) != g_ide_phy.cmd_seq;
+}
+
+// Set the data block size for a new transfer, unless host has started a new command.
+// Core1 sets the block size of the ATAPI packet itself when host writes a PACKET
+// command, and that must not be overwritten by a transfer of the previous command.
+static bool ide_phy_set_blocksize(uint32_t blocklen)
+{
+    if (ide_phy_new_command_pending())
+    {
+        return false;
+    }
+
+    g_idecomm.datablocksize = blocklen;
+    __sync_synchronize();
+
+    if (ide_phy_new_command_pending())
+    {
+        // Host wrote a new command while the block size was being set, so core1 may have set
+        // the ATAPI packet size in between. Core1 stores the command before incrementing
+        // cmd_seq, so the command register value is valid here.
+        if (g_idecomm.phyregs.regs.command == IDE_CMD_PACKET)
+        {
+            g_idecomm.datablocksize = 12;
+        }
+        return false;
+    }
+
+    return true;
+}
+
+// Post a request that belongs to the command core0 is currently handling.
+// Core1 drops it if host has started a new command before it is processed.
+static void ide_phy_post_command_request(uint32_t request)
+{
+    g_idecomm.set_regs_seq = g_ide_phy.cmd_seq;
+    __sync_synchronize();
+    ide_phy_post_request(request);
 }
 
 static bool ide_phy_check_pending_request(uint32_t request)
@@ -207,13 +267,17 @@ void ide_phy_config(const ide_phy_config_t* config)
     g_idecomm.atapi_dev1           = config->atapi_dev1;
     g_idecomm.disable_iordy        = config->disable_iordy;
     g_idecomm.enable_packet_intrq  = config->enable_packet_intrq;
-    g_idecomm.no_bsy_on_reads    = config->no_bsy_on_reads;
     g_idecomm.cpu_freq_hz = clock_get_hz(clk_sys);
     phyregs.state_irqreq = 0;
     phyregs.state_datain = 0;
     phyregs.state_dataout = 0;
     g_idecomm.phyregs = phyregs;
     g_idecomm.set_regs = phyregs.regs;
+    ide_phy_update_cmd_seq();
+    // Not tied to a host command, core1 must apply these even if the host
+    // starts a new command or holds the bus in reset meanwhile.
+    g_idecomm.set_regs_seq = IDECOMM_SEQ_ANY;
+    __sync_synchronize();
     ide_phy_post_request(CORE1_REQ_SET_REGS | CORE1_REQ_STOP_TRANSFERS);
 
     g_idecomm.enable_idephy = true;
@@ -244,6 +308,10 @@ void ide_phy_reset()
     phyregs.state_dataout = 0;
     g_idecomm.phyregs = phyregs;
     g_idecomm.set_regs = phyregs.regs;
+    ide_phy_update_cmd_seq();
+    // Not tied to a host command, core1 must apply these even if the host
+    // starts a new command or holds the bus in reset meanwhile.
+    g_idecomm.set_regs_seq = IDECOMM_SEQ_ANY;
     __sync_synchronize();
     ide_phy_post_request(CORE1_REQ_SET_REGS | CORE1_REQ_STOP_TRANSFERS);
 
@@ -316,6 +384,7 @@ ide_event_t ide_phy_get_events()
         }
         else
         {
+            ide_phy_update_cmd_seq();
             return IDE_EVENT_HWRST;
         }
     }
@@ -323,6 +392,7 @@ ide_event_t ide_phy_get_events()
     {
         // Software reset
         ide_phy_clear_event(CORE1_EVT_SWRST);
+        ide_phy_update_cmd_seq();
         g_ide_phy.watchdog_error = false;
         return IDE_EVENT_SWRST;
     }
@@ -330,6 +400,7 @@ ide_event_t ide_phy_get_events()
     {
         // dbgmsg("IDE_EVENT_CMD, status ", g_idecomm.phyregs.regs.status);
         ide_phy_clear_event(CORE1_EVT_CMD_RECEIVED);
+        ide_phy_update_cmd_seq();
         g_idecomm.udma_mode = -1; // For ATAPI packets
         g_ide_phy.transfer_block_start_time = millis();
         g_ide_phy.first_dataout_after_cmd = true;
@@ -384,6 +455,7 @@ void ide_phy_get_regs(ide_registers_t *regs)
 void ide_phy_set_regs(const ide_registers_t *regs, int device)
 {
     g_idecomm.set_regs = *regs;
+    g_idecomm.set_regs_seq = g_ide_phy.cmd_seq;
     __sync_synchronize();
 
     if (device < 0)
@@ -414,12 +486,42 @@ void ide_phy_start_write(uint32_t blocklen, int udma_mode)
 {
     if (blocklen & 1) blocklen++;
 
+    g_ide_phy.datain_tracking = false;
+    if (!ide_phy_set_blocksize(blocklen))
+    {
+        dbgmsg("ide_phy_start_write(): host has started a new command, not starting transfer");
+        g_ide_phy.transfer_running = false;
+        return;
+    }
+
     g_idecomm.udma_mode = udma_mode;
-    g_idecomm.datablocksize = blocklen;
     g_idecomm.udma_checksum_errors = 0;
+    g_idecomm.datain_sectors_remaining = 0;
     g_ide_phy.transfer_running = true;
 
     // Actual write is started when first block is written
+}
+
+void ide_phy_start_ata_write(uint32_t blocklen, int udma_mode, uint32_t total_sectors, uint32_t sectors_per_block)
+{
+    ide_phy_start_write(blocklen, udma_mode);
+
+    // Sector tracking is done by core1 at the end of each PIO data in block
+    if (g_ide_phy.transfer_running && udma_mode < 0 && sectors_per_block > 0 && total_sectors > 0)
+    {
+        g_idecomm.datain_sectors_per_block = sectors_per_block;
+        g_idecomm.datain_sectors_remaining = total_sectors;
+        g_ide_phy.datain_tracking = true;
+    }
+}
+
+bool ide_phy_is_ata_write_complete()
+{
+    // Core1 counts datain_sectors_remaining down to zero only when the last sector has
+    // been transferred, so this is false if host interrupted the transfer.
+    // With a core1 binary that does not support tracking, this stays non-zero.
+    return g_ide_phy.datain_tracking &&
+           __atomic_load_n(&g_idecomm.datain_sectors_remaining, __ATOMIC_ACQUIRE) == 0;
 }
 
 bool ide_phy_can_write_block()
@@ -451,6 +553,13 @@ static uint8_t *get_block_pointer()
 void ide_phy_write_block(const uint8_t *buf, uint32_t blocklen)
 {
     if (blocklen & 1) blocklen++;
+
+    if (ide_phy_new_command_pending())
+    {
+        // Caller notices the new command from ide_phy_is_command_interrupted()
+        dbgmsg("ide_phy_write_block(): host has started a new command, not sending data block");
+        return;
+    }
 
     assert(blocklen == g_idecomm.datablocksize);
     assert(sio_hw->fifo_st & SIO_FIFO_ST_RDY_BITS);
@@ -491,7 +600,7 @@ void ide_phy_write_block(const uint8_t *buf, uint32_t blocklen)
     // Give the transmit pointer to core 1
     sio_hw->fifo_wr = (uint32_t)block;
 
-    ide_phy_post_request(CORE1_REQ_START_DATAIN);
+    ide_phy_post_command_request(CORE1_REQ_START_DATAIN);
     g_ide_phy.transfer_block_start_time = millis();
 }
 
@@ -508,6 +617,13 @@ bool ide_phy_is_write_finished()
 
 static void data_out_give_next_block(bool noirq)
 {
+    if (ide_phy_new_command_pending())
+    {
+        // Caller notices the new command from ide_phy_is_command_interrupted()
+        dbgmsg("data_out_give_next_block(): host has started a new command, not receiving data block");
+        return;
+    }
+
     // Select a buffer for the transfer
     uint8_t *block = get_block_pointer();
 
@@ -517,11 +633,11 @@ static void data_out_give_next_block(bool noirq)
 
     if (g_ide_phy.suppress_first_dataout_irq && g_ide_phy.first_dataout_after_cmd)
     {
-        ide_phy_post_request(CORE1_REQ_START_DATAOUT_NOIRQ);
+        ide_phy_post_command_request(CORE1_REQ_START_DATAOUT_NOIRQ);
     }
     else
     {
-        ide_phy_post_request(CORE1_REQ_START_DATAOUT);
+        ide_phy_post_command_request(CORE1_REQ_START_DATAOUT);
     }
 
     g_ide_phy.first_dataout_after_cmd = false;
@@ -532,8 +648,14 @@ void ide_phy_start_read(uint32_t blocklen, int udma_mode)
 {
     if (blocklen & 1) blocklen++;
 
+    if (!ide_phy_set_blocksize(blocklen))
+    {
+        dbgmsg("ide_phy_start_read(): host has started a new command, not starting transfer");
+        g_ide_phy.transfer_running = false;
+        return;
+    }
+
     g_idecomm.udma_mode = udma_mode;
-    g_idecomm.datablocksize = blocklen;
     g_idecomm.udma_checksum_errors = 0;
     g_ide_phy.transfer_running = true;
 
@@ -612,15 +734,37 @@ void ide_phy_ata_read_block(uint8_t *buf, uint32_t blocklen, bool continue_trans
 
 void ide_phy_stop_transfers(int *crc_errors)
 {
-    ide_phy_post_request(CORE1_REQ_STOP_TRANSFERS);
-    ide_phy_clear_event(CORE1_EVT_DATA_DONE);
-    g_idecomm.datablocksize = 0;
     g_ide_phy.transfer_running = false;
+    g_ide_phy.datain_tracking = false;
 
-    // Drain FIFO
-    while (sio_hw->fifo_st & SIO_FIFO_ST_VLD_BITS)
+    if (__atomic_load_n(&g_idecomm.cmd_seq, __ATOMIC_ACQUIRE) != g_ide_phy.cmd_seq)
     {
-        (void)sio_hw->fifo_rd;
+        // Host has already issued a new command or reset, and core1 has stopped the transfers
+        // of this command itself. Core1 may have already received the new command's ATAPI
+        // packet into the FIFO and set datablocksize for it, so leave the shared state alone.
+        dbgmsg("ide_phy_stop_transfers(): new command pending, not stopping its transfers");
+    }
+    else
+    {
+        // Core1 drops the stop request if host issues a new command before it is processed
+        g_idecomm.set_regs_seq = g_ide_phy.cmd_seq;
+        __sync_synchronize();
+        ide_phy_post_request(CORE1_REQ_STOP_TRANSFERS);
+        ide_phy_clear_event(CORE1_EVT_DATA_DONE);
+
+        if (ide_phy_set_blocksize(0))
+        {
+            // Drain FIFO
+            while (sio_hw->fifo_st & SIO_FIFO_ST_VLD_BITS)
+            {
+                (void)sio_hw->fifo_rd;
+            }
+        }
+        else
+        {
+            // Host wrote a new command just now. Its ATAPI packet will arrive in the FIFO.
+            dbgmsg("ide_phy_stop_transfers(): new command arrived while stopping, not draining FIFO");
+        }
     }
 
     if (crc_errors) *crc_errors = g_idecomm.udma_checksum_errors;
@@ -629,6 +773,7 @@ void ide_phy_stop_transfers(int *crc_errors)
 void ide_phy_assert_irq(uint8_t ide_status)
 {
     g_idecomm.set_regs.status = ide_status;
+    g_idecomm.set_regs_seq = g_ide_phy.cmd_seq;
     __sync_synchronize();
 
     ide_phy_post_request(CORE1_REQ_ASSERT_IRQ);
