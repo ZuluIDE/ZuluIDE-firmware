@@ -42,6 +42,14 @@
 using namespace zuluide::pipe;
 using namespace zuluide::i2c;
 
+const char *wire_status_str[] = {
+  "Success",
+  "Data too long",
+  "NACK on transmit of address",
+  "NACK on transmit of data",
+  "Other error",
+  "Timeout"
+};
 
 
 I2CServer::I2CServer(ImageRequestPipe<i2c_server_source_t>* image_request_pipe, ImageResponsePipe<i2c_server_source_t>* image_response_pipe) :
@@ -68,7 +76,7 @@ void I2CServer::SetDeviceControl(DeviceControlSafe* devControl)
     devControlSet = true;
 }
 
-bool writeLengthPrefacedString(TwoWire *wire, uint8_t reg, uint16_t length, const char* buffer) {
+bool writeLengthPrefacedString(TwoWire *wire, uint8_t reg, uint16_t length, const char* buffer, bool quiet = false) {
   wire->beginTransmission(CLIENT_ADDR);
   wire->write(reg);
   
@@ -80,7 +88,7 @@ bool writeLengthPrefacedString(TwoWire *wire, uint8_t reg, uint16_t length, cons
   uint8_t wire_status = wire->endTransmission();
 
   if (wire_status != 0) {
-    dbgmsg("-- I2C transmission error: ", (int)wire_status);
+    if (!quiet) logmsg("-- I2C command transmission error: ", (int)wire_status, " - ", wire_status_str[wire_status]);
     return false;
   }
   // Break the string into BUFFER_LENGTH sized transmissions.
@@ -96,7 +104,7 @@ bool writeLengthPrefacedString(TwoWire *wire, uint8_t reg, uint16_t length, cons
 
     if (wire_status != 0)
     {
-      logmsg("-- I2C data transmission error: ", (int)wire_status);
+      if (!quiet) logmsg("-- I2C data transmission error: ", (int)wire_status, " - ", wire_status_str[wire_status]);
       return false;
     }
   }
@@ -115,12 +123,12 @@ bool I2CServer::CheckForDevice() {
   }
   else
   {
-    isPresent = writeLengthPrefacedString(wire, I2C_SERVER_RESET, 0, buf);
+    isPresent = writeLengthPrefacedString(wire, I2C_SERVER_RESET, 0, buf, true);
   }
   if (!isPresent && g_i2c_bus_speed != I2C_NORMAL_BUS_SPEED)
   {
     wire->setClock(I2C_NORMAL_BUS_SPEED);
-    isPresent =  writeLengthPrefacedString(wire, I2C_SERVER_RESET, 0, buf);
+    isPresent =  writeLengthPrefacedString(wire, I2C_SERVER_RESET, 0, buf, true);
     if (isPresent)
     {
       g_i2c_bus_speed = I2C_NORMAL_BUS_SPEED;
