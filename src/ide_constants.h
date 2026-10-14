@@ -95,6 +95,7 @@ X(IDE_CMD_STANDBY_IMMEDIATE_94H                     , 0x94) \
 X(IDE_CMD_IDLE_IMMEDIATE_95H                        , 0x95) \
 X(IDE_CMD_STANDBY_96H                               , 0x96) \
 X(IDE_CMD_IDLE_97H                                  , 0x97) \
+X(IDE_CMD_SLEEP_99H                                 , 0x99) \
 X(IDE_CMD_PACKET                                    , 0xA0) \
 X(IDE_CMD_IDENTIFY_PACKET_DEVICE                    , 0xA1) \
 X(IDE_CMD_SERVICE                                   , 0xA2) \
@@ -121,7 +122,7 @@ X(IDE_CMD_STANDBY_E2H                               , 0xE2) \
 X(IDE_CMD_IDLE_E3H                                  , 0xE3) \
 X(IDE_CMD_READ_BUFFER                               , 0xE4) \
 X(IDE_CMD_CHECK_POWER_MODE                          , 0xE5) \
-X(IDE_CMD_SLEEP                                     , 0xE6) \
+X(IDE_CMD_SLEEP_E6H                                 , 0xE6) \
 X(IDE_CMD_FLUSH_CACHE                               , 0xE7) \
 X(IDE_CMD_WRITE_BUFFER                              , 0xE8) \
 X(IDE_CMD_FLUSH_CACHE_EXT                           , 0xEA) \
