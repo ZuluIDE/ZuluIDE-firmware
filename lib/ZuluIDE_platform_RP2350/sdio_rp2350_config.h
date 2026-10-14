@@ -3,6 +3,7 @@
 #pragma once
 
 #include "ZuluIDE_platform_gpio.h"
+#include "ZuluIDE_platform.h"
 #include <ZuluIDE_log.h>
 
 // #define SDIO_BREAKPOINT_ON_ERROR

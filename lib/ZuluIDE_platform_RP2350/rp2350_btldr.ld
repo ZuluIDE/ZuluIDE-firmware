@@ -67,7 +67,10 @@ SECTIONS
         *:ZuluIDE_reboot_platform*(*)
         *rp2350_sniffer*(*)
         *ZuluIDE_create_image*(*)
-        *ide_*(*)
+        /* SDIO_RP2350 1.0.9 requires calling platform_watchdog_reset which needs the following
+         * rp2350_ide_phy is kept because watchdog_callback() calls
+         * ide_phy_reset_from_watchdog(), unused parts are removed by --gc-sections */
+        *ide_*(EXCLUDE_FILE(*rp2350_ide_phy.cpp.o) *)
         *Adafruit*:*(*)
         *libWire*:*(*)
         *libSPI*:*(*)
