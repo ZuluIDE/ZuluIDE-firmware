@@ -73,9 +73,9 @@ extern struct idecomm_t {
     bool enable_dev1_zeros; // Answer to register reads for device 1 with zeros
     bool atapi_dev0; // Automatically read command for ATAPI PACKET on device 0
     bool atapi_dev1; // Automatically read command for ATAPI PACKET on device 1
-    bool disable_iordy; // Disable IORDY in PIO mode 
+    bool disable_iordy; // Disable IORDY in PIO mode
 
-   // Enables INTRQ between the initial ATA PACKET command and receiving the ATAPI command
+    // Enables INTRQ between the initial ATA PACKET command and receiving the ATAPI command
     bool enable_packet_intrq;
 
     // For IOCS16 handling, the IDE register address is transferred to a state machine in
@@ -113,7 +113,32 @@ extern struct idecomm_t {
 
     // Active PIO mode.
     int pio_mode;
+
+    // ATA PIO data-in sector tracking (e.g. READ SECTORS).
+    // Set by core0 before the first block of a PIO data-in transfer, 0 disables tracking.
+    // After each block core1 decrements the sector count register by datain_sectors_per_block,
+    // and after the last block sets status to DRDY|DSC instead of BSY.
+    uint32_t datain_sectors_remaining;
+    uint32_t datain_sectors_per_block;
+
+    // Command sequence number, incremented by core1 when host writes the COMMAND
+    // register and on software or hardware reset.
+    uint32_t cmd_seq;
+
+    // Command sequence number that the CORE1_REQ_SET_REGS, CORE1_REQ_ASSERT_IRQ,
+    // CORE1_REQ_STOP_TRANSFERS and CORE1_REQ_START_* requests belong to, set by core0
+    // before posting them.
+    // Core1 drops the requests if the host has since started a new command or reset.
+    // SET_REGS and ASSERT_IRQ are also dropped if core1 has already completed the command
+    // itself (last sector of a tracked PIO data-in transfer).
+    // IDECOMM_SEQ_ANY marks requests that are not tied to a host command (PHY config and
+    // reset), these are never dropped.
+    uint32_t set_regs_seq;
 } g_idecomm;
+
+// Value of set_regs_seq for requests that must be applied regardless of the command sequence.
+// Core1 never uses this value for cmd_seq.
+#define IDECOMM_SEQ_ANY 0xFFFFFFFFu
 
 #define IDE_PIO                pio0
 #define IDE_CORE1_WAKEUP_IRQ   7

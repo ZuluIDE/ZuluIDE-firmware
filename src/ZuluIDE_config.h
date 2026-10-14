@@ -49,7 +49,6 @@
 #define CRASHFILE     "zuluerr.txt"
 #define LICENSEFILE   "zuluide.lic"
 #define LASTFILE      "zululast.txt"
-
 #define ZULUCONTROL_UF2_PREFIX "zulucontrol"
 
 // File names used for firmware update from SD card

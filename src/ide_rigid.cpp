@@ -85,6 +85,7 @@ void IDERigidDevice::print_device_config()
     if (!m_image || !m_image->get_image_name(imgfile, sizeof(imgfile))) strcpy(imgfile, "not loaded");
     logmsg("-- ATA hard drive, image ", imgfile);
     IDEDevice::print_device_config();
+    logmsg("-- Max set multiple: ", (int) m_devconfig.max_set_multiple, " (phy max ", (int)m_phy_caps.max_set_multiple, ")");
 }
 
 void IDERigidDevice::post_image_setup()
@@ -212,6 +213,12 @@ bool IDERigidDevice::handle_command(ide_registers_t *regs)
         case IDE_CMD_IDENTIFY_PACKET_DEVICE:
             return set_device_signature(regs, IDE_ERROR_ABORT, false);
 
+        // PACKET command is only for ATAPI devices. Some hosts send it to every device
+        // when looking for a CD-ROM to boot from, e.g. the IBM PC 330 BIOS sends TEST UNIT
+        // READY to each device and retries it 10 times before trying the next device.
+        // Abort it as a non-packet device should.
+        case IDE_CMD_PACKET: return cmd_packet_abort(regs);
+
         // Supported IDE commands
         case IDE_CMD_NOP: return cmd_nop(regs);
         case IDE_CMD_SET_FEATURES: return cmd_set_features(regs);
@@ -290,6 +297,15 @@ bool IDERigidDevice::cmd_nop(ide_registers_t *regs)
     return true;
 }
 
+bool IDERigidDevice::cmd_packet_abort(ide_registers_t *regs)
+{
+    dbgmsg("-- Not a packet device, aborting PACKET command");
+    regs->error = IDE_ERROR_ABORT;
+    ide_phy_set_regs(regs);
+    ide_phy_assert_irq(IDE_STATUS_DEVRDY | IDE_STATUS_DSC | IDE_STATUS_ERR);
+    return true;
+}
+
 // Set configuration based on register contents
 bool IDERigidDevice::cmd_set_features(ide_registers_t *regs)
 {
@@ -334,6 +350,10 @@ bool IDERigidDevice::cmd_set_features(ide_registers_t *regs)
     else if (feature == IDE_SET_FEATURE_ENABLE_ECC)
     {
         dbgmsg("-- Enable ECC --");
+    }
+    else if (feature == IDE_SET_FEATURE_VENDOR_ECC)
+    {
+        dbgmsg("-- Vendor length of ECC stubbed out");
     }
     else if (feature == IDE_SET_FEATURE_ENABLE_READ_AHEAD)
     {
@@ -402,6 +422,12 @@ bool IDERigidDevice::cmd_read(ide_registers_t *regs, bool dma_transfer, bool ver
     }
 
     if (is_multiple && m_ata_state.multiple_mode_sectors == 0)
+    {
+        dbgmsg("READ MULTIPLE when multiple mode is not set");
+        return false;
+    }
+
+    if (is_multiple && m_ata_state.multiple_mode_sectors > m_phy_caps.max_set_multiple)
         return false;
 
     uint32_t lba = 0;
@@ -471,31 +497,33 @@ bool IDERigidDevice::cmd_read(ide_registers_t *regs, bool dma_transfer, bool ver
         dbgmsg("cmd_read: LBA=", (int64_t)lba, " sector_size=", (int)sector_size,
                " file_offset=", (int64_t)file_offset, " sector_count=", (int)sector_count);
 
-        if (is_multiple)
-        {
-            uint32_t multi_mode = m_ata_state.multiple_mode_sectors;
-            uint32_t block_size = sector_size * multi_mode;
-            uint32_t block_count = sector_count / multi_mode;
+        // Each DRQ block is sectors_per_block sectors, except for READ MULTIPLE the last
+        // block has the remaining sectors if sector count is not a multiple of it.
+        uint32_t sectors_per_block = is_multiple ? m_ata_state.multiple_mode_sectors : 1;
+        uint32_t full_blocks = sector_count / sectors_per_block;
+        uint32_t rest_sectors = sector_count % sectors_per_block;
+        uint64_t rest_offset = file_offset + (uint64_t)full_blocks * sectors_per_block * sector_size;
 
-            if (block_count > 0)
-            {
-                status = m_image->read(file_offset, block_size, block_count, this);
-                lba += block_count * multi_mode;
-            }
+        // For PIO transfers, the PHY decrements the sector count register after each
+        // DRQ block and only sets BSY between blocks, not after the last one.
+        bool track_sectors = !dma_transfer && sector_size * sectors_per_block <= m_phy_caps.max_blocksize;
 
-            // "If the number of requested sectors is not evenly divisible by the block count,
-            // as many full blocks as possible are transferred, followed by a final, partial
-            // block transfer."
-            if (status && sector_count > block_count * multi_mode)
-            {
-                block_size = (sector_count - block_count * multi_mode) * sector_size;
-                status = m_image->read(file_offset, block_size, 1, this);
-            }
-        }
-        else
+        if (full_blocks > 0)
         {
-            status = m_image->read(file_offset, sector_size, sector_count, this);
+            // Track all sectors of the command, so that the PHY keeps BSY after the
+            // last full block if a partial block still follows.
+            m_ata_state.datain_track_sectors = track_sectors ? sector_count : 0;
+            status = m_image->read(file_offset, sector_size * sectors_per_block, full_blocks, this);
         }
+
+        if (status && rest_sectors > 0)
+        {
+            // Block size changes, so the PHY transfer is restarted for the last block
+            m_ata_state.datain_track_sectors = track_sectors ? rest_sectors : 0;
+            status = m_image->read(rest_offset, sector_size * rest_sectors, 1, this);
+        }
+
+        m_ata_state.datain_track_sectors = 0;
 
         if (status)
         {
@@ -510,9 +538,11 @@ bool IDERigidDevice::cmd_read(ide_registers_t *regs, bool dma_transfer, bool ver
                 // DMA transfer completion is indicated by interrupt
                 ide_phy_assert_irq(IDE_STATUS_DEVRDY | IDE_STATUS_DSC);
             }
-            else
+            else if (!ide_phy_is_ata_write_complete())
             {
-                // For PIO DATA IN transfer there is no interrupt after the last block
+                // For PIO DATA IN transfer there is no interrupt after the last block.
+                // If the PHY tracked the sectors, it has already set this status after the
+                // last sector and host may be writing the next command's registers already.
                 regs->sector_count = 0;
                 regs->status = IDE_STATUS_DEVRDY | IDE_STATUS_DSC;
                 ide_phy_set_regs(regs);
@@ -534,6 +564,12 @@ bool IDERigidDevice::cmd_write(ide_registers_t *regs, bool dma_transfer, bool is
         return false;
 
     if (is_multiple && m_ata_state.multiple_mode_sectors == 0)
+    {
+        dbgmsg("WRITE MULTIPLE when multiple mode is not set");
+        return false;
+    }
+
+    if (is_multiple && m_ata_state.multiple_mode_sectors > m_phy_caps.max_set_multiple)
         return false;
 
     uint32_t lba = 0;
@@ -565,31 +601,23 @@ bool IDERigidDevice::cmd_write(ide_registers_t *regs, bool dma_transfer, bool is
     if (m_image && m_image->writable())
     {
         uint32_t sector_size = m_devinfo.bytes_per_sector;
+        uint64_t file_offset = (uint64_t)lba * sector_size;
 
-        if (is_multiple)
+        // Each DRQ block is sectors_per_block sectors, except for WRITE MULTIPLE the last
+        // block has the remaining sectors if sector count is not a multiple of it.
+        uint32_t sectors_per_block = is_multiple ? m_ata_state.multiple_mode_sectors : 1;
+        uint32_t full_blocks = sector_count / sectors_per_block;
+        uint32_t rest_sectors = sector_count % sectors_per_block;
+        uint64_t rest_offset = file_offset + (uint64_t)full_blocks * sectors_per_block * sector_size;
+
+        if (full_blocks > 0)
         {
-            uint32_t multi_mode = m_ata_state.multiple_mode_sectors;
-            uint32_t block_size = sector_size * multi_mode;
-            uint32_t block_count = sector_count / multi_mode;
-
-            if (block_count > 0)
-            {
-                status = m_image->write((uint64_t)lba * sector_size, block_size, block_count, this);
-                lba += block_count * multi_mode;
-            }
-
-            // "If the number of requested sectors is not evenly divisible by the block count,
-            // as many full blocks as possible are transferred, followed by a final, partial
-            // block transfer."
-            if (status && sector_count > block_count * multi_mode)
-            {
-                block_size = (sector_count - block_count * multi_mode) * sector_size;
-                status = m_image->write((uint64_t)lba * sector_size, block_size, 1, this);
-            }
+            status = m_image->write(file_offset, sector_size * sectors_per_block, full_blocks, this);
         }
-        else
+
+        if (status && rest_sectors > 0)
         {
-            status = m_image->write((uint64_t)lba * sector_size, sector_size, sector_count, this);
+            status = m_image->write(rest_offset, sector_size * rest_sectors, 1, this);
         }
     }
     else
@@ -735,7 +763,7 @@ bool IDERigidDevice::cmd_identify_device(ide_registers_t *regs)
     // idf[IDE_IDENTIFY_OFFSET_PIO_CYCLETIME_IORDY] = 0x00B4;
     // idf[129] = 0x000B;
 
-     // Generic IDE hard drive
+    // Generic IDE hard drive
     uint64_t lba = capacity_lba();
 
     // Word 0 General Configuration — 0x42 = fixed disk (0x40) | security feature set supported (bit 1)
@@ -754,13 +782,20 @@ bool IDERigidDevice::cmd_identify_device(ide_registers_t *regs)
     copy_id_string(&idf[IDE_IDENTIFY_OFFSET_SERIAL_NUMBER], 10, m_devconfig.ata_serial);
     copy_id_string(&idf[IDE_IDENTIFY_OFFSET_FIRMWARE_REV], 4, m_devconfig.ata_revision);
     copy_id_string(&idf[IDE_IDENTIFY_OFFSET_MODEL_NUMBER], 20, m_devconfig.ata_model);
-    idf[IDE_IDENTIFY_OFFSET_MAX_SECTORS] = 0x8000 | (m_phy_caps.max_blocksize / m_devinfo.bytes_per_sector);
-    idf[IDE_IDENTIFY_OFFSET_MULTI_SECTOR_VALID] = 0x100 | m_ata_state.multiple_mode_sectors;
-
+    idf[IDE_IDENTIFY_OFFSET_MAX_SECTORS] = 0x8000 | m_phy_caps.max_set_multiple;
+    if (m_phy_caps.max_set_multiple == 0)
+    {
+        idf[IDE_IDENTIFY_OFFSET_MULTI_SECTOR_VALID]  = 0;
+    }
+    else
+    {
+        idf[IDE_IDENTIFY_OFFSET_MULTI_SECTOR_VALID] = m_phy_caps.max_set_multiple >= m_ata_state.multiple_mode_sectors ? 0x100 : 0x0;
+        idf[IDE_IDENTIFY_OFFSET_MULTI_SECTOR_VALID] |= m_ata_state.multiple_mode_sectors;
+    }
     idf[IDE_IDENTIFY_OFFSET_CAPABILITIES_1] = (m_phy_caps.supports_iordy ? 1 << 11 : 0) |
-                                             (1 << 10) | // iordy may be disabled
-                                             (1 << 9)  |  // Shall be set to one
-                                             (1 << 8);    // Shall be set to one
+                                            (1 << 10) | // iordy may be disabled
+                                            (1 << 9)  |  // Shall be set to one
+                                            (1 << 8);    // Shall be set to one
     idf[IDE_IDENTIFY_OFFSET_PIO_MODE_ATA1] = (m_phy_caps.max_pio_mode << 8);
     // \todo set on older drives
     // idf[IDE_IDENTIFY_OFFSET_OLD_DMA_TIMING_MODE] = 0x0200;
@@ -828,7 +863,29 @@ bool IDERigidDevice::cmd_identify_device(ide_registers_t *regs)
     {
         idf[IDE_IDENTIFY_OFFSET_HARDWARE_RESET_RESULT] = 0x4900; // Device 1 passed diagnostics
     }
-    // Calculate checksum
+
+
+    // idf[IDE_IDENTIFY_OFFSET_PIO_CYCLETIME_MIN] = m_phy_caps.min_pio_cycletime_no_iordy; // Without IORDY
+    // idf[IDE_IDENTIFY_OFFSET_PIO_CYCLETIME_IORDY] = m_phy_caps.min_pio_cycletime_with_iordy; // With IORDY
+
+    // idf[IDE_IDENTIFY_OFFSET_NUM_CYLINDERS] = m_devinfo.cylinders;
+    // idf[IDE_IDENTIFY_OFFSET_NUM_HEADS] = m_devinfo.heads;
+    // idf[IDE_IDENTIFY_OFFSET_BYTES_PER_TRACK] = m_devinfo.bytes_per_sector * m_devinfo.sectors_per_track;
+    // idf[IDE_IDENTIFY_OFFSET_BYTES_PER_SECTOR] = m_devinfo.bytes_per_sector;
+    // idf[IDE_IDENTIFY_OFFSET_SECTORS_PER_TRACK] = m_devinfo.sectors_per_track;
+
+    // idf[IDE_IDENTIFY_OFFSET_CURRENT_CYLINDERS] = m_devinfo.current_cylinders;
+    // idf[IDE_IDENTIFY_OFFSET_CURRENT_HEADS] = m_devinfo.current_heads;
+    // idf[IDE_IDENTIFY_OFFSET_CURRENT_SECTORS_PER_TRACK] = m_devinfo.current_sectors;
+    // uint32_t current_sector_cap = m_devinfo.current_cylinders * m_devinfo.current_heads * m_devinfo.current_sectors;
+    // idf[IDE_IDENTIFY_OFFSET_CURRENT_CAPACITY_IN_SECTORS_LOW] = current_sector_cap & 0xFFFF;;
+    // idf[IDE_IDENTIFY_OFFSET_CURRENT_CAPACITY_IN_SECTORS_HI] = (current_sector_cap >> 16) & 0xFFFF;
+
+    // uint64_t lba = capacity_lba();
+    // idf[IDE_IDENTIFY_OFFSET_TOTAL_SECTORS]     = lba & 0xFFFF;
+    // idf[IDE_IDENTIFY_OFFSET_TOTAL_SECTORS + 1] = (lba >> 16) & 0xFFFF;
+
+
     // See 8.15.61 Word 255: Integrity word
     uint8_t checksum = 0xA5;
     for (int i = 0; i < 255; i++)
@@ -859,14 +916,25 @@ bool IDERigidDevice::cmd_identify_device(ide_registers_t *regs)
 
 bool IDERigidDevice::cmd_set_multiple_mode(ide_registers_t *regs)
 {
-    if (regs->sector_count == 0)
+    uint8_t block_count = regs->sector_count;
+
+    if (block_count == 0)
     {
         dbgmsg("-- Disable MULTIPLE_MODE");
         m_ata_state.multiple_mode_sectors = 0;
     }
-    else if (regs->sector_count > (m_phy_caps.max_blocksize / m_devinfo.bytes_per_sector))
+    else if ((block_count & (block_count - 1)) != 0)
     {
-        dbgmsg("-- Host requested unsupported MULTIPLE_MODE = ", (int)regs->sector_count);
+        // Block count must be a power of two, abort and disable READ/WRITE MULTIPLE
+        dbgmsg("-- Host requested MULTIPLE_MODE = ", (int)block_count, ", which is not a power of two");
+        m_ata_state.multiple_mode_sectors = 0;
+        return false;
+    }
+    else if (block_count > m_phy_caps.max_set_multiple ||
+             block_count > (m_phy_caps.max_blocksize / m_devinfo.bytes_per_sector))
+    {
+        dbgmsg("-- Host requested unsupported MULTIPLE_MODE = ", (int)block_count,
+               ", max is ", (int)m_phy_caps.max_set_multiple);
         m_ata_state.multiple_mode_sectors = 0;
         return false;
     }
@@ -1134,7 +1202,17 @@ bool IDERigidDevice::ata_send_data_block(const uint8_t *data, uint16_t blocksize
 
         // Start data transfer
         int udma_mode = (m_ata_state.dma_requested ? m_ata_state.udma_mode : -1);
-        ide_phy_start_write(blocksize, udma_mode);
+        if (m_ata_state.datain_track_sectors > 0)
+        {
+            // Only the first transfer start of each image read tracks sectors
+            uint32_t sectors_per_block = blocksize / m_devinfo.bytes_per_sector;
+            ide_phy_start_ata_write(blocksize, udma_mode, m_ata_state.datain_track_sectors, sectors_per_block);
+            m_ata_state.datain_track_sectors = 0;
+        }
+        else
+        {
+            ide_phy_start_write(blocksize, udma_mode);
+        }
         ide_phy_write_block(data, blocksize);
     }
     else
@@ -1186,6 +1264,13 @@ bool IDERigidDevice::ata_send_wait_finish()
 
         if (ide_phy_is_command_interrupted())
         {
+            if (ide_phy_is_ata_write_complete())
+            {
+                // The PHY completed the command after the last sector and host has already
+                // issued the next command while this loop was polling. Not an interruption.
+                return true;
+            }
+
             dbgmsg("IDERigidDevice::ata_send_wait_finish() interrupted");
             return false;
         }

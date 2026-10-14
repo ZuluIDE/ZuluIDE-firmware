@@ -120,6 +120,18 @@ bool ide_phy_can_write_block();
 void ide_phy_write_block(const uint8_t *buf, uint32_t blocklen);
 bool ide_phy_is_write_finished();
 
+// ATA version of start_write() for PIO data in transfers (e.g. READ SECTORS) that tracks
+// transferred sectors. After each block the PHY decrements the sector count register by
+// sectors_per_block, and after the last of total_sectors it sets status to DEVRDY | DSC
+// instead of BSY. Not all PHYs support tracking, they fall back to ide_phy_start_write().
+void ide_phy_start_ata_write(uint32_t blocklen, int udma_mode, uint32_t total_sectors, uint32_t sectors_per_block);
+
+// Returns true if the PHY tracked the sectors of the transfer started with ide_phy_start_ata_write()
+// and has already set the final status (DEVRDY | DSC) and sector count itself after the last sector.
+// The host may then already be writing registers for the next command, so the device implementation
+// must not call ide_phy_set_regs() to complete the command.
+bool ide_phy_is_ata_write_complete();
+
 void ide_phy_start_read(uint32_t blocklen, int udma_mode = -1);
 bool ide_phy_can_read_block();
 void ide_phy_start_read_buffer(uint32_t blocklen);
@@ -153,6 +165,7 @@ struct ide_phy_capabilities_t
     int min_pio_cycletime_no_iordy;
     int min_pio_cycletime_with_iordy;
     int max_udma_mode; // -1 if UDMA not supported
+    uint8_t max_set_multiple = 8; // currently  IDECOMM_MAX_BLOCK_PAYLOAD / 512 (standard blocksize for rigid)
 };
 
 const ide_phy_capabilities_t *ide_phy_get_capabilities();

@@ -240,6 +240,20 @@ void ide_phy_start_write(uint32_t blocklen, int udma_mode)
     }
 }
 
+void ide_phy_start_ata_write(uint32_t blocklen, int udma_mode, uint32_t total_sectors, uint32_t sectors_per_block)
+{
+    // FPGA does not support sector tracking, it sets BSY at the end of each block
+    (void)total_sectors;
+    (void)sectors_per_block;
+    ide_phy_start_write(blocklen, udma_mode);
+}
+
+bool ide_phy_is_ata_write_complete()
+{
+    // FPGA does not track sectors, device implementation completes the command
+    return false;
+}
+
 bool ide_phy_can_write_block()
 {
     uint8_t status;
