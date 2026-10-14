@@ -188,6 +188,9 @@ protected:
     virtual bool cmd_flush_cache(ide_registers_t *regs);
     virtual bool cmd_idle(ide_registers_t *regs);
     virtual bool cmd_check_power_mode(ide_registers_t *regs);
+    // Hide unsupported commands from the normal log
+    // Some BIOSes issue ATA command that ATAPI device don't support
+    virtual bool cmd_unsupported(ide_registers_t *regs);
 
     // Methods used by ATAPI command implementations
 

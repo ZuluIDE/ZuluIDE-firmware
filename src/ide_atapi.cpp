@@ -109,6 +109,8 @@ bool IDEATAPIDevice::handle_command(ide_registers_t *regs)
         case IDE_CMD_IDLE_97H:           [[fallthrough]];
         case IDE_CMD_IDLE_E3H: return cmd_idle(regs);
         case IDE_CMD_CHECK_POWER_MODE: return cmd_check_power_mode(regs);
+        case IDE_CMD_SET_MULTIPLE_MODE: [[fallthrough]];
+        case IDE_CMD_INIT_DEV_PARAMS: return cmd_unsupported(regs);
         default: return false;
     }
 }
@@ -438,6 +440,15 @@ bool IDEATAPIDevice::cmd_check_power_mode(ide_registers_t *regs)
     dbgmsg("Check Power Mode command is a stub, always reports as Active mode or Idle mode (0xFF). Signaling INTRQ and device ready");
     ide_phy_assert_irq(IDE_STATUS_DEVRDY | IDE_STATUS_DSC);
     ide_phy_set_regs(regs);
+    return true;
+}
+
+bool IDEATAPIDevice::cmd_unsupported(ide_registers_t *regs)
+{
+    dbgmsg("-- ATAPI does not support this ATA command (DEV", m_devconfig.dev_index, ")");
+    regs->error = IDE_ERROR_ABORT;
+    ide_phy_set_regs(regs);
+    ide_phy_assert_irq(IDE_STATUS_DEVRDY | IDE_STATUS_DSC | IDE_STATUS_ERR);
     return true;
 }
 
