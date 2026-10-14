@@ -459,10 +459,13 @@ bool IDECDROMDevice::handle_atapi_command(const uint8_t *cmd)
         case ATAPI_CMD_STOP_PLAY_SCAN_AUDIO:    return atapi_stop_play_scan_audio(cmd);
         case ATAPI_CMD_SEEK10:                  return atapi_seek_10(cmd);
         case ATAPI_CMD_MECHANISM_STATUS:        return atapi_mechanism_status(cmd);
-        // Stream feature not supported, returning invalid command here
-        // to avoid warnings in log
-        case ATAPI_CMD_GET_PERFORMANCE:         return atapi_cmd_error(ATAPI_SENSE_ILLEGAL_REQ, ATAPI_ASC_INVALID_CMD);
-
+        // Commands that regularly occur that have not been implemented
+        // to avoid warnings in log with debug turned off
+        case ATAPI_CMD_READ_DISC_STRUCTURE: [[fallthrough]];
+        case ATAPI_CMD_REPORT_KEY:          [[fallthrough]];
+        case ATAPI_CMD_GET_PERFORMANCE:
+            dbgmsg("-- Unimplemented ATAPI command ", get_atapi_command_name(cmd[0]));
+            return atapi_cmd_error(ATAPI_SENSE_ILLEGAL_REQ, ATAPI_ASC_INVALID_CMD);
         default:
             return IDEATAPIDevice::handle_atapi_command(cmd);
     }

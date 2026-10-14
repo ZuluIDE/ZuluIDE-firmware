@@ -279,6 +279,9 @@ bool IDERigidDevice::handle_command(ide_registers_t *regs)
         case IDE_CMD_SECURITY_ERASE_PREPARE:    [[fallthrough]];
         case IDE_CMD_SECURITY_FREEZE_LOCK:      [[fallthrough]];
         case IDE_CMD_SECURITY_DISABLE_PASSWORD: return log_security_event(regs);
+        case IDE_CMD_SLEEP_99H: [[fallthrough]];
+        case IDE_CMD_SLEEP_E6H: return cmd_stubbed(regs);
+
         default: return false;
     }
 }
@@ -967,11 +970,11 @@ bool IDERigidDevice::cmd_standby(ide_registers_t *regs)
 {
     if (regs->command == IDE_CMD_STANDBY_96H || regs->command == IDE_CMD_STANDBY_E2H)
     {
-        dbgmsg("Standby command is a stub, timeout value of ", regs->sector_count, " ignored. Signaling INTRQ and device ready");
+        dbgmsg("-- Standby command is a stub, timeout value of ", regs->sector_count, " ignored. Signaling INTRQ and device ready");
     }
     else
     {
-        dbgmsg("Standby immediate command is a stub, signaling INTRQ and device ready");
+        dbgmsg("-- Standby immediate command is a stub, signaling INTRQ and device ready");
     }
     ide_phy_assert_irq(IDE_STATUS_DEVRDY | IDE_STATUS_DSC);
     return true;
@@ -981,7 +984,7 @@ bool IDERigidDevice::cmd_idle(ide_registers_t *regs)
 {
     if (regs->command == IDE_CMD_IDLE_97H || regs->command == IDE_CMD_IDLE_E3H)
     {
-        dbgmsg("Idle command is a stub, timeout value of ", regs->sector_count, " ignored. Signaling INTRQ and device ready");
+        dbgmsg("Idle command is a stub, timeout value of ", regs->sector_count, " ignored.");
     }
     else
     {
@@ -1031,6 +1034,14 @@ bool IDERigidDevice::cmd_get_media_status(ide_registers_t *regs)
         ide_phy_assert_irq(IDE_STATUS_DEVRDY | IDE_STATUS_DSC | IDE_STATUS_ERR);
     }
 
+    return true;
+}
+
+
+bool IDERigidDevice::cmd_stubbed(ide_registers_t *regs)
+{
+    dbgmsg("-- ATA command stubbed (DEV", m_devconfig.dev_index, ")");
+    ide_phy_assert_irq(IDE_STATUS_DEVRDY | IDE_STATUS_DSC);
     return true;
 }
 

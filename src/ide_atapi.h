@@ -97,6 +97,9 @@ public:
     // Not used currently
     virtual void poll() override {;};
 
+    // Map from command index for command name for logging
+    virtual const char *get_atapi_command_name(uint8_t cmd);
+
 protected:
     // Records that a user requested an eject the host is currently preventing, and
     // reports it so the display and web interface can show the pending eject.
