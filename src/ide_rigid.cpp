@@ -769,8 +769,9 @@ bool IDERigidDevice::cmd_identify_device(ide_registers_t *regs)
     // Generic IDE hard drive
     uint64_t lba = capacity_lba();
 
-    // Word 0 General Configuration — 0x42 = fixed disk (0x40) | security feature set supported (bit 1)
-    idf[IDE_IDENTIFY_OFFSET_GENERAL_CONFIGURATION] = 0x42;
+    // Word 0 General Configuration - mostly depreciated in later versions of ATA-2, but some old ATA-1 hosts/drivers may expect specific values
+    // Default will be 0x42 = fixed disk (0x40) | security feature set supported (bit 1)
+    idf[IDE_IDENTIFY_OFFSET_GENERAL_CONFIGURATION] = (m_devconfig.ide_identify_gencfg ? m_devconfig.ide_identify_gencfg : (m_devinfo.removable ? 0x80 : 0x42)); // Device type
 
     idf[IDE_IDENTIFY_OFFSET_NUM_CYLINDERS] = m_devinfo.cylinders;
     idf[IDE_IDENTIFY_OFFSET_NUM_HEADS] = m_devinfo.heads;
