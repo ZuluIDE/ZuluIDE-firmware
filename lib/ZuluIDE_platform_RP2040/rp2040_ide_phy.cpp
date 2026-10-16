@@ -81,6 +81,7 @@ static ide_phy_capabilities_t g_ide_phy_capabilities = {
     .min_pio_cycletime_with_iordy = 180,
 
     .max_udma_mode = 0,
+    .max_mwdma_mode = -1, // Not implemented in FPGA
 };
 
 // Reset the IDE phy
@@ -219,8 +220,10 @@ void ide_phy_set_pio_mode(int pio_mode)
 }
 
 // Data writes to IDE bus
-void ide_phy_start_write(uint32_t blocklen, int udma_mode)
+// Multiword DMA is not supported (max_mwdma_mode is -1), mwdma_mode is always -1.
+void ide_phy_start_write(uint32_t blocklen, int udma_mode, int mwdma_mode)
 {
+    (void)mwdma_mode;
     // dbgmsg("ide_phy_start_write(", (int)blocklen, ", ", udma_mode, ")");
     g_ide_phy.crc_errors = 0;
     g_ide_phy.block_crc1 = g_ide_phy.block_crc0 = 0;
@@ -354,8 +357,9 @@ void ide_phy_start_read_buffer(uint32_t blocklen)
     g_ide_phy.transfer_running = true;
 }
 
-void ide_phy_start_ata_read(uint32_t blocklen, int udma_mode)
+void ide_phy_start_ata_read(uint32_t blocklen, int udma_mode, int mwdma_mode)
 {
+    (void)mwdma_mode; // Not supported, see ide_phy_start_write()
     // dbgmsg("ide_phy_start_read(", (int)blocklen, ", ", udma_mode, ")");
     g_ide_phy.crc_errors = 0;
     g_ide_phy.block_crc1 = g_ide_phy.block_crc0 = 0;
@@ -393,8 +397,9 @@ void ide_phy_start_ata_read(uint32_t blocklen, int udma_mode)
     g_ide_phy.transfer_running = true;
 }
 
-void ide_phy_start_read(uint32_t blocklen, int udma_mode)
+void ide_phy_start_read(uint32_t blocklen, int udma_mode, int mwdma_mode)
 {
+    (void)mwdma_mode; // Not supported, see ide_phy_start_write()
     // dbgmsg("ide_phy_start_read(", (int)blocklen, ", ", udma_mode, ")");
     g_ide_phy.crc_errors = 0;
     g_ide_phy.block_crc1 = g_ide_phy.block_crc0 = 0;

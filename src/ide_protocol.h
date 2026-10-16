@@ -127,6 +127,7 @@ protected:
     struct {
         int dev_index;
         int max_udma_mode;
+        int max_mwdma_mode;
         int max_pio_mode;
         int max_blocksize;
         uint8_t max_set_multiple;
@@ -145,6 +146,12 @@ protected:
 
     // PHY capabilities limited by active device configuration
     ide_phy_capabilities_t m_phy_caps;
+
+    // Fill IDENTIFY (PACKET) DEVICE word 63 with the Multiword DMA modes supported up to max_mode
+    // and the active mode, and words 65..66 with the Multiword DMA cycle times.
+    // Nothing is filled if max_mode is negative.
+    void identify_mwdma_modes(uint16_t *idf, int max_mode, int active_mode);
+
     void formatDriveInfoField(char *field, int fieldsize, bool align_right);
     void set_ident_strings(const char* default_model, const char* default_serial, const char* default_revision);
 };

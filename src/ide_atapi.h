@@ -147,6 +147,7 @@ protected:
         uint16_t blocksize; // Block size for data transfers
         atapi_data_state_t data_state;
         int udma_mode;  // Negotiated udma mode, or negative if not enabled
+        int mwdma_mode; // Multiword DMA mode, or negative if not enabled. Only one of the DMA modes is enabled.
         bool dma_requested; // Host requests to use DMA transfer for current command
         bool unit_attention;
         bool unit_attention_reported; // Whether unit attention error has been reported to host for current media change
