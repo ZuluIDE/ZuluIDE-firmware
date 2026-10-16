@@ -184,11 +184,13 @@ static bool mountSDCard()
     static sd_card_state_t s_card_state = sd_card_state_t::NotPresent;
     // Verify that all existing files have been closed
     g_logfile.close();
-    g_ide_cdrom.set_image(nullptr);
-    g_ide_zipdrive.set_image(nullptr);
-    g_ide_removable.set_image(nullptr);
-    g_ide_rigid.set_image(nullptr);
-
+    if (g_ide_cdrom.has_image()) g_ide_cdrom.set_image(nullptr);
+    if (g_ide_zipdrive.has_image()) g_ide_zipdrive.set_image(nullptr);
+    if (g_ide_removable.has_image()) g_ide_removable.set_image(nullptr);
+    if (g_ide_rigid.has_image()) g_ide_rigid.set_image(nullptr);
+#ifdef ENABLE_DUAL_DEVICE
+    if (g_ide_rigid2.has_image()) g_ide_rigid2.set_image(nullptr);
+#endif
     // Check for the common case, FAT filesystem as first partition
     if (SD.begin(SD_CONFIG))
     {
@@ -1351,12 +1353,13 @@ void zuluide_main_loop(void)
                     g_sdcard_present = false;
                     g_StatusController.SetIsCardPresent(false);
                     logmsg("SD card removed, trying to reinit");
+                    g_ide_imagefile.close();
+                    g_ide_device->set_image(nullptr);
+
                     if (g_ide_device->is_removable())
                     {
                         g_ide_device->eject_media();
                     }
-                    g_ide_imagefile.close();
-                    g_ide_device->set_image(nullptr);
 
 #ifdef ENABLE_DUAL_DEVICE
                     if (g_ide_device2)
