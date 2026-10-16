@@ -79,7 +79,7 @@ X(ATAPI_CMD_CLOSE_TRACK_SESSION           , 0x5B) \
 X(ATAPI_CMD_READ_BUFFER_CAPACITY          , 0x5C) \
 X(ATAPI_CMD_SEND_CUE_SHEET                , 0x5D) \
 X(ATAPI_CMD_REPORT_LUNS                   , 0xA0) \
-X(ATAPI_CMD_BLANK                         , 0xA1) \
+X(ATAPI_CMD_ATA_PASSTHROUGH               , 0xA1) \
 X(ATAPI_CMD_SECURITY_PROTOCOL_IN          , 0xA2) \
 X(ATAPI_CMD_SEND_KEY                      , 0xA3) \
 X(ATAPI_CMD_REPORT_KEY                    , 0xA4) \

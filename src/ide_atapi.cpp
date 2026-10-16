@@ -36,7 +36,7 @@ extern zuluide::status::StatusController g_StatusController;
 extern zuluide::status::SystemStatus g_previous_controller_status;
 
 // Map from command index for command name for logging
-static const char *get_atapi_command_name(uint8_t cmd)
+const char *IDEATAPIDevice::get_atapi_command_name(uint8_t cmd)
 {
     switch (cmd)
     {
@@ -938,6 +938,9 @@ bool IDEATAPIDevice::handle_atapi_command(const uint8_t *cmd)
         case ATAPI_CMD_WRITE12:         return atapi_write(cmd);
         case ATAPI_CMD_WRITE_AND_VERIFY10: return atapi_write(cmd);
         case ATAPI_CMD_SYNCHRONIZE_CACHE: return atapi_cmd_ok();
+        case ATAPI_CMD_ATA_PASSTHROUGH:
+            dbgmsg("-- Unimplemented ATAPI command ", get_atapi_command_name(cmd[0]));
+            return atapi_cmd_error(ATAPI_SENSE_ILLEGAL_REQ, ATAPI_ASC_INVALID_CMD);
 
         default:
             logmsg("-- WARNING: Unsupported ATAPI command ", get_atapi_command_name(cmd[0]));
