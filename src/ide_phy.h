@@ -114,8 +114,10 @@ void ide_phy_set_pio_mode(int pio_mode);
 // Calling ide_phy_stop_transfers() stops any previously started transfer.
 //
 // If udma_mode is 0 or larger, the PHY may use UDMA transfers if they are supported.
+// Otherwise if mwdma_mode is 0 or larger, the PHY may use Multiword DMA transfers if they are
+// supported. In both cases the host transfers the data with DMA instead of the data register.
 
-void ide_phy_start_write(uint32_t blocklen, int udma_mode = -1);
+void ide_phy_start_write(uint32_t blocklen, int udma_mode = -1, int mwdma_mode = -1);
 bool ide_phy_can_write_block();
 void ide_phy_write_block(const uint8_t *buf, uint32_t blocklen);
 bool ide_phy_is_write_finished();
@@ -132,18 +134,20 @@ void ide_phy_start_ata_write(uint32_t blocklen, int udma_mode, uint32_t total_se
 // must not call ide_phy_set_regs() to complete the command.
 bool ide_phy_is_ata_write_complete();
 
-void ide_phy_start_read(uint32_t blocklen, int udma_mode = -1);
+void ide_phy_start_read(uint32_t blocklen, int udma_mode = -1, int mwdma_mode = -1);
 bool ide_phy_can_read_block();
 void ide_phy_start_read_buffer(uint32_t blocklen);
 void ide_phy_read_block(uint8_t *buf, uint32_t blocklen, bool continue_transfer = false);
 
 // ATA version of start_read() differs in that it does not assert IRQ
 // for the first data block. See figure 28 in T13/1410D revision 3a.
-void ide_phy_start_ata_read(uint32_t blocklen, int udma_mode = -1);
+void ide_phy_start_ata_read(uint32_t blocklen, int udma_mode = -1, int mwdma_mode = -1);
 void ide_phy_ata_read_block(uint8_t *buf, uint32_t blocklen, bool continue_transfer = false);
 
 // Stop any running or finished transfers.
-// In UltraDMA mode crc_errors receives the number of detected CRC errors since start_write/start_read
+// In UltraDMA mode crc_errors receives the number of detected CRC errors since start_write/start_read.
+// In Multiword DMA mode it receives the number of transfer errors, e.g. words host transferred
+// past the end of the data.
 void ide_phy_stop_transfers(int *crc_errors = nullptr);
 
 // Assert IDE interrupt and set status register
@@ -165,6 +169,7 @@ struct ide_phy_capabilities_t
     int min_pio_cycletime_no_iordy;
     int min_pio_cycletime_with_iordy;
     int max_udma_mode; // -1 if UDMA not supported
+    int max_mwdma_mode; // -1 if Multiword DMA not supported
     uint8_t max_set_multiple = 8; // currently  IDECOMM_MAX_BLOCK_PAYLOAD / 512 (standard blocksize for rigid)
 };
 

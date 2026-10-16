@@ -124,6 +124,7 @@ protected:
         uint16_t blocksize; // Block size for data transfers
         ata_data_state_t data_state;
         int udma_mode;  // Negotiated udma mode, or negative if not enabled
+        int mwdma_mode; // Multiword DMA mode, or negative if not enabled. Only one of the DMA modes is enabled.
         bool dma_requested; // Host requests to use DMA transfer for current command
         int crc_errors; // CRC errors in latest transfer
         uint8_t multiple_mode_sectors;  // Number of sectors configured, or 0 for disabled

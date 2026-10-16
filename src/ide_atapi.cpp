@@ -59,6 +59,7 @@ void IDEATAPIDevice::initialize(int devidx)
     if (m_devinfo.removable && !m_removable.ignore_prevent_removal)
         logmsg("Respecting host preventing removal of media");
     memset(&m_atapi_state, 0, sizeof(m_atapi_state));
+    m_atapi_state.mwdma_mode = -1; // UDMA mode 0 is enabled until hardware reset
     IDEDevice::initialize(devidx);
 }
 
@@ -121,7 +122,9 @@ void IDEATAPIDevice::handle_event(ide_event_t evt)
     {
         if (evt == IDE_EVENT_HWRST)
         {
+            // No DMA mode until host selects one, see the UDMA0 fallback in cmd_packet()
             m_atapi_state.udma_mode = -1;
+            m_atapi_state.mwdma_mode = -1;
 
             m_atapi_state.unit_attention = true;
             m_atapi_state.unit_attention_sense_asc = ATAPI_ASC_RESET_OCCURRED;
@@ -162,9 +165,17 @@ bool IDEATAPIDevice::cmd_set_features(ide_registers_t *regs)
             logmsg("-- Set PIO transfer mode ", (int)mode_minor);
             ide_phy_set_pio_mode(mode_minor);
         }
+        else if (mode_major == 4 && mode_minor <= m_phy_caps.max_mwdma_mode)
+        {
+            // Only one DMA mode is enabled at a time
+            m_atapi_state.mwdma_mode = mode_minor;
+            m_atapi_state.udma_mode = -1;
+            logmsg("-- Set Multiword DMA transfer mode ", (int)mode_minor);
+        }
         else if (mode_major == 8 && mode_minor <= m_phy_caps.max_udma_mode)
         {
             m_atapi_state.udma_mode = mode_minor;
+            m_atapi_state.mwdma_mode = -1;
             logmsg("-- Set UDMA transfer mode ", (int)mode_minor);
         }
         else
@@ -273,6 +284,13 @@ void IDEATAPIDevice::atapi_identify_packet_device_response(uint16_t *idf)
     idf[IDE_IDENTIFY_OFFSET_PIO_CYCLETIME_MIN] = m_phy_caps.min_pio_cycletime_no_iordy; // Without IORDY
     idf[IDE_IDENTIFY_OFFSET_PIO_CYCLETIME_IORDY] = m_phy_caps.min_pio_cycletime_with_iordy; // With IORDY
 
+    // Supported Multiword DMA modes
+    identify_mwdma_modes(idf, m_phy_caps.max_mwdma_mode, m_atapi_state.mwdma_mode);
+    if (m_phy_caps.max_mwdma_mode >= 0)
+    {
+        idf[IDE_IDENTIFY_OFFSET_CAPABILITIES_1] |= (1 << 8); // DMA supported
+    }
+
     // Supported UDMA modes
     idf[IDE_IDENTIFY_OFFSET_MODE_INFO_VALID] |= 0x04; // UDMA support word valid
     if (m_phy_caps.max_udma_mode >= 0)
@@ -339,12 +357,19 @@ bool IDEATAPIDevice::cmd_packet(ide_registers_t *regs)
     m_atapi_state.dma_requested = regs->feature & 0x01;
     m_atapi_state.crc_errors = 0;
 
-    if (m_atapi_state.dma_requested && m_atapi_state.udma_mode < 0)
+    if (m_atapi_state.dma_requested && m_atapi_state.udma_mode < 0 && m_atapi_state.mwdma_mode < 0)
     {
+        // JM20337 uses UDMA without selecting a mode. Multiword DMA mode 0 is the
+        // power-on default of ATA-3, but only used if UDMA is not available.
         if (m_phy_caps.max_udma_mode >= 0)
         {
             dbgmsg("---- Host requested DMA transfer while DMA mode is not selected, enabling UDMA0!");
             m_atapi_state.udma_mode = 0;
+        }
+        else if (m_phy_caps.max_mwdma_mode >= 0)
+        {
+            dbgmsg("---- Host requested DMA transfer while DMA mode is not selected, enabling Multiword DMA mode 0!");
+            m_atapi_state.mwdma_mode = 0;
         }
         else
         {
@@ -657,7 +682,8 @@ bool IDEATAPIDevice::atapi_send_data_block(const uint8_t *data, uint16_t blocksi
 
         // Start data transfer
         int udma_mode = (m_atapi_state.dma_requested ? m_atapi_state.udma_mode : -1);
-        ide_phy_start_write(blocksize, udma_mode);
+        int mwdma_mode = (m_atapi_state.dma_requested ? m_atapi_state.mwdma_mode : -1);
+        ide_phy_start_write(blocksize, udma_mode, mwdma_mode);
         ide_phy_write_block(data, blocksize);
     }
     else
@@ -754,7 +780,8 @@ bool IDEATAPIDevice::atapi_recv_data(uint8_t *data, size_t blocksize, size_t num
 
     // Start data transfer for first block
     int udma_mode = (m_atapi_state.dma_requested ? m_atapi_state.udma_mode : -1);
-    ide_phy_start_read(blocksize, udma_mode);
+    int mwdma_mode = (m_atapi_state.dma_requested ? m_atapi_state.mwdma_mode : -1);
+    ide_phy_start_read(blocksize, udma_mode, mwdma_mode);
 
     // Receive blocks
     for (size_t i = 0; i < num_blocks; i++)
@@ -792,7 +819,7 @@ bool IDEATAPIDevice::atapi_recv_data(uint8_t *data, size_t blocksize, size_t num
     if (m_atapi_state.crc_errors > 0)
     {
         // Return false to stop writing incorrect data to drive
-        logmsg("IDEATAPIDevice::atapi_recv_data UDMA checksum errors: ", (int)m_atapi_state.crc_errors);
+        logmsg("IDEATAPIDevice::atapi_recv_data UDMA checksum or Multiword DMA errors: ", (int)m_atapi_state.crc_errors);
         return false;
     }
 
@@ -812,7 +839,8 @@ bool IDEATAPIDevice::atapi_recv_data_block(uint8_t *data, uint16_t blocksize)
 
     // Start data transfer
     int udma_mode = (m_atapi_state.dma_requested ? m_atapi_state.udma_mode : -1);
-    ide_phy_start_read(blocksize, udma_mode);
+    int mwdma_mode = (m_atapi_state.dma_requested ? m_atapi_state.mwdma_mode : -1);
+    ide_phy_start_read(blocksize, udma_mode, mwdma_mode);
 
     uint32_t start = millis();
     while (!ide_phy_can_read_block())
@@ -844,7 +872,7 @@ bool IDEATAPIDevice::atapi_recv_data_block(uint8_t *data, uint16_t blocksize)
     if (m_atapi_state.crc_errors > 0)
     {
         // Return false to stop writing incorrect data to drive
-        logmsg("IDEATAPIDevice::atapi_recv_data UDMA checksum errors: ", (int)m_atapi_state.crc_errors);
+        logmsg("IDEATAPIDevice::atapi_recv_data UDMA checksum or Multiword DMA errors: ", (int)m_atapi_state.crc_errors);
         return false;
     }
     return true;
