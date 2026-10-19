@@ -539,6 +539,11 @@ bool IDEATAPIDevice::atapi_send_data(const uint8_t *data, size_t blocksize, size
         bytearray((const uint8_t*)data, blocksize * num_blocks));
 
     size_t max_blocksize = std::min<size_t>(m_phy_caps.max_blocksize, m_atapi_state.bytes_req);
+    if (max_blocksize > 1)
+    {
+        // Data is transferred as 16-bit words, only the last block may have an odd length
+        max_blocksize &= ~(size_t)1;
+    }
 
     for (size_t i = 0; i < num_blocks; i++)
     {
@@ -555,7 +560,7 @@ bool IDEATAPIDevice::atapi_send_data(const uint8_t *data, size_t blocksize, size
         }
 
         // Send rest as single block (common case)
-        if (!atapi_send_data_block(data + blocksize * i + sent, blocksize))
+        if (!atapi_send_data_block(data + blocksize * i + sent, blocksize - sent))
         {
             return false;
         }
