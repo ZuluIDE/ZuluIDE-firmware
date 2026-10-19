@@ -157,12 +157,14 @@ bool IDEATAPIDevice::cmd_set_features(ide_registers_t *regs)
 
         if (mode_major == 0)
         {
-            logmsg("-- Set PIO default transfer mode");
+            logmsg("-- DEV", m_devconfig.dev_index, ": Set PIO default transfer mode");
+            m_atapi_state.pio_mode = 0;
             ide_phy_set_pio_mode(0);
         }
         else if (mode_major == 1 && mode_minor <= m_phy_caps.max_pio_mode)
         {
-            logmsg("-- Set PIO transfer mode ", (int)mode_minor);
+            logmsg("-- DEV", m_devconfig.dev_index, ": Set PIO transfer mode ", (int)mode_minor);
+            m_atapi_state.pio_mode = mode_minor;
             ide_phy_set_pio_mode(mode_minor);
         }
         else if (mode_major == 4 && mode_minor <= m_phy_caps.max_mwdma_mode)
@@ -170,31 +172,31 @@ bool IDEATAPIDevice::cmd_set_features(ide_registers_t *regs)
             // Only one DMA mode is enabled at a time
             m_atapi_state.mwdma_mode = mode_minor;
             m_atapi_state.udma_mode = -1;
-            logmsg("-- Set Multiword DMA transfer mode ", (int)mode_minor);
+            logmsg("-- DEV", m_devconfig.dev_index, ": Set Multiword DMA transfer mode ", (int)mode_minor);
         }
         else if (mode_major == 8 && mode_minor <= m_phy_caps.max_udma_mode)
         {
             m_atapi_state.udma_mode = mode_minor;
             m_atapi_state.mwdma_mode = -1;
-            logmsg("-- Set UDMA transfer mode ", (int)mode_minor);
+            logmsg("-- DEV", m_devconfig.dev_index, ": Set UDMA transfer mode ", (int)mode_minor);
         }
         else
         {
-            logmsg("-- Unsupported mode ", mode, " (major ", (int)mode_major, " minor ", (int)mode_minor, ")");
+            logmsg("-- DEV", m_devconfig.dev_index, ": Unsupported mode ", mode, " (major ", (int)mode_major, " minor ", (int)mode_minor, ")");
             regs->error = IDE_ERROR_ABORT;
         }
     }
     else if (feature == IDE_SET_FEATURE_DISABLE_REVERT_TO_POWERON)
     {
-        dbgmsg("-- Disable revert to power-on defaults");
+        dbgmsg("-- DEV", m_devconfig.dev_index, ": Disable revert to power-on defaults");
     }
     else if (feature == IDE_SET_FEATURE_ENABLE_REVERT_TO_POWERON)
     {
-        dbgmsg("-- Enable revert to power-on defaults");
+        dbgmsg("-- DEV", m_devconfig.dev_index, ": Enable revert to power-on defaults");
     }
     else
     {
-        dbgmsg("-- Unknown SET_FEATURE: ", feature);
+        dbgmsg("-- DEV", m_devconfig.dev_index, ": Unknown SET_FEATURE: ", feature);
         regs->error = IDE_ERROR_ABORT;
     }
 

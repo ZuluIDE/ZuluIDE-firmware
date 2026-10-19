@@ -79,6 +79,13 @@ public:
     // Returns true if this device implements the ATAPI packet command set
     virtual bool is_packet_device() { return false; }
 
+    // Negotiated DMA modes, negative if not enabled. Only one of them is enabled at a time.
+    virtual int get_udma_mode() = 0;
+    virtual int get_mwdma_mode() = 0;
+
+    // PIO mode selected with SET FEATURES, 0 for the default mode
+    virtual int get_pio_mode() = 0;
+
     // Returns true if this device does not use the IORdy signal
     virtual bool disables_iordy() { return false; }
 

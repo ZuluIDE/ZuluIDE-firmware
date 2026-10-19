@@ -324,12 +324,14 @@ bool IDERigidDevice::cmd_set_features(ide_registers_t *regs)
 
         if (mode_major == 0)
         {
-            dbgmsg("-- Set PIO default transfer mode");
+            dbgmsg("-- DEV", m_devconfig.dev_index, ": Set PIO default transfer mode");
+            m_ata_state.pio_mode = 0;
             ide_phy_set_pio_mode(0);
         }
         else if (mode_major == 1 && mode_minor <= m_phy_caps.max_pio_mode)
         {
-            dbgmsg("-- Set PIO transfer mode ", (int)mode_minor);
+            dbgmsg("-- DEV", m_devconfig.dev_index, ": Set PIO transfer mode ", (int)mode_minor);
+            m_ata_state.pio_mode = mode_minor;
             ide_phy_set_pio_mode(mode_minor);
         }
         else if (mode_major == 4 && mode_minor <= m_phy_caps.max_mwdma_mode)
@@ -337,51 +339,51 @@ bool IDERigidDevice::cmd_set_features(ide_registers_t *regs)
             // Only one DMA mode is enabled at a time
             m_ata_state.mwdma_mode = mode_minor;
             m_ata_state.udma_mode = -1;
-            dbgmsg("-- Set Multiword DMA transfer mode ", (int)mode_minor);
+            dbgmsg("-- DEV", m_devconfig.dev_index, ": Set Multiword DMA transfer mode ", (int)mode_minor);
         }
         else if (mode_major == 8 && mode_minor <= m_phy_caps.max_udma_mode)
         {
             m_ata_state.udma_mode = mode_minor;
             m_ata_state.mwdma_mode = -1;
-            dbgmsg("-- Set UDMA transfer mode ", (int)mode_minor);
+            dbgmsg("-- DEV", m_devconfig.dev_index, ": Set UDMA transfer mode ", (int)mode_minor);
         }
         else
         {
-            dbgmsg("-- Unsupported mode ", mode, " (major ", (int)mode_major, " minor ", (int)mode_minor, ")");
+            dbgmsg("-- DEV", m_devconfig.dev_index, ": Unsupported mode ", mode, " (major ", (int)mode_major, " minor ", (int)mode_minor, ")");
             regs->error = IDE_ERROR_ABORT;
         }
     }
     else if (feature == IDE_SET_FEATURE_DISABLE_REVERT_TO_POWERON)
     {
-        dbgmsg("-- Disable revert to power-on defaults");
+        dbgmsg("-- DEV", m_devconfig.dev_index, ": Disable revert to power-on defaults");
     }
     else if (feature == IDE_SET_FEATURE_ENABLE_REVERT_TO_POWERON)
     {
-        dbgmsg("-- Enable revert to power-on defaults");
+        dbgmsg("-- DEV", m_devconfig.dev_index, ": Enable revert to power-on defaults");
     }
     else if (feature == IDE_SET_FEATURE_ENABLE_ECC)
     {
-        dbgmsg("-- Enable ECC --");
+        dbgmsg("-- DEV", m_devconfig.dev_index, ": Enable ECC --");
     }
     else if (feature == IDE_SET_FEATURE_VENDOR_ECC)
     {
-        dbgmsg("-- Vendor length of ECC stubbed out");
+        dbgmsg("-- DEV", m_devconfig.dev_index, ": Vendor length of ECC stubbed out");
     }
     else if (feature == IDE_SET_FEATURE_ENABLE_READ_AHEAD)
     {
-        dbgmsg("-- Enable read look-ahead --");
+        dbgmsg("-- DEV", m_devconfig.dev_index, ": Enable read look-ahead --");
     }
     else if (feature == IDE_SET_FEATURE_ENABLE_WRITE_CACHE)
     {
-        dbgmsg("-- Enable write cache");
+        dbgmsg("-- DEV", m_devconfig.dev_index, ": Enable write cache");
     }
     else if (feature == IDE_SET_FEATURE_DISABLE_WRITE_CACHE)
     {
-        dbgmsg("-- Disable write cache");
+        dbgmsg("-- DEV", m_devconfig.dev_index, ": Disable write cache");
     }
     else
     {
-        dbgmsg("-- Unknown SET_FEATURE: ", feature);
+        dbgmsg("-- DEV", m_devconfig.dev_index, ": Unknown SET_FEATURE: ", feature);
         regs->error = IDE_ERROR_ABORT;
     }
 
