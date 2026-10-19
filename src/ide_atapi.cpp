@@ -91,8 +91,8 @@ bool IDEATAPIDevice::handle_command(ide_registers_t *regs)
     switch (regs->command)
     {
         // Commands superseded by the ATAPI packet interface
-        case IDE_CMD_IDENTIFY_DEVICE: [[fallthrough]];
-        case IDE_CMD_READ_SECTORS: [[fallthrough]];
+        case IDE_CMD_IDENTIFY_DEVICE:   [[fallthrough]];
+        case IDE_CMD_READ_SECTORS:      [[fallthrough]];
         case IDE_CMD_READ_SECTORS_EXT:
             return set_device_signature(regs, IDE_ERROR_ABORT, false);
         case IDE_CMD_EXECUTE_DEVICE_DIAGNOSTIC:
@@ -104,13 +104,15 @@ bool IDEATAPIDevice::handle_command(ide_registers_t *regs)
         case IDE_CMD_PACKET: return cmd_packet(regs);
         case IDE_CMD_DEVICE_RESET: return cmd_device_reset(regs);
         case IDE_CMD_FLUSH_CACHE: return cmd_flush_cache(regs);
-        case IDE_CMD_IDLE_IMMEDIATE_95H: [[fallthrough]];
-        case IDE_CMD_IDLE_IMMEDIATE_E1H: [[fallthrough]];
-        case IDE_CMD_IDLE_97H:           [[fallthrough]];
-        case IDE_CMD_IDLE_E3H: return cmd_idle(regs);
+        case IDE_CMD_IDLE_IMMEDIATE_95H:    [[fallthrough]];
+        case IDE_CMD_IDLE_IMMEDIATE_E1H:    [[fallthrough]];
+        case IDE_CMD_IDLE_97H:              [[fallthrough]];
+        case IDE_CMD_IDLE_E3H:              return cmd_idle(regs);
         case IDE_CMD_CHECK_POWER_MODE: return cmd_check_power_mode(regs);
-        case IDE_CMD_SET_MULTIPLE_MODE: [[fallthrough]];
-        case IDE_CMD_INIT_DEV_PARAMS: return cmd_unsupported(regs);
+        case IDE_CMD_SET_MULTIPLE_MODE:         [[fallthrough]];
+        case IDE_CMD_INIT_DEV_PARAMS: return    cmd_unsupported(regs);
+        case IDE_CMD_SLEEP_99H: [[fallthrough]];
+        case IDE_CMD_SLEEP_E6H: return cmd_stubbed(regs);
         default: return false;
     }
 }
@@ -449,6 +451,13 @@ bool IDEATAPIDevice::cmd_unsupported(ide_registers_t *regs)
     regs->error = IDE_ERROR_ABORT;
     ide_phy_set_regs(regs);
     ide_phy_assert_irq(IDE_STATUS_DEVRDY | IDE_STATUS_DSC | IDE_STATUS_ERR);
+    return true;
+}
+
+bool IDEATAPIDevice::cmd_stubbed(ide_registers_t *regs)
+{
+    dbgmsg("-- ATA command stubbed (ATAPI DEV", m_devconfig.dev_index, ")");
+    ide_phy_assert_irq(IDE_STATUS_DEVRDY | IDE_STATUS_DSC);
     return true;
 }
 

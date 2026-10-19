@@ -194,6 +194,8 @@ protected:
     // Hide unsupported commands from the normal log
     // Some BIOSes issue ATA command that ATAPI device don't support
     virtual bool cmd_unsupported(ide_registers_t *regs);
+    // Send a standard command response without other actions
+    virtual bool cmd_stubbed(ide_registers_t *regs);
 
     // Methods used by ATAPI command implementations
 
