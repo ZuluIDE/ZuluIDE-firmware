@@ -129,10 +129,22 @@ bool createImageFile(const char *imgname, uint64_t size, uint8_t *write_buf, siz
   LED_ON();
   FsFile file = SD.open(imgname, O_WRONLY | O_CREAT);
 
-  if (!file.preAllocate(size))
+  if (SD.fatType() == FAT_TYPE_EXFAT && file.preAllocate(size))
   {
-    logmsg("-- Preallocation didn't find contiguous set of clusters, continuing anyway");
+    // On exFAT preallocation leaves the valid data length at zero. Marking the
+    // whole allocation valid makes the image usable immediately instead of
+    // zero filling it, at the cost of the image containing whatever data was
+    // previously stored in those sectors.
+    if (file.setValidLength(size))
+    {
+      file.close();
+      logmsg("-- Image creation successful via preallocation, skipped zeroing out data");
+      LED_OFF();
+      return true;
+    }
+    logmsg("-- Failed to set valid data length of preallocated image, zeroing out data");
   }
+
 
   int blocks = size/write_buf_len;
 
