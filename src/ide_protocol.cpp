@@ -423,7 +423,13 @@ void ide_protocol_poll()
         }
         else if (g_last_reset_event == IDE_EVENT_HWRST)
         {
-            if (ini_haskey("IDE", "has_drive1", CONFIGFILE))
+            static int8_t s_drive1_set_in_ini = -1;
+            if (s_drive1_set_in_ini == -1)
+            {
+                s_drive1_set_in_ini = ini_haskey("IDE", "has_drive1", CONFIGFILE);
+            }
+
+            if (s_drive1_set_in_ini)
             {
                 // No need to wait for DASP because the presence of drive1
                 // is set by config file

@@ -92,8 +92,8 @@ bool IDEATAPIDevice::handle_command(ide_registers_t *regs)
     switch (regs->command)
     {
         // Commands superseded by the ATAPI packet interface
-        case IDE_CMD_IDENTIFY_DEVICE: [[fallthrough]];
-        case IDE_CMD_READ_SECTORS: [[fallthrough]];
+        case IDE_CMD_IDENTIFY_DEVICE:   [[fallthrough]];
+        case IDE_CMD_READ_SECTORS:      [[fallthrough]];
         case IDE_CMD_READ_SECTORS_EXT:
             return set_device_signature(regs, IDE_ERROR_ABORT, false);
         case IDE_CMD_EXECUTE_DEVICE_DIAGNOSTIC:
@@ -105,13 +105,15 @@ bool IDEATAPIDevice::handle_command(ide_registers_t *regs)
         case IDE_CMD_PACKET: return cmd_packet(regs);
         case IDE_CMD_DEVICE_RESET: return cmd_device_reset(regs);
         case IDE_CMD_FLUSH_CACHE: return cmd_flush_cache(regs);
-        case IDE_CMD_IDLE_IMMEDIATE_95H: [[fallthrough]];
-        case IDE_CMD_IDLE_IMMEDIATE_E1H: [[fallthrough]];
-        case IDE_CMD_IDLE_97H:           [[fallthrough]];
-        case IDE_CMD_IDLE_E3H: return cmd_idle(regs);
+        case IDE_CMD_IDLE_IMMEDIATE_95H:    [[fallthrough]];
+        case IDE_CMD_IDLE_IMMEDIATE_E1H:    [[fallthrough]];
+        case IDE_CMD_IDLE_97H:              [[fallthrough]];
+        case IDE_CMD_IDLE_E3H:              return cmd_idle(regs);
         case IDE_CMD_CHECK_POWER_MODE: return cmd_check_power_mode(regs);
-        case IDE_CMD_SET_MULTIPLE_MODE: [[fallthrough]];
-        case IDE_CMD_INIT_DEV_PARAMS: return cmd_unsupported(regs);
+        case IDE_CMD_SET_MULTIPLE_MODE:         [[fallthrough]];
+        case IDE_CMD_INIT_DEV_PARAMS: return    cmd_unsupported(regs);
+        case IDE_CMD_SLEEP_99H: [[fallthrough]];
+        case IDE_CMD_SLEEP_E6H: return cmd_stubbed(regs);
         default: return false;
     }
 }
@@ -479,6 +481,13 @@ bool IDEATAPIDevice::cmd_unsupported(ide_registers_t *regs)
     return true;
 }
 
+bool IDEATAPIDevice::cmd_stubbed(ide_registers_t *regs)
+{
+    dbgmsg("-- ATA command stubbed (ATAPI DEV", m_devconfig.dev_index, ")");
+    ide_phy_assert_irq(IDE_STATUS_DEVRDY | IDE_STATUS_DSC);
+    return true;
+}
+
 // Set the packet device signature values to PHY registers
 // See T13/1410D revision 3a section 9.12 Signature and persistence
 bool IDEATAPIDevice::set_device_signature(ide_registers_t *regs, uint8_t error, bool was_reset)
@@ -566,6 +575,11 @@ bool IDEATAPIDevice::atapi_send_data(const uint8_t *data, size_t blocksize, size
         bytearray((const uint8_t*)data, blocksize * num_blocks));
 
     size_t max_blocksize = std::min<size_t>(m_phy_caps.max_blocksize, m_atapi_state.bytes_req);
+    if (max_blocksize > 1)
+    {
+        // Data is transferred as 16-bit words, only the last block may have an odd length
+        max_blocksize &= ~(size_t)1;
+    }
 
     for (size_t i = 0; i < num_blocks; i++)
     {
@@ -582,7 +596,7 @@ bool IDEATAPIDevice::atapi_send_data(const uint8_t *data, size_t blocksize, size
         }
 
         // Send rest as single block (common case)
-        if (!atapi_send_data_block(data + blocksize * i + sent, blocksize))
+        if (!atapi_send_data_block(data + blocksize * i + sent, blocksize - sent))
         {
             return false;
         }
@@ -1732,7 +1746,7 @@ void IDEATAPIDevice::eject_media()
         }
         else
         {
-            dbgmsg("Device ejecting media, image already cleared");
+            logmsg("Device ejecting media");
         }
         m_removable.ejected = true;
         clear_eject_deferred();
