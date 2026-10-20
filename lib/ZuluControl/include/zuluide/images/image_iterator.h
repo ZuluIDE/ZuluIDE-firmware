@@ -61,7 +61,7 @@ namespace zuluide::images {
     bool IsFirst();
     bool IsLast();
     void Cleanup();
-    static bool fileIsValidImage(FsFile& file, const char* fileName, bool warning = false);
+    static bool fileIsValidImage(FsFile& file, const char* fileName, bool warning = false, bool dual_device_mode = false);
 
     /***
 	[En/Dis]able parsing bin cue sheets to check size of multi-part bin/cue images.
@@ -73,7 +73,7 @@ namespace zuluide::images {
     bool Move(bool forward = true);
     bool FetchSizeFromCueFile();
     FsFile currentFile;
-    static bool is_valid_filename(const char *name, bool warning = false);
+    static bool is_valid_filename(const char *name, bool warning = false, bool dual_device_mode = false);
     bool searchForCueSheetFile(FsFile *directory, FsFile *outputFile);
     static bool folderContainsCueSheet(FsFile &dir);
 
