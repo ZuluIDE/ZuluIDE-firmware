@@ -324,7 +324,7 @@ bool ImageIterator::folderContainsCueSheet(FsFile &dir)
   return false;
 }
 
-bool ImageIterator::fileIsValidImage(FsFile& file, const char* fileName, bool warning) {
+bool ImageIterator::fileIsValidImage(FsFile& file, const char* fileName, bool warning, bool dual_device_mode) {
   if (file.isHidden())
     return false;
 
@@ -351,13 +351,13 @@ bool ImageIterator::fileIsValidImage(FsFile& file, const char* fileName, bool wa
   }
 
   // If the file name is bad, skip it.
-  return is_valid_filename(fileName, warning);
+  return is_valid_filename(fileName, warning, dual_device_mode);
 }
 
 /***
     Predicate for checking filenames.
  */
-bool ImageIterator::is_valid_filename(const char *name, bool warning)
+bool ImageIterator::is_valid_filename(const char *name, bool warning, bool dual_device_mode)
 {
   if (strcasecmp(name, "ice5lp1k_top_bitmap.bin") == 0){
     // Ignore FPGA bitstream
@@ -381,11 +381,15 @@ bool ImageIterator::is_valid_filename(const char *name, bool warning)
     return false;
   }
 
-  if (strncasecmp(name, DUALDRIVE_IMAGE_PRIMARY, strlen(DUALDRIVE_IMAGE_PRIMARY)) == 0 ||
-      strncasecmp(name, DUALDRIVE_IMAGE_SECONDARY, strlen(DUALDRIVE_IMAGE_SECONDARY)) == 0 )
+  // Skip if validing the dual drive prefix filename, as this would return a false negative 
+  if (!dual_device_mode)
   {
-    // Dual image is handled separately
-    return false;
+    if (strncasecmp(name, DUALDRIVE_IMAGE_PRIMARY, strlen(DUALDRIVE_IMAGE_PRIMARY)) == 0 ||
+        strncasecmp(name, DUALDRIVE_IMAGE_SECONDARY, strlen(DUALDRIVE_IMAGE_SECONDARY)) == 0 )
+    {
+      // Dual image is handled separately
+      return false;
+    }
   }
 
   if (strncasecmp(name, "zulu", 4) == 0) {

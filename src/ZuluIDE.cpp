@@ -621,12 +621,16 @@ bool setupDualDrive(std::unique_ptr<zuluide::status::IDeviceStatus> &device)
 
       if (strncasecmp(filename, DUALDRIVE_IMAGE_PRIMARY, strlen(DUALDRIVE_IMAGE_PRIMARY)) == 0)
       {
+        if (!ImageIterator::fileIsValidImage(file, filename, true, true))
+          continue;
         found_hd0 = true;
         strncpy(HD0_filename, filename, sizeof(HD0_filename));
       }
 
       if (strncasecmp(filename, DUALDRIVE_IMAGE_SECONDARY, strlen(DUALDRIVE_IMAGE_SECONDARY)) == 0)
       {
+        if (!ImageIterator::fileIsValidImage(file, filename, true, true))
+          continue;
         found_hd1 = true;
         strncpy(HD1_filename, filename, sizeof(HD1_filename));
       }
