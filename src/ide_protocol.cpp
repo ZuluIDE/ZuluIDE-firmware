@@ -31,6 +31,7 @@
 #include "ide_phy.h"
 #include "ide_constants.h"
 #include <minIni.h>
+#include <stdio.h>
 
 // Map from command index for command name for logging
 static const char *get_ide_command_name(uint8_t cmd)
@@ -212,15 +213,38 @@ void ide_protocol_poll()
             }
 
             int selected_device = (regs.device >> 4) & 1;
-            dbgmsg("IDE Command for DEV", selected_device, ": ", cmd, " ", get_ide_command_name(cmd),
+            IDEDevice *device = g_ide_devices[selected_device];
+
+            // Show the selected transfer mode for DMA commands and ATAPI packets.
+            // Bit 0 of the feature register selects DMA data transfer for ATAPI packets.
+            bool is_dma_cmd = (cmd == IDE_CMD_READ_DMA  || cmd == IDE_CMD_READ_DMA_WOUT_RETRY  || cmd == IDE_CMD_READ_DMA_EXT ||
+                               cmd == IDE_CMD_WRITE_DMA || cmd == IDE_CMD_WRITE_DMA_WOUT_RETRY || cmd == IDE_CMD_WRITE_DMA_EXT ||
+                               (cmd == IDE_CMD_PACKET && (regs.feature & 0x01)));
+            bool is_pio_packet = (cmd == IDE_CMD_PACKET && !(regs.feature & 0x01));
+            char transfer_mode[8] = "";
+            if (device && is_dma_cmd)
+            {
+                int udma_mode = device->get_udma_mode();
+                int mwdma_mode = device->get_mwdma_mode();
+                if (udma_mode >= 0)
+                    snprintf(transfer_mode, sizeof(transfer_mode), " [U%d]", udma_mode);
+                else if (mwdma_mode >= 0)
+                    snprintf(transfer_mode, sizeof(transfer_mode), " [MW%d]", mwdma_mode);
+                else
+                    snprintf(transfer_mode, sizeof(transfer_mode), " [-]");
+            }
+            else if (device && is_pio_packet)
+            {
+                snprintf(transfer_mode, sizeof(transfer_mode), " [P%d]", device->get_pio_mode());
+            }
+
+            dbgmsg("IDE Command for DEV", selected_device, ": ", cmd, " ", get_ide_command_name(cmd), transfer_mode,
                 " (device ", regs.device,
                 ", dev_ctrl ", regs.device_control,
                 ", feature ", regs.feature,
                 ", sector_count ", regs.sector_count,
                 ", lba ", regs.lba_high, " ", regs.lba_mid, " ", regs.lba_low, ")"
                 );
-
-            IDEDevice *device = g_ide_devices[selected_device];
 
             if (!device)
             {
@@ -571,6 +595,7 @@ void IDEDevice::initialize(int devidx)
     m_phy_caps = *ide_phy_get_capabilities();
     m_devconfig.max_pio_mode = ini_getl("IDE", "max_pio", 3, CONFIGFILE);
     m_devconfig.max_udma_mode = ini_getl("IDE", "max_udma", 2, CONFIGFILE);
+    m_devconfig.max_mwdma_mode = ini_getl("IDE", "max_mwdma", 2, CONFIGFILE);
     // READ/WRITE MULTIPLE block count must be a power of two, up to 128 sectors (IDENTIFY word 47)
     long max_set_multiple = ini_getl("IDE", "max_set_multiple", 8, CONFIGFILE);
     if (max_set_multiple < 0)
@@ -602,6 +627,7 @@ void IDEDevice::initialize(int devidx)
 
     g_ignore_cmd_interrupt = ini_getl("IDE", "ignore_command_interrupt", 1, CONFIGFILE);
     m_phy_caps.max_udma_mode = std::min(m_phy_caps.max_udma_mode, m_devconfig.max_udma_mode);
+    m_phy_caps.max_mwdma_mode = std::min(m_phy_caps.max_mwdma_mode, m_devconfig.max_mwdma_mode);
     m_phy_caps.max_pio_mode = std::min(m_phy_caps.max_pio_mode, m_devconfig.max_pio_mode);
     m_phy_caps.max_blocksize = std::min<int>(m_phy_caps.max_blocksize, m_devconfig.max_blocksize);
     m_phy_caps.max_set_multiple = std::min(m_phy_caps.max_set_multiple, m_devconfig.max_set_multiple);
@@ -613,10 +639,34 @@ void IDEDevice::post_image_setup()
     print_device_config();
 }
 
+void IDEDevice::identify_mwdma_modes(uint16_t *idf, int max_mode, int active_mode)
+{
+    // Minimum cycle time t0 of Multiword DMA modes 0..2, ATA-3 table 23
+    static const uint16_t cycletime_ns[3] = {480, 150, 120};
+
+    if (max_mode < 0) return;
+    if (max_mode > 2) max_mode = 2;
+
+    // Word 63: bits 0..7 supported modes, bits 8..15 the active mode
+    idf[IDE_IDENTIFY_OFFSET_MODEINFO_MULTIWORD] = (2 << max_mode) - 1;
+    if (active_mode >= 0 && active_mode <= max_mode)
+    {
+        idf[IDE_IDENTIFY_OFFSET_MODEINFO_MULTIWORD] |= (1 << (8 + active_mode));
+    }
+
+    // Words 65..66: minimum cycle time of the fastest supported mode, and the recommended
+    // cycle time, which can be the same as the transfer speed does not depend on media position.
+    // Words 64..70 are valid, ATA-3 requires this for Multiword DMA mode 1 and above.
+    idf[IDE_IDENTIFY_OFFSET_MULTIWORD_CYCLETIME_MIN] = cycletime_ns[max_mode];
+    idf[IDE_IDENTIFY_OFFSET_MULTIWORD_CYCLETIME_REC] = cycletime_ns[max_mode];
+    idf[IDE_IDENTIFY_OFFSET_MODE_INFO_VALID] |= 0x02;
+}
+
 void IDEDevice::print_device_config()
 {
     logmsg("-- Max PIO mode: ", m_devconfig.max_pio_mode, " (phy max ", m_phy_caps.max_pio_mode, ")");
     logmsg("-- Max UDMA mode: ", m_devconfig.max_udma_mode, " (phy max ", m_phy_caps.max_udma_mode, ")");
+    logmsg("-- Max Multiword DMA mode: ", m_devconfig.max_mwdma_mode, " (phy max ", m_phy_caps.max_mwdma_mode, ")");
     logmsg("-- Max blocksize: ", m_devconfig.max_blocksize, " (phy max ", (int)m_phy_caps.max_blocksize, ")");
 
     if (m_devconfig.ide_identify_gencfg)

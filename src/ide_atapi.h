@@ -57,6 +57,12 @@ public:
 
     virtual bool is_packet_device() { return true; }
 
+    virtual int get_udma_mode() override { return m_atapi_state.udma_mode; }
+
+    virtual int get_mwdma_mode() override { return m_atapi_state.mwdma_mode; }
+
+    virtual int get_pio_mode() override { return m_atapi_state.pio_mode; }
+
     virtual bool is_medium_present() override;
 
     virtual bool has_image() { return m_image != nullptr; }
@@ -150,6 +156,8 @@ protected:
         uint16_t blocksize; // Block size for data transfers
         atapi_data_state_t data_state;
         int udma_mode;  // Negotiated udma mode, or negative if not enabled
+        int mwdma_mode; // Multiword DMA mode, or negative if not enabled. Only one of the DMA modes is enabled.
+        int pio_mode;   // PIO mode selected with SET FEATURES, 0 for the default mode
         bool dma_requested; // Host requests to use DMA transfer for current command
         bool unit_attention;
         bool unit_attention_reported; // Whether unit attention error has been reported to host for current media change

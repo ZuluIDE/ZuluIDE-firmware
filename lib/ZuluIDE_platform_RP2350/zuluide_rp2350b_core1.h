@@ -95,10 +95,10 @@ extern struct idecomm_t {
 
     // UDMA mode must be set before START_DATAIN/DATAOUT request and
     // not changed until transfer is done.
-    // If set to -1, PIO data transfer is used.
+    // If set to -1, Multiword DMA (see mwdma_mode) or PIO data transfer is used.
     int udma_mode;
 
-    // Number of UDMA checksum errors
+    // Number of UDMA checksum errors, also counts Multiword DMA transfer errors
     int udma_checksum_errors;
 
     // CPU clock rate
@@ -134,6 +134,12 @@ extern struct idecomm_t {
     // IDECOMM_SEQ_ANY marks requests that are not tied to a host command (PHY config and
     // reset), these are never dropped.
     uint32_t set_regs_seq;
+
+    // Multiword DMA mode, used when udma_mode is -1. Like udma_mode, it must be set before
+    // START_DATAIN/DATAOUT request and not changed until transfer is done.
+    // Data blocks are in the PIO data format, see IDECOMM_DATAFORMAT_PIO().
+    // If set to -1, PIO data transfer is used.
+    int mwdma_mode;
 } g_idecomm;
 
 // Value of set_regs_seq for requests that must be applied regardless of the command sequence.

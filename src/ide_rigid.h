@@ -58,6 +58,12 @@ public:
 
     virtual bool is_packet_device() { return false; }
 
+    virtual int get_udma_mode() override { return m_ata_state.udma_mode; }
+
+    virtual int get_mwdma_mode() override { return m_ata_state.mwdma_mode; }
+
+    virtual int get_pio_mode() override { return m_ata_state.pio_mode; }
+
     virtual bool is_medium_present() {return has_image();}
 
     virtual bool has_image() { return m_image != nullptr; }
@@ -124,6 +130,8 @@ protected:
         uint16_t blocksize; // Block size for data transfers
         ata_data_state_t data_state;
         int udma_mode;  // Negotiated udma mode, or negative if not enabled
+        int mwdma_mode; // Multiword DMA mode, or negative if not enabled. Only one of the DMA modes is enabled.
+        int pio_mode;   // PIO mode selected with SET FEATURES, 0 for the default mode
         bool dma_requested; // Host requests to use DMA transfer for current command
         int crc_errors; // CRC errors in latest transfer
         uint8_t multiple_mode_sectors;  // Number of sectors configured, or 0 for disabled
