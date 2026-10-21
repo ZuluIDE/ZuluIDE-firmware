@@ -217,25 +217,28 @@ void ide_protocol_poll()
 
             // Show the selected transfer mode for DMA commands and ATAPI packets.
             // Bit 0 of the feature register selects DMA data transfer for ATAPI packets.
-            bool is_dma_cmd = (cmd == IDE_CMD_READ_DMA  || cmd == IDE_CMD_READ_DMA_WOUT_RETRY  || cmd == IDE_CMD_READ_DMA_EXT ||
-                               cmd == IDE_CMD_WRITE_DMA || cmd == IDE_CMD_WRITE_DMA_WOUT_RETRY || cmd == IDE_CMD_WRITE_DMA_EXT ||
-                               (cmd == IDE_CMD_PACKET && (regs.feature & 0x01)));
-            bool is_pio_packet = (cmd == IDE_CMD_PACKET && !(regs.feature & 0x01));
             char transfer_mode[8] = "";
-            if (device && is_dma_cmd)
+            if (g_log_debug && device)
             {
-                int udma_mode = device->get_udma_mode();
-                int mwdma_mode = device->get_mwdma_mode();
-                if (udma_mode >= 0)
-                    snprintf(transfer_mode, sizeof(transfer_mode), " [U%d]", udma_mode);
-                else if (mwdma_mode >= 0)
-                    snprintf(transfer_mode, sizeof(transfer_mode), " [MW%d]", mwdma_mode);
-                else
-                    snprintf(transfer_mode, sizeof(transfer_mode), " [-]");
-            }
-            else if (device && is_pio_packet)
-            {
-                snprintf(transfer_mode, sizeof(transfer_mode), " [P%d]", device->get_pio_mode());
+                bool is_dma_cmd = (cmd == IDE_CMD_READ_DMA  || cmd == IDE_CMD_READ_DMA_WOUT_RETRY  || cmd == IDE_CMD_READ_DMA_EXT ||
+                                   cmd == IDE_CMD_WRITE_DMA || cmd == IDE_CMD_WRITE_DMA_WOUT_RETRY || cmd == IDE_CMD_WRITE_DMA_EXT ||
+                                   (cmd == IDE_CMD_PACKET && (regs.feature & 0x01)));
+                bool is_pio_packet = (cmd == IDE_CMD_PACKET && !(regs.feature & 0x01));
+                if (is_dma_cmd)
+                {
+                    int udma_mode = device->get_udma_mode();
+                    int mwdma_mode = device->get_mwdma_mode();
+                    if (udma_mode >= 0)
+                        snprintf(transfer_mode, sizeof(transfer_mode), " [U%d]", udma_mode);
+                    else if (mwdma_mode >= 0)
+                        snprintf(transfer_mode, sizeof(transfer_mode), " [MW%d]", mwdma_mode);
+                    else
+                        snprintf(transfer_mode, sizeof(transfer_mode), " [-]");
+                }
+                else if (is_pio_packet)
+                {
+                    snprintf(transfer_mode, sizeof(transfer_mode), " [P%d]", device->get_pio_mode());
+                }
             }
 
             dbgmsg("IDE Command for DEV", selected_device, ": ", cmd, " ", get_ide_command_name(cmd), transfer_mode,
