@@ -164,20 +164,22 @@ bool IDEATAPIDevice::cmd_set_features(ide_registers_t *regs)
             m_atapi_state.pio_mode = 0;
             ide_phy_set_pio_mode(0);
         }
-        else if (mode_major == 1 && mode_minor <= m_phy_caps.max_pio_mode)
+        else if (mode_major == 1 && mode_minor <= m_devconfig.max_pio_mode)
         {
             logmsg("-- DEV", m_devconfig.dev_index, ": Set PIO transfer mode ", (int)mode_minor);
             m_atapi_state.pio_mode = mode_minor;
             ide_phy_set_pio_mode(mode_minor);
         }
-        else if (mode_major == 4 && mode_minor <= m_phy_caps.max_mwdma_mode)
+#ifdef ENABLE_MWDMA
+        else if (mode_major == 4 && mode_minor <= m_devconfig.max_mwdma_mode)
         {
             // Only one DMA mode is enabled at a time
             m_atapi_state.mwdma_mode = mode_minor;
             m_atapi_state.udma_mode = -1;
             logmsg("-- DEV", m_devconfig.dev_index, ": Set Multiword DMA transfer mode ", (int)mode_minor);
         }
-        else if (mode_major == 8 && mode_minor <= m_phy_caps.max_udma_mode)
+#endif
+        else if (mode_major == 8 && mode_minor <= m_devconfig.max_udma_mode)
         {
             m_atapi_state.udma_mode = mode_minor;
             m_atapi_state.mwdma_mode = -1;
@@ -261,7 +263,7 @@ void IDEATAPIDevice::atapi_identify_packet_device_response(uint16_t *idf)
     idf[IDE_IDENTIFY_OFFSET_COMMAND_SET_SUPPORT_2] = 0x4000;
     idf[IDE_IDENTIFY_OFFSET_COMMAND_SET_SUPPORT_3] = 0x4000;
     idf[IDE_IDENTIFY_OFFSET_COMMAND_SET_ENABLED_1] = 0x0014;
-    idf[IDE_IDENTIFY_OFFSET_BYTE_COUNT_ZERO] = m_phy_caps.max_blocksize; // Number of bytes transferred when bytes_req = 0
+    idf[IDE_IDENTIFY_OFFSET_BYTE_COUNT_ZERO] = m_devconfig.max_blocksize; // Number of bytes transferred when bytes_req = 0
 
     // Diagnostics results
     if (m_devconfig.dev_index == 0)
@@ -283,27 +285,27 @@ void IDEATAPIDevice::atapi_identify_packet_device_response(uint16_t *idf)
 
     // Supported PIO modes
     if (m_phy_caps.supports_iordy) idf[IDE_IDENTIFY_OFFSET_CAPABILITIES_1] |= (1 << 11);
-    idf[IDE_IDENTIFY_OFFSET_PIO_MODE_ATA1] = (m_phy_caps.max_pio_mode << 8);
+    idf[IDE_IDENTIFY_OFFSET_PIO_MODE_ATA1] = (m_devconfig.max_pio_mode << 8);
     idf[IDE_IDENTIFY_OFFSET_MODE_INFO_VALID] |= 0x02; // PIO support word valid
-    idf[IDE_IDENTIFY_OFFSET_MODEINFO_PIO] = (m_phy_caps.max_pio_mode >= 3) ? 1 : 0; // PIO3 supported?
+    idf[IDE_IDENTIFY_OFFSET_MODEINFO_PIO] = (m_devconfig.max_pio_mode >= 3) ? 1 : 0; // PIO3 supported?
     idf[IDE_IDENTIFY_OFFSET_PIO_CYCLETIME_MIN] = m_phy_caps.min_pio_cycletime_no_iordy; // Without IORDY
     idf[IDE_IDENTIFY_OFFSET_PIO_CYCLETIME_IORDY] = m_phy_caps.min_pio_cycletime_with_iordy; // With IORDY
 
     // Supported Multiword DMA modes
-    identify_mwdma_modes(idf, m_phy_caps.max_mwdma_mode, m_atapi_state.mwdma_mode);
-    if (m_phy_caps.max_mwdma_mode >= 0)
+    identify_mwdma_modes(idf, m_devconfig.max_mwdma_mode, m_atapi_state.mwdma_mode);
+    if (m_devconfig.max_mwdma_mode >= 0)
     {
         idf[IDE_IDENTIFY_OFFSET_CAPABILITIES_1] |= (1 << 8); // DMA supported
     }
 
     // Supported UDMA modes
     idf[IDE_IDENTIFY_OFFSET_MODE_INFO_VALID] |= 0x04; // UDMA support word valid
-    if (m_phy_caps.max_udma_mode >= 0)
+    if (m_devconfig.max_udma_mode >= 0)
     {
         idf[IDE_IDENTIFY_OFFSET_CAPABILITIES_1] |= (1 << 8);
 
         // Bitmask of supported UDMA modes
-        idf[IDE_IDENTIFY_OFFSET_MODEINFO_ULTRADMA] = (2 << m_phy_caps.max_udma_mode) - 1;
+        idf[IDE_IDENTIFY_OFFSET_MODEINFO_ULTRADMA] = (2 << m_devconfig.max_udma_mode) - 1;
         if (m_atapi_state.udma_mode >= 0)
         {
             // Active UDMA mode
@@ -366,16 +368,18 @@ bool IDEATAPIDevice::cmd_packet(ide_registers_t *regs)
     {
         // JM20337 uses UDMA without selecting a mode. Multiword DMA mode 0 is the
         // power-on default of ATA-3, but only used if UDMA is not available.
-        if (m_phy_caps.max_udma_mode >= 0)
+        if (m_devconfig.max_udma_mode >= 0)
         {
             dbgmsg("---- Host requested DMA transfer while DMA mode is not selected, enabling UDMA0!");
             m_atapi_state.udma_mode = 0;
         }
-        else if (m_phy_caps.max_mwdma_mode >= 0)
+#ifdef ENABLE_MWDMA
+        else if (m_devconfig.max_mwdma_mode >= 0)
         {
             dbgmsg("---- Host requested DMA transfer while DMA mode is not selected, enabling Multiword DMA mode 0!");
             m_atapi_state.mwdma_mode = 0;
         }
+#endif
         else
         {
             logmsg("---- Host requested DMA  transfer but PHY does not support, continuing with PIO!");
@@ -386,7 +390,7 @@ bool IDEATAPIDevice::cmd_packet(ide_registers_t *regs)
     {
         // "the host should not set the byte count limit to zero. If the host sets the byte count limit to
         // zero, the contents of IDENTIFY PACKET DEVICE word 125 determines the expected behavior"
-        m_atapi_state.bytes_req = m_phy_caps.max_blocksize;
+        m_atapi_state.bytes_req = m_devconfig.max_blocksize;
     }
 
 #ifdef IDE_PHY_NO_DIRECT_ATAPI_SUPPORT
@@ -575,7 +579,7 @@ bool IDEATAPIDevice::atapi_send_data(const uint8_t *data, size_t blocksize, size
     dbgmsg("---- ATAPI send ", (int)num_blocks, "x", (int)blocksize, " bytes: ",
         bytearray((const uint8_t*)data, blocksize * num_blocks));
 
-    size_t max_blocksize = std::min<size_t>(m_phy_caps.max_blocksize, m_atapi_state.bytes_req);
+    size_t max_blocksize = std::min<size_t>(m_devconfig.max_blocksize, m_atapi_state.bytes_req);
     if (max_blocksize > 1)
     {
         // Data is transferred as 16-bit words, only the last block may have an odd length
@@ -633,7 +637,7 @@ ssize_t IDEATAPIDevice::atapi_send_data_async(const uint8_t *data, size_t blocks
         return blocks_sent;
     }
 
-    size_t max_blocksize = std::min<size_t>(m_phy_caps.max_blocksize, m_atapi_state.bytes_req);
+    size_t max_blocksize = std::min<size_t>(m_devconfig.max_blocksize, m_atapi_state.bytes_req);
     if (blocksize > max_blocksize)
     {
         dbgmsg("-- atapi_send_data_async(): Block size ", (int)blocksize, " exceeds limit ", (int)max_blocksize,
@@ -766,7 +770,7 @@ bool IDEATAPIDevice::atapi_send_wait_finish()
 
 bool IDEATAPIDevice::atapi_recv_data(uint8_t *data, size_t blocksize, size_t num_blocks)
 {
-    size_t phy_max_blocksize = m_phy_caps.max_blocksize;
+    size_t phy_max_blocksize = m_devconfig.max_blocksize;
     size_t max_blocksize = std::min<size_t>(phy_max_blocksize, m_atapi_state.bytes_req);
     if (blocksize > max_blocksize)
     {

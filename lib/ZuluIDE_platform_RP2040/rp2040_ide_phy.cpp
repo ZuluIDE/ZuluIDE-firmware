@@ -71,7 +71,7 @@ static void verify_crc(uint32_t *block_crc)
     *block_crc = 0;
 }
 
-static ide_phy_capabilities_t g_ide_phy_capabilities = {
+static const ide_phy_capabilities_t g_ide_phy_capabilities = {
     // ICE5LP1K has 8 kB of RAM, we use it as 2x 4096 byte buffers
     .max_blocksize = 4096,
 

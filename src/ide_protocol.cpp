@@ -595,10 +595,13 @@ void IDEDevice::initialize(int devidx)
 
     m_devconfig.dev_index = devidx;
 
-    m_phy_caps = *ide_phy_get_capabilities();
-    m_devconfig.max_pio_mode = ini_getl("IDE", "max_pio", 3, CONFIGFILE);
-    m_devconfig.max_udma_mode = ini_getl("IDE", "max_udma", 2, CONFIGFILE);
-    m_devconfig.max_mwdma_mode = ini_getl("IDE", "max_mwdma", 2, CONFIGFILE);
+    m_devconfig.max_pio_mode = ini_getl("IDE", "max_pio", m_phy_caps.max_pio_mode, CONFIGFILE);
+    m_devconfig.max_udma_mode = ini_getl("IDE", "max_udma", m_phy_caps.max_udma_mode, CONFIGFILE);
+#ifdef ENABLE_MWDMA
+    m_devconfig.max_mwdma_mode = ini_getl("IDE", "max_mwdma", m_phy_caps.max_mwdma_mode, CONFIGFILE);
+#else
+    m_devconfig.max_mwdma_mode = -1;
+#endif
     // READ/WRITE MULTIPLE block count must be a power of two, up to 128 sectors (IDENTIFY word 47)
     long max_set_multiple = ini_getl("IDE", "max_set_multiple", 8, CONFIGFILE);
     if (max_set_multiple < 0)
@@ -629,11 +632,11 @@ void IDEDevice::initialize(int devidx)
     m_devconfig.block_write_delay_us = ini_getl("IDE", "block_write_delay_us", 0, CONFIGFILE);
 
     g_ignore_cmd_interrupt = ini_getl("IDE", "ignore_command_interrupt", 1, CONFIGFILE);
-    m_phy_caps.max_udma_mode = std::min(m_phy_caps.max_udma_mode, m_devconfig.max_udma_mode);
-    m_phy_caps.max_mwdma_mode = std::min(m_phy_caps.max_mwdma_mode, m_devconfig.max_mwdma_mode);
-    m_phy_caps.max_pio_mode = std::min(m_phy_caps.max_pio_mode, m_devconfig.max_pio_mode);
-    m_phy_caps.max_blocksize = std::min<int>(m_phy_caps.max_blocksize, m_devconfig.max_blocksize);
-    m_phy_caps.max_set_multiple = std::min(m_phy_caps.max_set_multiple, m_devconfig.max_set_multiple);
+    m_devconfig.max_udma_mode = std::min(m_phy_caps.max_udma_mode, m_devconfig.max_udma_mode);
+    m_devconfig.max_mwdma_mode = std::min(m_phy_caps.max_mwdma_mode, m_devconfig.max_mwdma_mode);
+    m_devconfig.max_pio_mode = std::min(m_phy_caps.max_pio_mode, m_devconfig.max_pio_mode);
+    m_devconfig.max_blocksize = std::min<int>(m_phy_caps.max_blocksize, m_devconfig.max_blocksize);
+    m_devconfig.max_set_multiple = std::min(m_phy_caps.max_set_multiple, m_devconfig.max_set_multiple);
 }
 
 void IDEDevice::post_image_setup()
@@ -669,7 +672,9 @@ void IDEDevice::print_device_config()
 {
     logmsg("-- Max PIO mode: ", m_devconfig.max_pio_mode, " (phy max ", m_phy_caps.max_pio_mode, ")");
     logmsg("-- Max UDMA mode: ", m_devconfig.max_udma_mode, " (phy max ", m_phy_caps.max_udma_mode, ")");
+#ifdef ENABLE_MWDMA
     logmsg("-- Max Multiword DMA mode: ", m_devconfig.max_mwdma_mode, " (phy max ", m_phy_caps.max_mwdma_mode, ")");
+#endif
     logmsg("-- Max blocksize: ", m_devconfig.max_blocksize, " (phy max ", (int)m_phy_caps.max_blocksize, ")");
 
     if (m_devconfig.ide_identify_gencfg)

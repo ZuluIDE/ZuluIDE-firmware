@@ -152,7 +152,7 @@ protected:
     } m_devconfig;
 
     // PHY capabilities limited by active device configuration
-    ide_phy_capabilities_t m_phy_caps;
+    const ide_phy_capabilities_t m_phy_caps = *ide_phy_get_capabilities();
 
     // Fill IDENTIFY (PACKET) DEVICE word 63 with the Multiword DMA modes supported up to max_mode
     // and the active mode, and words 65..66 with the Multiword DMA cycle times.
