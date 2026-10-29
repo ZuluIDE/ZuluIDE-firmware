@@ -33,6 +33,7 @@
 #include <ZuluControl_platform.h>
 #include <ZuluIDE_usb_platform.h>
 #include <ZuluIDE.h>
+#include <ide_activity.h>
 #include "ide_phy.h"
 #include <SdFat.h>
 #include <assert.h>
@@ -892,14 +893,16 @@ void core1_log_poll()
 }
 
 void platform_poll_input() {
-    g_rotary_input.Poll();
+    platform_ui_poll_input();
 
     if (uiStatusController)
     {
         // Process status update, if any exist.
         if (!uiStatusController->ProcessUpdate()) {
-            // If no updates happened, refresh the display (enables animation)
-            display.Refresh();
+            // If no updates happened, refresh the display (enables animation),
+            // slowed down while IDE data is moving
+            if (platform_ui_display_refresh_due())
+                display.Refresh();
         }
 
         g_controllerImageResponsePipe->ProcessUpdates();
@@ -913,6 +916,7 @@ void platform_poll_input() {
 void platform_poll(bool only_from_main)
 {
     static uint32_t prev_poll_time;
+    static uint32_t prev_main_poll_time;
 
     // Disable the RP2040Support.h interrupt, otherwise it steals our FIFO items
     // TODO: Find a better place to do this, it has to be after
@@ -923,6 +927,15 @@ void platform_poll(bool only_from_main)
     uint32_t time_now = millis();
     if (time_now == prev_poll_time)
     {
+        // A transfer already polled in this millisecond. While the controls are
+        // in use still let the main loop process UI input, otherwise it is
+        // starved during heavy transfers. Outside that window skip it to keep
+        // the time between IDE commands short.
+        if (only_from_main && time_now != prev_main_poll_time && platform_ui_input_active())
+        {
+            prev_main_poll_time = time_now;
+            platform_poll_input();
+        }
         return;
     }
     prev_poll_time = time_now;
@@ -931,12 +944,20 @@ void platform_poll(bool only_from_main)
     adc_poll();
     core1_log_poll();
     usb_log_poll();
+    g_ide_activity.poll();
     usb_command_poll();
     
     if (only_from_main)
     {
+        prev_main_poll_time = time_now;
         platform_poll_input();
         platform_reboot_poll();
+    }
+    else
+    {
+        // Inside an IDE transfer the main loop may not run for several ms,
+        // keep sampling the rotary dial so fast turns are decoded
+        platform_ui_sample_input();
     }
 
 #ifdef ENABLE_AUDIO_OUTPUT
