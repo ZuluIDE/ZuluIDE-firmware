@@ -36,6 +36,7 @@ void load_image(const zuluide::images::Image& toLoad, bool insert = true);
 extern void save_logfile(bool always);
 #include "ZuluIDE_config.h"
 #include <minIni.h>
+#include "ide_activity.h"
 extern uint8_t g_ide_signals;
 static uint8_t ide_disk_buffer[512];
 
@@ -1452,7 +1453,10 @@ void IDERigidDevice::poll()
 ssize_t IDERigidDevice::read_callback(const uint8_t *data, size_t blocksize, size_t num_blocks)
 {
     platform_poll();
-    return ata_send_data(data, blocksize, num_blocks);
+    ssize_t blocks_sent = ata_send_data(data, blocksize, num_blocks);
+    if (blocks_sent > 0)
+        g_ide_activity.add_read(m_devconfig.dev_index, blocks_sent * blocksize);
+    return blocks_sent;
 }
 
 // Called by IDEImage to request reception of more data from IDE bus
@@ -1460,6 +1464,7 @@ ssize_t IDERigidDevice::write_callback(uint8_t *data, size_t blocksize, size_t n
 {
     if (ata_recv_data(data, blocksize, num_blocks, first_xfer, last_xfer))
     {
+        g_ide_activity.add_write(m_devconfig.dev_index, num_blocks * blocksize);
         return num_blocks;
     }
     else

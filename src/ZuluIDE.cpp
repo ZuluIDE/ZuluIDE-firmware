@@ -38,6 +38,7 @@
 #include "ide_removable.h"
 #include "ide_rigid.h"
 #include "ide_imagefile.h"
+#include "ide_activity.h"
 #include <ZuluControl_platform.h>
 #include <ZuluIDE_reboot_platform.h>
 #include "status/status_controller.h"
@@ -1191,6 +1192,8 @@ static void zuluide_reload_config()
       dbgmsg("-- Disabling status LED");
       platform_disable_led();
   }
+
+  g_ide_activity.set_output_interval_ms(ini_getl("IDE", "throughput_output_ms", IDEActivity::DEFAULT_OUTPUT_UPDATE_MS, CONFIGFILE));
 
   uint8_t eject_button = ini_getl("IDE", "eject_button", 1, CONFIGFILE);
   platform_init_eject_button(eject_button);

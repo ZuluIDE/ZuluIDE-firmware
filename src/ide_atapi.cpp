@@ -31,6 +31,7 @@
 #include <minIni.h>
 #include <zuluide/images/image_iterator.h>
 #include <status/status_controller.h>
+#include "ide_activity.h"
 
 extern zuluide::status::StatusController g_StatusController;
 extern zuluide::status::SystemStatus g_previous_controller_status;
@@ -1526,7 +1527,10 @@ bool IDEATAPIDevice::doRead(uint32_t lba, uint32_t transfer_len)
 ssize_t IDEATAPIDevice::read_callback(const uint8_t *data, size_t blocksize, size_t num_blocks)
 {
     platform_poll();
-    return atapi_send_data_async(data, blocksize, num_blocks);
+    ssize_t blocks_sent = atapi_send_data_async(data, blocksize, num_blocks);
+    if (blocks_sent > 0)
+        g_ide_activity.add_read(m_devconfig.dev_index, blocks_sent * blocksize);
+    return blocks_sent;
 }
 
 // Parse ATAPI WRITE command
@@ -1602,6 +1606,7 @@ ssize_t IDEATAPIDevice::write_callback(uint8_t *data, size_t blocksize, size_t n
 {
     if (atapi_recv_data(data, blocksize, num_blocks))
     {
+        g_ide_activity.add_write(m_devconfig.dev_index, num_blocks * blocksize);
         return num_blocks;
     }
     else

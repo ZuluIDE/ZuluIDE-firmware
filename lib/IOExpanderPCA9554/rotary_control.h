@@ -68,7 +68,16 @@ namespace zuluide::control {
     virtual void StopSendingEvents();
     virtual bool CheckForDevice() override;
     virtual bool GetDeviceExists() override;
-    void Poll();
+    // Sample() then DispatchEvents().
+    // Returns true if a button or the rotary dial changed since the last sample
+    bool Poll();
+    // Read the inputs and decode buttons and rotation without calling the
+    // receiver, events are queued until DispatchEvents(). Lets the dial be
+    // sampled often enough from contexts where UI updates are not safe.
+    // Returns true if a button or the rotary dial changed since the last sample
+    bool Sample();
+    // Deliver events queued by Sample() to the receiver
+    void DispatchEvents();
 
   private:
     uint8_t getValue();
@@ -89,6 +98,11 @@ namespace zuluide::control {
     uint8_t lrmem;
     int32_t lrsum;
     uint8_t rotary_state;
+    uint8_t last_input_byte;
+    uint8_t pending_primary;
+    uint8_t pending_secondary;
+    uint8_t pending_rotary_button;
+    int16_t pending_rotation;
 
     static const uint8_t rotary_transition_lut[7][4];
   };

@@ -64,7 +64,8 @@ bool RotaryControl::GetDeviceExists()
 }
 
 RotaryControl::RotaryControl(int addr) :
-  pcaAddr(addr), deviceExists(false), isSending(false), tick_count(0), going_cw(true), number_of_ticks(1), rotary_state(ROTARY_TICK_000) {
+  pcaAddr(addr), deviceExists(false), isSending(false), tick_count(0), going_cw(true), number_of_ticks(1), rotary_state(ROTARY_TICK_000), last_input_byte(0xFF),
+  pending_primary(0), pending_secondary(0), pending_rotary_button(0), pending_rotation(0) {
 }
 
 uint8_t RotaryControl::getValue() {
@@ -92,12 +93,41 @@ void RotaryControl::SetI2c(TwoWire* i2c) {
   wire = i2c;
 }
 
-void RotaryControl::Poll() {  
+bool RotaryControl::Poll() {
+  bool changed = Sample();
+  DispatchEvents();
+  return changed;
+}
+
+void RotaryControl::DispatchEvents() {
+  for (; pending_primary > 0; pending_primary--) {
+    inputReceiver->PrimaryButtonPressed();
+  }
+  for (; pending_secondary > 0; pending_secondary--) {
+    inputReceiver->SecondaryButtonPressed();
+  }
+  for (; pending_rotary_button > 0; pending_rotary_button--) {
+    inputReceiver->RotaryButtonPressed();
+  }
+  for (; pending_rotation > 0; pending_rotation--) {
+    inputReceiver->RotaryUpdate(1);
+  }
+  for (; pending_rotation < 0; pending_rotation++) {
+    inputReceiver->RotaryUpdate(-1);
+  }
+}
+
+bool RotaryControl::Sample() {  
   if(!deviceExists || !isSending) {
-    return;
+    return false;
   }
   
   uint8_t input_byte = getValue();
+  // Only the button and rotary pins count as a change
+  const uint8_t input_mask = (1 << EXP_EJECT_PIN) | (1 << EXP_INSERT_PIN) | (1 << EXP_ROT_PIN)
+                           | (1 << EXP_ROT_A_PIN) | (1 << EXP_ROT_B_PIN);
+  bool changed = ((input_byte ^ last_input_byte) & input_mask) != 0;
+  last_input_byte = input_byte;
   uint32_t check_time = millis();
   bool ejectButtonIsDown = ((1 << EXP_EJECT_PIN) & input_byte) != 0;
   bool insertButtonIsPressed = ((1 << EXP_INSERT_PIN) & input_byte) != 0;  
@@ -105,16 +135,16 @@ void RotaryControl::Poll() {
 
   if (buttonIsPressed(ejectButtonIsDown, &eject_btn_millis, check_time)) {
     // Eject button was pressed succsfully.
-    inputReceiver->PrimaryButtonPressed();
+    pending_primary++;
   }
 
   if (buttonIsPressed(insertButtonIsPressed, &insert_btn_millis, check_time)) {
     // Insert button was pressed succsfully.
-    inputReceiver->SecondaryButtonPressed();
+    pending_secondary++;
   }
 
   if (buttonIsPressed(rotateButton, &rotate_btn_millis, check_time)) {
-    inputReceiver->RotaryButtonPressed();
+    pending_rotary_button++;
   }
   uint8_t chan_a = 1 & (input_byte >> EXP_ROT_A_PIN);
   uint8_t chan_b = 1 & (input_byte >> EXP_ROT_B_PIN);
@@ -127,13 +157,13 @@ void RotaryControl::Poll() {
       if (tick_count < number_of_ticks - 1) {
         tick_count++;
       } else {
-        inputReceiver->RotaryUpdate(-1);
+        pending_rotation--;
         tick_count = 0;
       }
     } else  if (rotaryDirection == ROTARY_DIR_CCW) {
       tick_count = 1;
       if (tick_count > number_of_ticks - 1) {
-        inputReceiver->RotaryUpdate(1);
+        pending_rotation++;
       }
       going_cw = false;
     }
@@ -142,17 +172,19 @@ void RotaryControl::Poll() {
       if (tick_count < number_of_ticks - 1) {
         tick_count++;
       } else {
-        inputReceiver->RotaryUpdate(1);
+        pending_rotation++;
         tick_count = 0;
       }
     } else if (rotaryDirection == ROTARY_DIR_CW) {
       tick_count = 1;
       if (tick_count > number_of_ticks - 1) {
-        inputReceiver->RotaryUpdate(-1);
+        pending_rotation--;
       }
       going_cw = true;
     }
   }
+
+  return changed;
 }
 
 bool RotaryControl::buttonIsPressed(bool isDown, uint32_t* lastDownMillis, uint32_t checkTime) {

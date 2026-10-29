@@ -40,6 +40,7 @@
 #include <Adafruit_SSD1306.h>
 #include <pico/time.h>
 #include "ZuluControl_platform.h"
+#include <ide_activity.h>
 
 #define CONTROLLER_TYPE_BOARD 1
 #define CONTROLLER_TYPE_WIFI  2
@@ -54,6 +55,16 @@ zuluide::pipe::ImageResponsePipe<zuluide::i2c::i2c_server_source_t> g_I2CServerI
 zuluide::pipe::ImageRequestPipe<zuluide::i2c::i2c_server_source_t> g_I2CServerImageRequestPipe;
 zuluide::i2c::I2CServer g_I2cServer(&g_I2CServerImageRequestPipe, &g_I2CServerImageResponsePipe);
 zuluide::ObserverTransfer<zuluide::status::SystemStatus> *uiStatusController;
+
+// UI throttling while IDE data is moving, set by zuluide.ini [UI] busy_* settings.
+// 0 pauses the task entirely while busy.
+static uint32_t g_busy_display_refresh_ms = 1000;
+static uint32_t g_busy_input_poll_ms = 10;
+// Input polling and display refresh run at full rate for this long after any
+// button or rotary change, so the controls stay responsive while in use
+static constexpr uint32_t INPUT_ACTIVE_HOLD_MS = 3000;
+static uint32_t g_input_last_change_ms;
+static bool g_input_change_seen;
 
 // Force this definition to defined somewhere else
 // bootloader linker was linking to this function from this discarded object in the bootloader linker script
@@ -122,6 +133,9 @@ uint8_t platform_check_for_controller()
     static bool checked = false;
     static uint8_t controller_found = 0;
     if (checked) return controller_found;
+
+    g_busy_display_refresh_ms = ini_getl("UI", "busy_display_refresh_ms", g_busy_display_refresh_ms, CONFIGFILE);
+    g_busy_input_poll_ms = ini_getl("UI", "busy_input_poll_ms", g_busy_input_poll_ms, CONFIGFILE);
     g_i2c_bus_speed = I2C_FAST_BUS_SPEED;
     g_wire.setClock(g_i2c_bus_speed);  // 400 kHz (Fast Mode)
     // Setting the drive strength seems to help the I2C bus with the ZuluControl and the controller OLED display
@@ -201,6 +215,63 @@ uint8_t platform_check_for_controller()
     controller_found = (hasHardwareUI ? CONTROLLER_TYPE_BOARD : 0) | (hasI2CServer ? CONTROLLER_TYPE_WIFI : 0);
     checked = true;
     return controller_found;
+}
+
+// Returns true when a UI task should run now. Without IDE activity or within
+// INPUT_ACTIVE_HOLD_MS of an input change it always runs, otherwise while
+// busy it runs at most once per busy_interval_ms.
+static bool input_recently_changed(uint32_t now)
+{
+    return g_input_change_seen && (uint32_t)(now - g_input_last_change_ms) < INPUT_ACTIVE_HOLD_MS;
+}
+
+static void input_changed()
+{
+    // Each change restarts the full rate window
+    g_input_last_change_ms = millis();
+    g_input_change_seen = true;
+}
+
+static bool ui_task_due(uint32_t &last_run_ms, uint32_t busy_interval_ms)
+{
+    uint32_t now = millis();
+    if (!input_recently_changed(now) && g_ide_activity.is_busy())
+    {
+        if (busy_interval_ms == 0)
+            return false;
+        if ((uint32_t)(now - last_run_ms) < busy_interval_ms)
+            return false;
+    }
+    last_run_ms = now;
+    return true;
+}
+
+bool platform_ui_display_refresh_due()
+{
+    static uint32_t last_run_ms;
+    return ui_task_due(last_run_ms, g_busy_display_refresh_ms);
+}
+
+void platform_ui_poll_input()
+{
+    static uint32_t last_run_ms;
+    if (ui_task_due(last_run_ms, g_busy_input_poll_ms) && g_rotary_input.Sample())
+        input_changed();
+
+    // Deliver events, including those sampled during IDE transfers
+    g_rotary_input.DispatchEvents();
+}
+
+bool platform_ui_input_active()
+{
+    return input_recently_changed(millis());
+}
+
+void platform_ui_sample_input()
+{
+    // Only while the controls are in use, each sample is a blocking I2C read
+    if (input_recently_changed(millis()) && g_rotary_input.Sample())
+        input_changed();
 }
 
 void platform_set_status_controller(zuluide::ObserverTransfer<zuluide::status::SystemStatus> *statusController) {
