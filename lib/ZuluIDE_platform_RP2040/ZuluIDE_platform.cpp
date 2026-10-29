@@ -32,6 +32,7 @@
 #include <pico/bootrom.h>
 #include <ZuluIDE.h>
 #include <ide_activity.h>
+#include <ZuluIDE_usb_console.h>
 #include "ide_phy.h"
 #include <SdFat.h>
 #include <assert.h>
@@ -543,6 +544,9 @@ void usb_log_poll()
                 // Limit to CDC packet size
         uint32_t len = available;
         if (len == 0) return;
+
+        // Clear the USB console throughput line so log text starts on a clean line
+        if (!ideConsoleClearLiveLine()) return;
         if (len > CFG_TUD_CDC_EP_BUFSIZE) len = CFG_TUD_CDC_EP_BUFSIZE;
 
         // Update log position by the actual number of bytes sent
