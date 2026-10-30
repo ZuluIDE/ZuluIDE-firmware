@@ -811,10 +811,14 @@ bool IDERigidDevice::cmd_identify_device(ide_registers_t *regs)
         idf[IDE_IDENTIFY_OFFSET_MULTI_SECTOR_VALID] = m_devconfig.max_set_multiple >= m_ata_state.multiple_mode_sectors ? 0x100 : 0x0;
         idf[IDE_IDENTIFY_OFFSET_MULTI_SECTOR_VALID] |= m_ata_state.multiple_mode_sectors;
     }
-    idf[IDE_IDENTIFY_OFFSET_CAPABILITIES_1] = (m_phy_caps.supports_iordy ? 1 << 11 : 0) |
+    idf[IDE_IDENTIFY_OFFSET_CAPABILITIES_1] = (m_devconfig.supports_iordy ? 1 << 11 : 0) |
                                             (1 << 10) | // iordy may be disabled
-                                            (1 << 9)  |  // Shall be set to one
-                                            (1 << 8);    // Shall be set to one
+                                            (1 << 9)  ;  // Shall be set to one
+
+    if (m_devconfig.max_udma_mode >= 0)
+    {
+        idf[IDE_IDENTIFY_OFFSET_CAPABILITIES_1] |= (1 << 8); // DMA supported
+    }
     idf[IDE_IDENTIFY_OFFSET_PIO_MODE_ATA1] = (m_devconfig.max_pio_mode << 8);
     // \todo set on older drives
     // idf[IDE_IDENTIFY_OFFSET_OLD_DMA_TIMING_MODE] = 0x0200;
@@ -831,11 +835,11 @@ bool IDERigidDevice::cmd_identify_device(ide_registers_t *regs)
     idf[IDE_IDENTIFY_OFFSET_TOTAL_SECTORS]     = lba & 0xFFFF;
     idf[IDE_IDENTIFY_OFFSET_TOTAL_SECTORS + 1] = (lba >> 16) & 0xFFFF;
     idf[IDE_IDENTIFY_OFFSET_MODEINFO_SINGLEWORD] = 0;// 0x0007; // disabling single word dma
-    identify_mwdma_modes(idf, m_phy_caps.max_mwdma_mode, m_ata_state.mwdma_mode); // Multiword DMA, words 63, 65 and 66
+    identify_mwdma_modes(idf, m_devconfig.max_mwdma_mode, m_ata_state.mwdma_mode); // Multiword DMA, words 63, 65 and 66
 
     idf[IDE_IDENTIFY_OFFSET_MODEINFO_PIO] = (m_devconfig.max_pio_mode >= 3) ? 1 : 0; // PIO3 supported?
-    idf[IDE_IDENTIFY_OFFSET_PIO_CYCLETIME_MIN] = m_phy_caps.min_pio_cycletime_no_iordy; // Without IORDY
-    idf[IDE_IDENTIFY_OFFSET_PIO_CYCLETIME_IORDY] = m_phy_caps.min_pio_cycletime_with_iordy; // With IORDY
+    idf[IDE_IDENTIFY_OFFSET_PIO_CYCLETIME_MIN] =   ide_min_pio_cycle_time(m_ata_state.pio_mode, false); // Without IORDY
+    idf[IDE_IDENTIFY_OFFSET_PIO_CYCLETIME_IORDY] = ide_min_pio_cycle_time(m_ata_state.pio_mode, true); // With IORDY
 
     idf[IDE_IDENTIFY_OFFSET_STANDARD_VERSION_MAJOR] = 0x0078; // Version ATAPI-6
     idf[IDE_IDENTIFY_OFFSET_STANDARD_VERSION_MINOR] = 0x0019; // Minor version rev 3a
@@ -1070,7 +1074,7 @@ void IDERigidDevice::handle_event(ide_event_t evt)
             // Hardware reset disables UDMA and selects the default Multiword DMA mode 0
             // (ATA-3 9.4.3, ATA/ATAPI-6 6.6.1 and 10.2.3)
             m_ata_state.udma_mode = -1;
-            m_ata_state.mwdma_mode = (m_phy_caps.max_mwdma_mode >= 0) ? 0 : -1;
+            m_ata_state.mwdma_mode = (m_devconfig.max_mwdma_mode >= 0) ? 0 : -1;
         }
         m_devinfo.seek_executed = false;
         set_device_signature(nullptr, 0, true);

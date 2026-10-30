@@ -527,6 +527,23 @@ void ide_protocol_poll()
     }
 }
 
+uint16_t ide_min_pio_cycle_time(uint8_t pio_mode, bool iordy_enabled)
+{
+    // Pio mode 3 and higher default to pio mode 2 timing if iordy is disabled
+    if (!iordy_enabled && pio_mode > 2)
+        pio_mode = 2;
+
+    switch (pio_mode)
+    {
+        case 1: return 383;
+        case 2: return 240;
+        case 3: return 180;
+        // Invalid modes, use slowset setting
+        case 0: [[fallthrough]];
+        default: return 600;
+    }
+}
+
 void IDEDevice::formatDriveInfoField(char *field, int fieldsize, bool align_right)
 {
     if (align_right)
@@ -591,6 +608,9 @@ void IDEDevice::set_ident_strings(const char* default_model, const char* default
 
 void IDEDevice::initialize(int devidx)
 {
+    // PHY capabilities limited by active device configuration
+    m_phy_caps = *ide_phy_get_capabilities();
+
     memset(&m_devconfig, 0, sizeof(m_devconfig));
 
     m_devconfig.dev_index = devidx;
@@ -637,6 +657,8 @@ void IDEDevice::initialize(int devidx)
     m_devconfig.max_pio_mode = std::min(m_phy_caps.max_pio_mode, m_devconfig.max_pio_mode);
     m_devconfig.max_blocksize = std::min<int>(m_phy_caps.max_blocksize, m_devconfig.max_blocksize);
     m_devconfig.max_set_multiple = std::min(m_phy_caps.max_set_multiple, m_devconfig.max_set_multiple);
+
+    m_devconfig.supports_iordy = true;
 }
 
 void IDEDevice::post_image_setup()
@@ -651,7 +673,9 @@ void IDEDevice::identify_mwdma_modes(uint16_t *idf, int max_mode, int active_mod
     static const uint16_t cycletime_ns[3] = {480, 150, 120};
 
     if (max_mode < 0) return;
-    if (max_mode > 2) max_mode = 2;
+    if (max_mode > m_devconfig.max_mwdma_mode) max_mode = m_devconfig.max_mwdma_mode;
+
+    idf[IDE_IDENTIFY_OFFSET_CAPABILITIES_1] |= (1 << 8); // DMA supported
 
     // Word 63: bits 0..7 supported modes, bits 8..15 the active mode
     idf[IDE_IDENTIFY_OFFSET_MODEINFO_MULTIWORD] = (2 << max_mode) - 1;

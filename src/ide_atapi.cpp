@@ -284,19 +284,15 @@ void IDEATAPIDevice::atapi_identify_packet_device_response(uint16_t *idf)
     }
 
     // Supported PIO modes
-    if (m_phy_caps.supports_iordy) idf[IDE_IDENTIFY_OFFSET_CAPABILITIES_1] |= (1 << 11);
+    if (m_devconfig.supports_iordy) idf[IDE_IDENTIFY_OFFSET_CAPABILITIES_1] |= (1 << 11);
     idf[IDE_IDENTIFY_OFFSET_PIO_MODE_ATA1] = (m_devconfig.max_pio_mode << 8);
     idf[IDE_IDENTIFY_OFFSET_MODE_INFO_VALID] |= 0x02; // PIO support word valid
     idf[IDE_IDENTIFY_OFFSET_MODEINFO_PIO] = (m_devconfig.max_pio_mode >= 3) ? 1 : 0; // PIO3 supported?
-    idf[IDE_IDENTIFY_OFFSET_PIO_CYCLETIME_MIN] = m_phy_caps.min_pio_cycletime_no_iordy; // Without IORDY
-    idf[IDE_IDENTIFY_OFFSET_PIO_CYCLETIME_IORDY] = m_phy_caps.min_pio_cycletime_with_iordy; // With IORDY
+    idf[IDE_IDENTIFY_OFFSET_PIO_CYCLETIME_MIN] =   ide_min_pio_cycle_time(m_atapi_state.pio_mode, false);
+    idf[IDE_IDENTIFY_OFFSET_PIO_CYCLETIME_IORDY] = ide_min_pio_cycle_time(m_atapi_state.pio_mode, true); // With IORDY
 
     // Supported Multiword DMA modes
     identify_mwdma_modes(idf, m_devconfig.max_mwdma_mode, m_atapi_state.mwdma_mode);
-    if (m_devconfig.max_mwdma_mode >= 0)
-    {
-        idf[IDE_IDENTIFY_OFFSET_CAPABILITIES_1] |= (1 << 8); // DMA supported
-    }
 
     // Supported UDMA modes
     idf[IDE_IDENTIFY_OFFSET_MODE_INFO_VALID] |= 0x04; // UDMA support word valid
