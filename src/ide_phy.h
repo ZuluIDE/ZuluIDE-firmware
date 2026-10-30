@@ -164,10 +164,7 @@ uint8_t ide_phy_get_signals();
 struct ide_phy_capabilities_t
 {
     uint32_t max_blocksize;
-    bool supports_iordy;
     int max_pio_mode;
-    int min_pio_cycletime_no_iordy;
-    int min_pio_cycletime_with_iordy;
     int max_udma_mode; // -1 if UDMA not supported
     int max_mwdma_mode; // -1 if Multiword DMA not supported
     uint8_t max_set_multiple = 8; // currently  IDECOMM_MAX_BLOCK_PAYLOAD / 512 (standard blocksize for rigid)

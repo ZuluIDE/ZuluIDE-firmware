@@ -527,6 +527,23 @@ void ide_protocol_poll()
     }
 }
 
+uint16_t ide_min_pio_cycle_time(uint8_t pio_mode, bool iordy_enabled)
+{
+    // Pio mode 3 and higher default to pio mode 2 timing if iordy is disabled
+    if (!iordy_enabled && pio_mode > 2)
+        pio_mode = 2;
+
+    switch (pio_mode)
+    {
+        case 1: return 383;
+        case 2: return 240;
+        case 3: return 180;
+        // Invalid modes, use slowset setting
+        case 0: [[fallthrough]];
+        default: return 600;
+    }
+}
+
 void IDEDevice::formatDriveInfoField(char *field, int fieldsize, bool align_right)
 {
     if (align_right)
@@ -591,14 +608,20 @@ void IDEDevice::set_ident_strings(const char* default_model, const char* default
 
 void IDEDevice::initialize(int devidx)
 {
+    // PHY capabilities limited by active device configuration
+    m_phy_caps = *ide_phy_get_capabilities();
+
     memset(&m_devconfig, 0, sizeof(m_devconfig));
 
     m_devconfig.dev_index = devidx;
 
-    m_phy_caps = *ide_phy_get_capabilities();
-    m_devconfig.max_pio_mode = ini_getl("IDE", "max_pio", 3, CONFIGFILE);
-    m_devconfig.max_udma_mode = ini_getl("IDE", "max_udma", 2, CONFIGFILE);
-    m_devconfig.max_mwdma_mode = ini_getl("IDE", "max_mwdma", 2, CONFIGFILE);
+    m_devconfig.max_pio_mode = ini_getl("IDE", "max_pio", m_phy_caps.max_pio_mode, CONFIGFILE);
+    m_devconfig.max_udma_mode = ini_getl("IDE", "max_udma", m_phy_caps.max_udma_mode, CONFIGFILE);
+#ifdef ENABLE_MWDMA
+    m_devconfig.max_mwdma_mode = ini_getl("IDE", "max_mwdma", m_phy_caps.max_mwdma_mode, CONFIGFILE);
+#else
+    m_devconfig.max_mwdma_mode = -1;
+#endif
     // READ/WRITE MULTIPLE block count must be a power of two, up to 128 sectors (IDENTIFY word 47)
     long max_set_multiple = ini_getl("IDE", "max_set_multiple", 8, CONFIGFILE);
     if (max_set_multiple < 0)
@@ -629,11 +652,13 @@ void IDEDevice::initialize(int devidx)
     m_devconfig.block_write_delay_us = ini_getl("IDE", "block_write_delay_us", 0, CONFIGFILE);
 
     g_ignore_cmd_interrupt = ini_getl("IDE", "ignore_command_interrupt", 1, CONFIGFILE);
-    m_phy_caps.max_udma_mode = std::min(m_phy_caps.max_udma_mode, m_devconfig.max_udma_mode);
-    m_phy_caps.max_mwdma_mode = std::min(m_phy_caps.max_mwdma_mode, m_devconfig.max_mwdma_mode);
-    m_phy_caps.max_pio_mode = std::min(m_phy_caps.max_pio_mode, m_devconfig.max_pio_mode);
-    m_phy_caps.max_blocksize = std::min<int>(m_phy_caps.max_blocksize, m_devconfig.max_blocksize);
-    m_phy_caps.max_set_multiple = std::min(m_phy_caps.max_set_multiple, m_devconfig.max_set_multiple);
+    m_devconfig.max_udma_mode = std::min(m_phy_caps.max_udma_mode, m_devconfig.max_udma_mode);
+    m_devconfig.max_mwdma_mode = std::min(m_phy_caps.max_mwdma_mode, m_devconfig.max_mwdma_mode);
+    m_devconfig.max_pio_mode = std::min(m_phy_caps.max_pio_mode, m_devconfig.max_pio_mode);
+    m_devconfig.max_blocksize = std::min<int>(m_phy_caps.max_blocksize, m_devconfig.max_blocksize);
+    m_devconfig.max_set_multiple = std::min(m_phy_caps.max_set_multiple, m_devconfig.max_set_multiple);
+
+    m_devconfig.supports_iordy = true;
 }
 
 void IDEDevice::post_image_setup()
@@ -648,7 +673,9 @@ void IDEDevice::identify_mwdma_modes(uint16_t *idf, int max_mode, int active_mod
     static const uint16_t cycletime_ns[3] = {480, 150, 120};
 
     if (max_mode < 0) return;
-    if (max_mode > 2) max_mode = 2;
+    if (max_mode > m_devconfig.max_mwdma_mode) max_mode = m_devconfig.max_mwdma_mode;
+
+    idf[IDE_IDENTIFY_OFFSET_CAPABILITIES_1] |= (1 << 8); // DMA supported
 
     // Word 63: bits 0..7 supported modes, bits 8..15 the active mode
     idf[IDE_IDENTIFY_OFFSET_MODEINFO_MULTIWORD] = (2 << max_mode) - 1;
@@ -669,7 +696,9 @@ void IDEDevice::print_device_config()
 {
     logmsg("-- Max PIO mode: ", m_devconfig.max_pio_mode, " (phy max ", m_phy_caps.max_pio_mode, ")");
     logmsg("-- Max UDMA mode: ", m_devconfig.max_udma_mode, " (phy max ", m_phy_caps.max_udma_mode, ")");
+#ifdef ENABLE_MWDMA
     logmsg("-- Max Multiword DMA mode: ", m_devconfig.max_mwdma_mode, " (phy max ", m_phy_caps.max_mwdma_mode, ")");
+#endif
     logmsg("-- Max blocksize: ", m_devconfig.max_blocksize, " (phy max ", (int)m_phy_caps.max_blocksize, ")");
 
     if (m_devconfig.ide_identify_gencfg)

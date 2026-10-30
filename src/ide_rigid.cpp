@@ -329,20 +329,20 @@ bool IDERigidDevice::cmd_set_features(ide_registers_t *regs)
             m_ata_state.pio_mode = 0;
             ide_phy_set_pio_mode(0);
         }
-        else if (mode_major == 1 && mode_minor <= m_phy_caps.max_pio_mode)
+        else if (mode_major == 1 && mode_minor <= m_devconfig.max_pio_mode)
         {
             dbgmsg("-- DEV", m_devconfig.dev_index, ": Set PIO transfer mode ", (int)mode_minor);
             m_ata_state.pio_mode = mode_minor;
             ide_phy_set_pio_mode(mode_minor);
         }
-        else if (mode_major == 4 && mode_minor <= m_phy_caps.max_mwdma_mode)
+        else if (mode_major == 4 && mode_minor <= m_devconfig.max_mwdma_mode)
         {
             // Only one DMA mode is enabled at a time
             m_ata_state.mwdma_mode = mode_minor;
             m_ata_state.udma_mode = -1;
             dbgmsg("-- DEV", m_devconfig.dev_index, ": Set Multiword DMA transfer mode ", (int)mode_minor);
         }
-        else if (mode_major == 8 && mode_minor <= m_phy_caps.max_udma_mode)
+        else if (mode_major == 8 && mode_minor <= m_devconfig.max_udma_mode)
         {
             m_ata_state.udma_mode = mode_minor;
             m_ata_state.mwdma_mode = -1;
@@ -442,7 +442,7 @@ bool IDERigidDevice::cmd_read(ide_registers_t *regs, bool dma_transfer, bool ver
         return false;
     }
 
-    if (is_multiple && m_ata_state.multiple_mode_sectors > m_phy_caps.max_set_multiple)
+    if (is_multiple && m_ata_state.multiple_mode_sectors > m_devconfig.max_set_multiple)
         return false;
 
     uint32_t lba = 0;
@@ -521,7 +521,7 @@ bool IDERigidDevice::cmd_read(ide_registers_t *regs, bool dma_transfer, bool ver
 
         // For PIO transfers, the PHY decrements the sector count register after each
         // DRQ block and only sets BSY between blocks, not after the last one.
-        bool track_sectors = !dma_transfer && sector_size * sectors_per_block <= m_phy_caps.max_blocksize;
+        bool track_sectors = !dma_transfer && sector_size * sectors_per_block <= m_devconfig.max_blocksize;
 
         if (full_blocks > 0)
         {
@@ -587,7 +587,7 @@ bool IDERigidDevice::cmd_write(ide_registers_t *regs, bool dma_transfer, bool is
         return false;
     }
 
-    if (is_multiple && m_ata_state.multiple_mode_sectors > m_phy_caps.max_set_multiple)
+    if (is_multiple && m_ata_state.multiple_mode_sectors > m_devconfig.max_set_multiple)
         return false;
 
     uint32_t lba = 0;
@@ -801,26 +801,30 @@ bool IDERigidDevice::cmd_identify_device(ide_registers_t *regs)
     copy_id_string(&idf[IDE_IDENTIFY_OFFSET_SERIAL_NUMBER], 10, m_devconfig.ata_serial);
     copy_id_string(&idf[IDE_IDENTIFY_OFFSET_FIRMWARE_REV], 4, m_devconfig.ata_revision);
     copy_id_string(&idf[IDE_IDENTIFY_OFFSET_MODEL_NUMBER], 20, m_devconfig.ata_model);
-    idf[IDE_IDENTIFY_OFFSET_MAX_SECTORS] = 0x8000 | m_phy_caps.max_set_multiple;
-    if (m_phy_caps.max_set_multiple == 0)
+    idf[IDE_IDENTIFY_OFFSET_MAX_SECTORS] = 0x8000 | m_devconfig.max_set_multiple;
+    if (m_devconfig.max_set_multiple == 0)
     {
         idf[IDE_IDENTIFY_OFFSET_MULTI_SECTOR_VALID]  = 0;
     }
     else
     {
-        idf[IDE_IDENTIFY_OFFSET_MULTI_SECTOR_VALID] = m_phy_caps.max_set_multiple >= m_ata_state.multiple_mode_sectors ? 0x100 : 0x0;
+        idf[IDE_IDENTIFY_OFFSET_MULTI_SECTOR_VALID] = m_devconfig.max_set_multiple >= m_ata_state.multiple_mode_sectors ? 0x100 : 0x0;
         idf[IDE_IDENTIFY_OFFSET_MULTI_SECTOR_VALID] |= m_ata_state.multiple_mode_sectors;
     }
-    idf[IDE_IDENTIFY_OFFSET_CAPABILITIES_1] = (m_phy_caps.supports_iordy ? 1 << 11 : 0) |
+    idf[IDE_IDENTIFY_OFFSET_CAPABILITIES_1] = (m_devconfig.supports_iordy ? 1 << 11 : 0) |
                                             (1 << 10) | // iordy may be disabled
-                                            (1 << 9)  |  // Shall be set to one
-                                            (1 << 8);    // Shall be set to one
-    idf[IDE_IDENTIFY_OFFSET_PIO_MODE_ATA1] = (m_phy_caps.max_pio_mode << 8);
+                                            (1 << 9)  ;  // Shall be set to one
+
+    if (m_devconfig.max_udma_mode >= 0)
+    {
+        idf[IDE_IDENTIFY_OFFSET_CAPABILITIES_1] |= (1 << 8); // DMA supported
+    }
+    idf[IDE_IDENTIFY_OFFSET_PIO_MODE_ATA1] = (m_devconfig.max_pio_mode << 8);
     // \todo set on older drives
     // idf[IDE_IDENTIFY_OFFSET_OLD_DMA_TIMING_MODE] = 0x0200;
     idf[IDE_IDENTIFY_OFFSET_MODE_INFO_VALID] =  0x01;
-    idf[IDE_IDENTIFY_OFFSET_MODE_INFO_VALID] |= (m_phy_caps.max_udma_mode >= 0) ? 0x04 : 0x00; // UDMA support word valid
-    idf[IDE_IDENTIFY_OFFSET_MODE_INFO_VALID] |= ((m_phy_caps.max_pio_mode >= 3)) ? 0x02 : 0x00; // PIO support word valid
+    idf[IDE_IDENTIFY_OFFSET_MODE_INFO_VALID] |= (m_devconfig.max_udma_mode >= 0) ? 0x04 : 0x00; // UDMA support word valid
+    idf[IDE_IDENTIFY_OFFSET_MODE_INFO_VALID] |= ((m_devconfig.max_pio_mode >= 3)) ? 0x02 : 0x00; // PIO support word valid
     // \todo set on older drives
     idf[IDE_IDENTIFY_OFFSET_CURRENT_CYLINDERS] = m_devinfo.current_cylinders;
     idf[IDE_IDENTIFY_OFFSET_CURRENT_HEADS] = m_devinfo.current_heads;
@@ -831,11 +835,11 @@ bool IDERigidDevice::cmd_identify_device(ide_registers_t *regs)
     idf[IDE_IDENTIFY_OFFSET_TOTAL_SECTORS]     = lba & 0xFFFF;
     idf[IDE_IDENTIFY_OFFSET_TOTAL_SECTORS + 1] = (lba >> 16) & 0xFFFF;
     idf[IDE_IDENTIFY_OFFSET_MODEINFO_SINGLEWORD] = 0;// 0x0007; // disabling single word dma
-    identify_mwdma_modes(idf, m_phy_caps.max_mwdma_mode, m_ata_state.mwdma_mode); // Multiword DMA, words 63, 65 and 66
+    identify_mwdma_modes(idf, m_devconfig.max_mwdma_mode, m_ata_state.mwdma_mode); // Multiword DMA, words 63, 65 and 66
 
-    idf[IDE_IDENTIFY_OFFSET_MODEINFO_PIO] = (m_phy_caps.max_pio_mode >= 3) ? 1 : 0; // PIO3 supported?
-    idf[IDE_IDENTIFY_OFFSET_PIO_CYCLETIME_MIN] = m_phy_caps.min_pio_cycletime_no_iordy; // Without IORDY
-    idf[IDE_IDENTIFY_OFFSET_PIO_CYCLETIME_IORDY] = m_phy_caps.min_pio_cycletime_with_iordy; // With IORDY
+    idf[IDE_IDENTIFY_OFFSET_MODEINFO_PIO] = (m_devconfig.max_pio_mode >= 3) ? 1 : 0; // PIO3 supported?
+    idf[IDE_IDENTIFY_OFFSET_PIO_CYCLETIME_MIN] =   ide_min_pio_cycle_time(m_ata_state.pio_mode, false); // Without IORDY
+    idf[IDE_IDENTIFY_OFFSET_PIO_CYCLETIME_IORDY] = ide_min_pio_cycle_time(m_ata_state.pio_mode, true); // With IORDY
 
     idf[IDE_IDENTIFY_OFFSET_STANDARD_VERSION_MAJOR] = 0x0078; // Version ATAPI-6
     idf[IDE_IDENTIFY_OFFSET_STANDARD_VERSION_MINOR] = 0x0019; // Minor version rev 3a
@@ -853,10 +857,10 @@ bool IDERigidDevice::cmd_identify_device(ide_registers_t *regs)
     //   0x0002 = security feature set available, device is FROZEN
     idf[IDE_IDENTIFY_OFFSET_SECURITY_STATUS] = 0x0000;
 
-    if (m_phy_caps.max_udma_mode >= 0)
+    if (m_devconfig.max_udma_mode >= 0)
     {
         // Bitmask of supported UDMA modes
-        idf[IDE_IDENTIFY_OFFSET_MODEINFO_ULTRADMA] = (2 << m_phy_caps.max_udma_mode) - 1;
+        idf[IDE_IDENTIFY_OFFSET_MODEINFO_ULTRADMA] = (2 << m_devconfig.max_udma_mode) - 1;
         if (m_ata_state.udma_mode >= 0)
         {
             // Active UDMA mode
@@ -949,11 +953,11 @@ bool IDERigidDevice::cmd_set_multiple_mode(ide_registers_t *regs)
         m_ata_state.multiple_mode_sectors = 0;
         return false;
     }
-    else if (block_count > m_phy_caps.max_set_multiple ||
-             block_count > (m_phy_caps.max_blocksize / m_devinfo.bytes_per_sector))
+    else if (block_count > m_devconfig.max_set_multiple ||
+             block_count > (m_devconfig.max_blocksize / m_devinfo.bytes_per_sector))
     {
         dbgmsg("-- Host requested unsupported MULTIPLE_MODE = ", (int)block_count,
-               ", max is ", (int)m_phy_caps.max_set_multiple);
+               ", max is ", (int)m_devconfig.max_set_multiple);
         m_ata_state.multiple_mode_sectors = 0;
         return false;
     }
@@ -1070,7 +1074,7 @@ void IDERigidDevice::handle_event(ide_event_t evt)
             // Hardware reset disables UDMA and selects the default Multiword DMA mode 0
             // (ATA-3 9.4.3, ATA/ATAPI-6 6.6.1 and 10.2.3)
             m_ata_state.udma_mode = -1;
-            m_ata_state.mwdma_mode = (m_phy_caps.max_mwdma_mode >= 0) ? 0 : -1;
+            m_ata_state.mwdma_mode = (m_devconfig.max_mwdma_mode >= 0) ? 0 : -1;
         }
         m_devinfo.seek_executed = false;
         set_device_signature(nullptr, 0, true);
@@ -1138,7 +1142,7 @@ bool IDERigidDevice::ata_send_chunked_data(const uint8_t *data, size_t blocksize
     dbgmsg("---- ATA send ", (int)num_blocks, "x", (int)blocksize, " bytes: ",
         bytearray((const uint8_t*)data, blocksize * num_blocks));
 
-    size_t max_blocksize = m_phy_caps.max_blocksize;
+    size_t max_blocksize = m_devconfig.max_blocksize;
 
     for (size_t i = 0; i < num_blocks; i++)
     {
@@ -1191,7 +1195,7 @@ ssize_t IDERigidDevice::ata_send_data(const uint8_t *data, size_t blocksize, siz
         return blocks_sent;
     }
 
-    size_t max_blocksize = m_phy_caps.max_blocksize;
+    size_t max_blocksize = m_devconfig.max_blocksize;
     if (blocksize > max_blocksize)
     {
         dbgmsg("-- ata_send_data(): Block size ", (int)blocksize, " exceeds limit ", (int)max_blocksize,
@@ -1317,7 +1321,7 @@ bool IDERigidDevice::ata_recv_data(uint8_t *data, size_t blocksize, size_t num_b
 
     int udma_mode = (m_ata_state.dma_requested ? m_ata_state.udma_mode : -1);
     int mwdma_mode = (m_ata_state.dma_requested ? m_ata_state.mwdma_mode : -1);
-    size_t max_blocksize = m_phy_caps.max_blocksize;
+    size_t max_blocksize = m_devconfig.max_blocksize;
     if (blocksize > max_blocksize)
     {
         // Have to split the blocks for phy

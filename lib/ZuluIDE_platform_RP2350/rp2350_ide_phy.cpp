@@ -87,11 +87,7 @@ static struct {
 
 static ide_phy_capabilities_t g_ide_phy_capabilities = {
     .max_blocksize = IDECOMM_MAX_BLOCK_PAYLOAD,
-
-    .supports_iordy = true,
     .max_pio_mode = 3,
-    .min_pio_cycletime_no_iordy = 240,
-    .min_pio_cycletime_with_iordy = 180,
     .max_udma_mode = 2,
     .max_mwdma_mode = 2,
     .max_set_multiple = 8, // currently  IDECOMM_MAX_BLOCK_PAYLOAD / 512 (standard blocksize for rigid)
