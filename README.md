@@ -1,6 +1,8 @@
 ZuluIDE™ Firmware
 =================
 
+[![MemBrowse](https://membrowse.com/badge.svg)](https://membrowse.com/public/ZuluIDE/ZuluIDE-firmware)
+
 ZuluIDE™ is a hardware interface between IDE bus and SD cards. There are two generations of ZuluIDE:
 * ZuluIDE V2, powered by the RP2350B microcontroller
 * The oiriginal ZuluIDE RP2040, powered by the RP2040 mirocontroller and a small field-programmable gate array. This first-generation ZuluIDE is still supported, but ZuluIDE V2 has permanently succeeded it, as it is faster and costs less to produce.
