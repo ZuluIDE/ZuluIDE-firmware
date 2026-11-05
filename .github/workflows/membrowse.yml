@@ -112,3 +112,4 @@ jobs:
           api_key: ${{ secrets.MEMBROWSE_API_KEY }}
           ld:     ${{ matrix.linker_script  }}
           map_file: ".pio/build/${{ matrix.target }}/zuluide.map"  # optional: per-library attribution
+          skip_sections: ".heap"
