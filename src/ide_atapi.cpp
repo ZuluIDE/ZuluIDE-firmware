@@ -465,8 +465,10 @@ bool IDEATAPIDevice::cmd_check_power_mode(ide_registers_t *regs)
 {
     regs->sector_count = 0xFF; // Result value
     dbgmsg("Check Power Mode command is a stub, always reports as Active mode or Idle mode (0xFF). Signaling INTRQ and device ready");
-    ide_phy_assert_irq(IDE_STATUS_DEVRDY | IDE_STATUS_DSC);
+    // Set the result before the interrupt: ide_phy_set_regs() also writes the status register,
+    // which in regs still has BSY set from the command
     ide_phy_set_regs(regs);
+    ide_phy_assert_irq(IDE_STATUS_DEVRDY | IDE_STATUS_DSC);
     return true;
 }
 

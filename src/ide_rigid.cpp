@@ -1013,8 +1013,10 @@ bool IDERigidDevice::cmd_check_power_mode(ide_registers_t *regs)
 {
     regs->sector_count = 0xFF; // Result value
     dbgmsg("Check Power Mode command is a stub, always reports as Active mode or Idle mode (0xFF). Signaling INTRQ and device ready");
-    ide_phy_assert_irq(IDE_STATUS_DEVRDY | IDE_STATUS_DSC);
+    // Set the result before the interrupt: ide_phy_set_regs() also writes the status register,
+    // which in regs still has BSY set from the command
     ide_phy_set_regs(regs);
+    ide_phy_assert_irq(IDE_STATUS_DEVRDY | IDE_STATUS_DSC);
     return true;
 }
 
@@ -1290,6 +1292,11 @@ bool IDERigidDevice::ata_send_wait_finish()
         if ((uint32_t)(millis() - start) > 10000)
         {
             logmsg("IDERigidDevice::ata_send_wait_finish() data write timeout");
+            ide_phy_print_debug();
+
+            // Stop the transfer so that the PHY can interrupt host for the error, it cannot
+            // assert INTRQ in the middle of a Multiword DMA transfer
+            ide_phy_stop_transfers();
             return false;
         }
 
@@ -1338,7 +1345,7 @@ bool IDERigidDevice::ata_recv_data(uint8_t *data, size_t blocksize, size_t num_b
     }
 
     // Start data transfer for first block
-    ide_phy_start_ata_read(blocksize, udma_mode, mwdma_mode);
+    ide_phy_start_ata_read(blocksize, udma_mode, mwdma_mode, num_blocks);
 
     // Receive blocks
     for (size_t i = 0; i < num_blocks; i++)
@@ -1356,7 +1363,8 @@ bool IDERigidDevice::ata_recv_data(uint8_t *data, size_t blocksize, size_t num_b
 
             if (ide_phy_is_command_interrupted())
             {
-                dbgmsg("IDERigidDevice::ata_recv_data() interrupted");
+                dbgmsg("IDERigidDevice::ata_recv_data() interrupted on block ", (int)(i + 1), "/", (int)num_blocks,
+                       " of ", (int)blocksize, " bytes");
                 ide_phy_print_debug();
                 return false;
             }

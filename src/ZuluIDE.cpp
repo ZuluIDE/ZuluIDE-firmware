@@ -419,8 +419,11 @@ void save_logfile(bool always = false)
 
     if (loglen != prev_log_len && g_sdcard_present)
     {
-        // Save log at most every LOG_SAVE_INTERVAL_MS
-        if (always || (LOG_SAVE_INTERVAL_MS > 0 && (uint32_t)(millis() - prev_log_save) > LOG_SAVE_INTERVAL_MS))
+        // Save log at most every LOG_SAVE_INTERVAL_MS, or when half of the log buffer is unsaved.
+        // With debug messages of a busy host the buffer otherwise wrapped over 0.4 s of messages
+        // in every second.
+        if (always || (uint32_t)(loglen - prev_log_pos) > LOGBUFSIZE / 2 ||
+            (LOG_SAVE_INTERVAL_MS > 0 && (uint32_t)(millis() - prev_log_save) > LOG_SAVE_INTERVAL_MS))
         {
             g_logfile.write(log_get_buffer(&prev_log_pos));
             g_logfile.flush();

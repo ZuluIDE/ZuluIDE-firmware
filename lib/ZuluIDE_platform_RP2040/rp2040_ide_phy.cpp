@@ -357,9 +357,10 @@ void ide_phy_start_read_buffer(uint32_t blocklen)
     g_ide_phy.transfer_running = true;
 }
 
-void ide_phy_start_ata_read(uint32_t blocklen, int udma_mode, int mwdma_mode)
+void ide_phy_start_ata_read(uint32_t blocklen, int udma_mode, int mwdma_mode, uint32_t num_blocks)
 {
     (void)mwdma_mode; // Not supported, see ide_phy_start_write()
+    (void)num_blocks; // The FPGA receives one block at a time
     // dbgmsg("ide_phy_start_read(", (int)blocklen, ", ", udma_mode, ")");
     g_ide_phy.crc_errors = 0;
     g_ide_phy.block_crc1 = g_ide_phy.block_crc0 = 0;

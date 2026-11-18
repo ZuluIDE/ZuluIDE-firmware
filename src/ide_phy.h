@@ -141,7 +141,9 @@ void ide_phy_read_block(uint8_t *buf, uint32_t blocklen, bool continue_transfer 
 
 // ATA version of start_read() differs in that it does not assert IRQ
 // for the first data block. See figure 28 in T13/1410D revision 3a.
-void ide_phy_start_ata_read(uint32_t blocklen, int udma_mode = -1, int mwdma_mode = -1);
+// num_blocks is the number of blocks that the device implementation reads with
+// ide_phy_ata_read_block(), 0 if not known. A PHY may then receive a block ahead.
+void ide_phy_start_ata_read(uint32_t blocklen, int udma_mode = -1, int mwdma_mode = -1, uint32_t num_blocks = 0);
 void ide_phy_ata_read_block(uint8_t *buf, uint32_t blocklen, bool continue_transfer = false);
 
 // Stop any running or finished transfers.

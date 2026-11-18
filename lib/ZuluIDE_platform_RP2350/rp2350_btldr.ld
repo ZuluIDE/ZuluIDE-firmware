@@ -50,7 +50,7 @@ SECTIONS
      * reduce the flash usage.
      */
     /DISCARD/ : {
-        *libzuluide*(*)
+        *libzuluide*:*(*)
         *printf*(*)
         *scanf*(*)
         *dtoa*(*)
