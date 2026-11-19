@@ -362,23 +362,18 @@ bool IDEATAPIDevice::cmd_packet(ide_registers_t *regs)
 
     if (m_atapi_state.dma_requested && m_atapi_state.udma_mode < 0 && m_atapi_state.mwdma_mode < 0)
     {
-        // JM20337 uses UDMA without selecting a mode. Multiword DMA mode 0 is the
-        // power-on default of ATA-3, but only used if UDMA is not available.
+        // JM20337 uses UDMA without selecting a mode.
         if (m_devconfig.max_udma_mode >= 0)
         {
             dbgmsg("---- Host requested DMA transfer while DMA mode is not selected, enabling UDMA0!");
             m_atapi_state.udma_mode = 0;
         }
-#ifdef ENABLE_MWDMA
-        else if (m_devconfig.max_mwdma_mode >= 0)
-        {
-            dbgmsg("---- Host requested DMA transfer while DMA mode is not selected, enabling Multiword DMA mode 0!");
-            m_atapi_state.mwdma_mode = 0;
-        }
-#endif
         else
         {
-            logmsg("---- Host requested DMA  transfer but PHY does not support, continuing with PIO!");
+            // Older systems like the FMV-TOWNS may not set the feature register before a packet command
+            // possibly leaving DMA requested even though no DMA mode has been enabled. In this case
+            // disable the dma_requested
+            m_atapi_state.dma_requested = false;
         }
     }
 
