@@ -34,7 +34,7 @@
 #define FW_VER_NUM      "2026.11.20"
 #define FW_VER_SUFFIX   "devel"
 // #define FW_VER_BUILD    "1"
-#if FW_VER_BUILD
+#ifdef FW_VER_BUILD
 # define ZULU_FW_VERSION FW_VER_NUM "-" FW_VER_SUFFIX "." FW_VER_BUILD
 #else
 # define ZULU_FW_VERSION FW_VER_NUM "-" FW_VER_SUFFIX
