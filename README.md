@@ -37,7 +37,8 @@ Image files
 - For Zip drives and removable drives the extension is optional but also any extension is valid, except for `.iso`, `.bin/.cue`, and any extension on the [ignored list](#ignored-list). The images are used in alphabetic order.
 - If a prefix to specify the drive is used, all other files that wish to be inserted and ejected into the drive must have the same prefix. The files are used alphabetically.
  - If ZuluIDE has defaulted to a CD-ROM drive, the first image that it finds on the SD card will be used as a CD. This filename is logged to zululog.txt
- - For rigid hard disk emulation, any raw file format (regardless of file suffix, `.img`, `.ima`, `.hda`, `.hfs`) will work. In addition, later ZuluIDE firmware versions support Virtual Hard Disk Version 1 (only, V2 not supported) image files.
+ - For rigid hard disk emulation, any raw file format (regardless of file suffix, `.img`, `.ima`, `.hda`, `.hfs`) will work.
+ - Recent ZuluIDE firmware versions also support VHDv1 (Virtual Hard Disk Version 1 **only**, V2 .VHDX is not supported) image files.
 
 Any file on the [ignored list](#ignored-list) will not be used as an device image.
 
@@ -71,6 +72,13 @@ To configure a typical setup with a harddrive as primary and a CD-ROM as seconda
 
 You can optionally name the file `HD1.bin` to make the harddrive secondary and CD drive primary.
 DIP switch primary / secondary / cable selection setting is ignored when in dual drive mode.
+
+Supported transfer modes with ZuluIDE V2
+-------------------------
+ZuluIDE V2 supports the following transfer modes:
+* Ultra DMA transfer modes modes 0-2 (up to ATA/33). 80-conductor cables are not required for ATA/33.
+* Multi-word DMA modes 0-2, with the [latest firmware](https://github.com/ZuluIDE/ZuluIDE-firmware/releases/latest)
+* Programmed I/O modes 0-3
 
 USB Mass Storage
 ----------------

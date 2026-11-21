@@ -47,6 +47,8 @@ void usb_command_poll()
         rx_len += available;
     }
 
+    ideConsolePoll();
+
     if (rx_len == 0) return;
 
     // Initial mode: Display the menu if any key but `L` or whitespace is pressed,

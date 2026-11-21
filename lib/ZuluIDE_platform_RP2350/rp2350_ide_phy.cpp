@@ -96,11 +96,7 @@ static struct {
 
 static ide_phy_capabilities_t g_ide_phy_capabilities = {
     .max_blocksize = IDECOMM_MAX_BLOCK_PAYLOAD,
-
-    .supports_iordy = true,
     .max_pio_mode = 3,
-    .min_pio_cycletime_no_iordy = 240,
-    .min_pio_cycletime_with_iordy = 180,
     .max_udma_mode = 2,
     .max_mwdma_mode = 2,
     .max_set_multiple = 8, // currently  IDECOMM_MAX_BLOCK_PAYLOAD / 512 (standard blocksize for rigid)
@@ -821,6 +817,22 @@ void ide_phy_stop_transfers(int *crc_errors)
         g_idecomm.set_regs_seq = g_ide_phy.cmd_seq;
         __sync_synchronize();
         ide_phy_post_request(CORE1_REQ_STOP_TRANSFERS);
+
+        // Wait for core1 to handle the stop before returning. Core1 skips start requests that
+        // are in the same batch as a stop, so a transfer started right after this would be
+        // silently dropped and the command completed without data. This happens when core0
+        // responds to an ATAPI packet while core1 is still in the register write handler.
+        uint32_t start = time_us_32();
+        while (ide_phy_check_pending_request(CORE1_REQ_STOP_TRANSFERS | CORE1_REQ_BUSY))
+        {
+            if ((uint32_t)(time_us_32() - start) > CORE1_RESPONSE_DELAY)
+            {
+                logmsg("ide_phy_stop_transfers: Core1 is not responding");
+                ide_phy_print_debug();
+                break;
+            }
+        }
+
         ide_phy_clear_event(CORE1_EVT_DATA_DONE);
 
         if (ide_phy_set_blocksize(0))

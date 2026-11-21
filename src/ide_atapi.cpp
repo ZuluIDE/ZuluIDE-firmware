@@ -31,6 +31,7 @@
 #include <minIni.h>
 #include <zuluide/images/image_iterator.h>
 #include <status/status_controller.h>
+#include "ide_activity.h"
 
 extern zuluide::status::StatusController g_StatusController;
 extern zuluide::status::SystemStatus g_previous_controller_status;
@@ -92,8 +93,8 @@ bool IDEATAPIDevice::handle_command(ide_registers_t *regs)
     switch (regs->command)
     {
         // Commands superseded by the ATAPI packet interface
-        case IDE_CMD_IDENTIFY_DEVICE: [[fallthrough]];
-        case IDE_CMD_READ_SECTORS: [[fallthrough]];
+        case IDE_CMD_IDENTIFY_DEVICE:   [[fallthrough]];
+        case IDE_CMD_READ_SECTORS:      [[fallthrough]];
         case IDE_CMD_READ_SECTORS_EXT:
             return set_device_signature(regs, IDE_ERROR_ABORT, false);
         case IDE_CMD_EXECUTE_DEVICE_DIAGNOSTIC:
@@ -105,13 +106,15 @@ bool IDEATAPIDevice::handle_command(ide_registers_t *regs)
         case IDE_CMD_PACKET: return cmd_packet(regs);
         case IDE_CMD_DEVICE_RESET: return cmd_device_reset(regs);
         case IDE_CMD_FLUSH_CACHE: return cmd_flush_cache(regs);
-        case IDE_CMD_IDLE_IMMEDIATE_95H: [[fallthrough]];
-        case IDE_CMD_IDLE_IMMEDIATE_E1H: [[fallthrough]];
-        case IDE_CMD_IDLE_97H:           [[fallthrough]];
-        case IDE_CMD_IDLE_E3H: return cmd_idle(regs);
+        case IDE_CMD_IDLE_IMMEDIATE_95H:    [[fallthrough]];
+        case IDE_CMD_IDLE_IMMEDIATE_E1H:    [[fallthrough]];
+        case IDE_CMD_IDLE_97H:              [[fallthrough]];
+        case IDE_CMD_IDLE_E3H:              return cmd_idle(regs);
         case IDE_CMD_CHECK_POWER_MODE: return cmd_check_power_mode(regs);
-        case IDE_CMD_SET_MULTIPLE_MODE: [[fallthrough]];
-        case IDE_CMD_INIT_DEV_PARAMS: return cmd_unsupported(regs);
+        case IDE_CMD_SET_MULTIPLE_MODE:         [[fallthrough]];
+        case IDE_CMD_INIT_DEV_PARAMS: return    cmd_unsupported(regs);
+        case IDE_CMD_SLEEP_99H: [[fallthrough]];
+        case IDE_CMD_SLEEP_E6H: return cmd_stubbed(regs);
         default: return false;
     }
 }
@@ -161,20 +164,22 @@ bool IDEATAPIDevice::cmd_set_features(ide_registers_t *regs)
             m_atapi_state.pio_mode = 0;
             ide_phy_set_pio_mode(0);
         }
-        else if (mode_major == 1 && mode_minor <= m_phy_caps.max_pio_mode)
+        else if (mode_major == 1 && mode_minor <= m_devconfig.max_pio_mode)
         {
             logmsg("-- DEV", m_devconfig.dev_index, ": Set PIO transfer mode ", (int)mode_minor);
             m_atapi_state.pio_mode = mode_minor;
             ide_phy_set_pio_mode(mode_minor);
         }
-        else if (mode_major == 4 && mode_minor <= m_phy_caps.max_mwdma_mode)
+#ifdef ENABLE_MWDMA
+        else if (mode_major == 4 && mode_minor <= m_devconfig.max_mwdma_mode)
         {
             // Only one DMA mode is enabled at a time
             m_atapi_state.mwdma_mode = mode_minor;
             m_atapi_state.udma_mode = -1;
             logmsg("-- DEV", m_devconfig.dev_index, ": Set Multiword DMA transfer mode ", (int)mode_minor);
         }
-        else if (mode_major == 8 && mode_minor <= m_phy_caps.max_udma_mode)
+#endif
+        else if (mode_major == 8 && mode_minor <= m_devconfig.max_udma_mode)
         {
             m_atapi_state.udma_mode = mode_minor;
             m_atapi_state.mwdma_mode = -1;
@@ -258,7 +263,7 @@ void IDEATAPIDevice::atapi_identify_packet_device_response(uint16_t *idf)
     idf[IDE_IDENTIFY_OFFSET_COMMAND_SET_SUPPORT_2] = 0x4000;
     idf[IDE_IDENTIFY_OFFSET_COMMAND_SET_SUPPORT_3] = 0x4000;
     idf[IDE_IDENTIFY_OFFSET_COMMAND_SET_ENABLED_1] = 0x0014;
-    idf[IDE_IDENTIFY_OFFSET_BYTE_COUNT_ZERO] = m_phy_caps.max_blocksize; // Number of bytes transferred when bytes_req = 0
+    idf[IDE_IDENTIFY_OFFSET_BYTE_COUNT_ZERO] = m_devconfig.max_blocksize; // Number of bytes transferred when bytes_req = 0
 
     // Diagnostics results
     if (m_devconfig.dev_index == 0)
@@ -279,28 +284,24 @@ void IDEATAPIDevice::atapi_identify_packet_device_response(uint16_t *idf)
     }
 
     // Supported PIO modes
-    if (m_phy_caps.supports_iordy) idf[IDE_IDENTIFY_OFFSET_CAPABILITIES_1] |= (1 << 11);
-    idf[IDE_IDENTIFY_OFFSET_PIO_MODE_ATA1] = (m_phy_caps.max_pio_mode << 8);
+    if (m_devconfig.supports_iordy) idf[IDE_IDENTIFY_OFFSET_CAPABILITIES_1] |= (1 << 11);
+    idf[IDE_IDENTIFY_OFFSET_PIO_MODE_ATA1] = (m_devconfig.max_pio_mode << 8);
     idf[IDE_IDENTIFY_OFFSET_MODE_INFO_VALID] |= 0x02; // PIO support word valid
-    idf[IDE_IDENTIFY_OFFSET_MODEINFO_PIO] = (m_phy_caps.max_pio_mode >= 3) ? 1 : 0; // PIO3 supported?
-    idf[IDE_IDENTIFY_OFFSET_PIO_CYCLETIME_MIN] = m_phy_caps.min_pio_cycletime_no_iordy; // Without IORDY
-    idf[IDE_IDENTIFY_OFFSET_PIO_CYCLETIME_IORDY] = m_phy_caps.min_pio_cycletime_with_iordy; // With IORDY
+    idf[IDE_IDENTIFY_OFFSET_MODEINFO_PIO] = (m_devconfig.max_pio_mode >= 3) ? 1 : 0; // PIO3 supported?
+    idf[IDE_IDENTIFY_OFFSET_PIO_CYCLETIME_MIN] =   ide_min_pio_cycle_time(m_atapi_state.pio_mode, false);
+    idf[IDE_IDENTIFY_OFFSET_PIO_CYCLETIME_IORDY] = ide_min_pio_cycle_time(m_atapi_state.pio_mode, true); // With IORDY
 
     // Supported Multiword DMA modes
-    identify_mwdma_modes(idf, m_phy_caps.max_mwdma_mode, m_atapi_state.mwdma_mode);
-    if (m_phy_caps.max_mwdma_mode >= 0)
-    {
-        idf[IDE_IDENTIFY_OFFSET_CAPABILITIES_1] |= (1 << 8); // DMA supported
-    }
+    identify_mwdma_modes(idf, m_devconfig.max_mwdma_mode, m_atapi_state.mwdma_mode);
 
     // Supported UDMA modes
     idf[IDE_IDENTIFY_OFFSET_MODE_INFO_VALID] |= 0x04; // UDMA support word valid
-    if (m_phy_caps.max_udma_mode >= 0)
+    if (m_devconfig.max_udma_mode >= 0)
     {
         idf[IDE_IDENTIFY_OFFSET_CAPABILITIES_1] |= (1 << 8);
 
         // Bitmask of supported UDMA modes
-        idf[IDE_IDENTIFY_OFFSET_MODEINFO_ULTRADMA] = (2 << m_phy_caps.max_udma_mode) - 1;
+        idf[IDE_IDENTIFY_OFFSET_MODEINFO_ULTRADMA] = (2 << m_devconfig.max_udma_mode) - 1;
         if (m_atapi_state.udma_mode >= 0)
         {
             // Active UDMA mode
@@ -363,16 +364,18 @@ bool IDEATAPIDevice::cmd_packet(ide_registers_t *regs)
     {
         // JM20337 uses UDMA without selecting a mode. Multiword DMA mode 0 is the
         // power-on default of ATA-3, but only used if UDMA is not available.
-        if (m_phy_caps.max_udma_mode >= 0)
+        if (m_devconfig.max_udma_mode >= 0)
         {
             dbgmsg("---- Host requested DMA transfer while DMA mode is not selected, enabling UDMA0!");
             m_atapi_state.udma_mode = 0;
         }
-        else if (m_phy_caps.max_mwdma_mode >= 0)
+#ifdef ENABLE_MWDMA
+        else if (m_devconfig.max_mwdma_mode >= 0)
         {
             dbgmsg("---- Host requested DMA transfer while DMA mode is not selected, enabling Multiword DMA mode 0!");
             m_atapi_state.mwdma_mode = 0;
         }
+#endif
         else
         {
             logmsg("---- Host requested DMA  transfer but PHY does not support, continuing with PIO!");
@@ -383,7 +386,7 @@ bool IDEATAPIDevice::cmd_packet(ide_registers_t *regs)
     {
         // "the host should not set the byte count limit to zero. If the host sets the byte count limit to
         // zero, the contents of IDENTIFY PACKET DEVICE word 125 determines the expected behavior"
-        m_atapi_state.bytes_req = m_phy_caps.max_blocksize;
+        m_atapi_state.bytes_req = m_devconfig.max_blocksize;
     }
 
 #ifdef IDE_PHY_NO_DIRECT_ATAPI_SUPPORT
@@ -464,9 +467,7 @@ bool IDEATAPIDevice::cmd_idle(ide_registers_t *regs)
 bool IDEATAPIDevice::cmd_check_power_mode(ide_registers_t *regs)
 {
     regs->sector_count = 0xFF; // Result value
-    dbgmsg("Check Power Mode command is a stub, always reports as Active mode or Idle mode (0xFF). Signaling INTRQ and device ready");
-    // Set the result before the interrupt: ide_phy_set_regs() also writes the status register,
-    // which in regs still has BSY set from the command
+    dbgmsg("Check Power Mode command is a stub, always reports as Active mode or Idle mode (0xFF)");
     ide_phy_set_regs(regs);
     ide_phy_assert_irq(IDE_STATUS_DEVRDY | IDE_STATUS_DSC);
     return true;
@@ -478,6 +479,13 @@ bool IDEATAPIDevice::cmd_unsupported(ide_registers_t *regs)
     regs->error = IDE_ERROR_ABORT;
     ide_phy_set_regs(regs);
     ide_phy_assert_irq(IDE_STATUS_DEVRDY | IDE_STATUS_DSC | IDE_STATUS_ERR);
+    return true;
+}
+
+bool IDEATAPIDevice::cmd_stubbed(ide_registers_t *regs)
+{
+    dbgmsg("-- ATA command stubbed (ATAPI DEV", m_devconfig.dev_index, ")");
+    ide_phy_assert_irq(IDE_STATUS_DEVRDY | IDE_STATUS_DSC);
     return true;
 }
 
@@ -567,7 +575,12 @@ bool IDEATAPIDevice::atapi_send_data(const uint8_t *data, size_t blocksize, size
     dbgmsg("---- ATAPI send ", (int)num_blocks, "x", (int)blocksize, " bytes: ",
         bytearray((const uint8_t*)data, blocksize * num_blocks));
 
-    size_t max_blocksize = std::min<size_t>(m_phy_caps.max_blocksize, m_atapi_state.bytes_req);
+    size_t max_blocksize = std::min<size_t>(m_devconfig.max_blocksize, m_atapi_state.bytes_req);
+    if (max_blocksize > 1)
+    {
+        // Data is transferred as 16-bit words, only the last block may have an odd length
+        max_blocksize &= ~(size_t)1;
+    }
 
     for (size_t i = 0; i < num_blocks; i++)
     {
@@ -584,7 +597,7 @@ bool IDEATAPIDevice::atapi_send_data(const uint8_t *data, size_t blocksize, size
         }
 
         // Send rest as single block (common case)
-        if (!atapi_send_data_block(data + blocksize * i + sent, blocksize))
+        if (!atapi_send_data_block(data + blocksize * i + sent, blocksize - sent))
         {
             return false;
         }
@@ -620,7 +633,7 @@ ssize_t IDEATAPIDevice::atapi_send_data_async(const uint8_t *data, size_t blocks
         return blocks_sent;
     }
 
-    size_t max_blocksize = std::min<size_t>(m_phy_caps.max_blocksize, m_atapi_state.bytes_req);
+    size_t max_blocksize = std::min<size_t>(m_devconfig.max_blocksize, m_atapi_state.bytes_req);
     if (blocksize > max_blocksize)
     {
         dbgmsg("-- atapi_send_data_async(): Block size ", (int)blocksize, " exceeds limit ", (int)max_blocksize,
@@ -753,7 +766,7 @@ bool IDEATAPIDevice::atapi_send_wait_finish()
 
 bool IDEATAPIDevice::atapi_recv_data(uint8_t *data, size_t blocksize, size_t num_blocks)
 {
-    size_t phy_max_blocksize = m_phy_caps.max_blocksize;
+    size_t phy_max_blocksize = m_devconfig.max_blocksize;
     size_t max_blocksize = std::min<size_t>(phy_max_blocksize, m_atapi_state.bytes_req);
     if (blocksize > max_blocksize)
     {
@@ -1514,7 +1527,10 @@ bool IDEATAPIDevice::doRead(uint32_t lba, uint32_t transfer_len)
 ssize_t IDEATAPIDevice::read_callback(const uint8_t *data, size_t blocksize, size_t num_blocks)
 {
     platform_poll();
-    return atapi_send_data_async(data, blocksize, num_blocks);
+    ssize_t blocks_sent = atapi_send_data_async(data, blocksize, num_blocks);
+    if (blocks_sent > 0)
+        g_ide_activity.add_read(m_devconfig.dev_index, blocks_sent * blocksize);
+    return blocks_sent;
 }
 
 // Parse ATAPI WRITE command
@@ -1590,6 +1606,7 @@ ssize_t IDEATAPIDevice::write_callback(uint8_t *data, size_t blocksize, size_t n
 {
     if (atapi_recv_data(data, blocksize, num_blocks))
     {
+        g_ide_activity.add_write(m_devconfig.dev_index, num_blocks * blocksize);
         return num_blocks;
     }
     else
@@ -1734,7 +1751,7 @@ void IDEATAPIDevice::eject_media()
         }
         else
         {
-            dbgmsg("Device ejecting media, image already cleared");
+            logmsg("Device ejecting media");
         }
         m_removable.ejected = true;
         clear_eject_deferred();

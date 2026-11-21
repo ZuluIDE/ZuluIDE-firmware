@@ -31,6 +31,8 @@
 #include <hardware/resets.h>
 #include <pico/bootrom.h>
 #include <ZuluIDE.h>
+#include <ide_activity.h>
+#include <ZuluIDE_usb_console.h>
 #include "ide_phy.h"
 #include <SdFat.h>
 #include <assert.h>
@@ -298,7 +300,7 @@ void platform_late_init()
 }
 
 void platform_poll_input() {
-  g_rotary_input.Poll();
+  platform_ui_poll_input();
 }
 
 static bool g_fast_dasp_asserted = false;
@@ -542,6 +544,9 @@ void usb_log_poll()
                 // Limit to CDC packet size
         uint32_t len = available;
         if (len == 0) return;
+
+        // Clear the USB console throughput line so log text starts on a clean line
+        if (!ideConsoleClearLiveLine()) return;
         if (len > CFG_TUD_CDC_EP_BUFSIZE) len = CFG_TUD_CDC_EP_BUFSIZE;
 
         // Update log position by the actual number of bytes sent
@@ -905,6 +910,7 @@ void platform_poll(bool only_from_main)
     // Monitor supply voltage and process USB events
     adc_poll();
     usb_log_poll();
+    g_ide_activity.poll();
     usb_command_poll();
     if (only_from_main)
     {
@@ -1057,8 +1063,10 @@ void zuluide_main_loop1(void)
     {
         // Process status update, if any exist.
         if (!uiStatusController->ProcessUpdate()) {
-            // If no updates happend, refresh the display (enables animation)
-            display.Refresh();
+            // If no updates happend, refresh the display (enables animation),
+            // slowed down while IDE data is moving
+            if (platform_ui_display_refresh_due())
+                display.Refresh();
         }
         g_controllerImageResponsePipe->ProcessUpdates();
         g_I2cServer.Poll();

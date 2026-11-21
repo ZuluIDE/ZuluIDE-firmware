@@ -42,3 +42,12 @@ void ideConsoleMenuProcess(char c);
 
 // Enter the media management menu.
 void ideConsoleMenuEnter();
+
+// Called regularly from usb_command_poll() to update the live
+// throughput line while the throughput monitor is shown.
+void ideConsolePoll();
+
+// Called by usb_log_poll() before sending log data. Clears the live
+// throughput line if it is shown so log text does not mix with it.
+// Returns false if the clear could not be sent yet, hold the log until later.
+bool ideConsoleClearLiveLine();

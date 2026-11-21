@@ -27,6 +27,7 @@
 #include "ZuluIDE_platform.h"
 #include "ZuluIDE_config.h"
 #include "ZuluIDE_log.h"
+#include "ide_activity.h"
 #include <ZuluIDE_reboot_platform.h>
 #include <zuluide/images/image_iterator.h>
 #include <string.h>
@@ -115,6 +116,7 @@ enum class MenuState : uint8_t
     MainMenuExitMSCConfirm,   // Waiting for 'y' confirmation on exiting USB SD card reader mode
     ImageSelection,           // Image list and selection for primary device
     ImageSelectionList,       // Browsing enumerated images
+    ThroughputMonitor,        // Live transfer throughput line, any key exits
 };
 
 static MenuState s_state            = MenuState::Inactive;
@@ -122,6 +124,16 @@ static bool      s_menu_just_entered = false; // show menu once then re-process 
 static int       s_image_cnt        = 0;    // cached image count for ImageSelectionList
 static char      s_num_buf[4]       = {};   // digit accumulator for image selection
 static uint8_t   s_num_len          = 0;
+
+// Throughput monitor line, written out a piece at a time so a slow or
+// stalled USB host never blocks IDE transfers
+static char      s_tp_line[160]     = {};
+static uint32_t  s_tp_pos           = 0;
+static uint32_t  s_tp_len           = 0;
+static uint32_t  s_tp_sample        = 0;
+// Set once part of the line has been sent, log output must clear it first
+static bool      s_tp_visible       = false;
+static uint32_t  s_tp_clear_pos     = 0;
 
 // -----------------------------------------------------------------------
 // Display helpers
@@ -143,6 +155,10 @@ static void show_main_menu()
     serial_out("    'l' - toggle logging to SD card [");
     serial_out(g_log_to_sd ? "ON" : "OFF");
     serial_println("]");
+#ifdef PLATFORM_MASS_STORAGE
+    if (!platform_in_msc_mode())
+#endif
+        serial_println("    't' - show transfer throughput");
 #ifdef PLATFORM_MASS_STORAGE
     if (!platform_in_msc_mode())
     {
@@ -186,6 +202,31 @@ static void show_image_selection()
     serial_println("    'b' - back to main menu");
     serial_println("    'q' - exit menu");
     serial_println("  Or type image number + Enter to load directly:");
+}
+
+static void format_throughput_line()
+{
+    const IDEActivity &tp = g_ide_activity;
+    const int all = IDEActivity::ALL_DEVICES;
+    // "\x1b[2K" clears the current line so each update overwrites the last
+    snprintf(s_tp_line, sizeof(s_tp_line),
+        "\r\x1b[2KDev0 R/W/C: %lu/%lu/%lu  Dev1 R/W/C: %lu/%lu/%lu  Both R/W/C: %lu/%lu/%lu kB/s\r",
+        (unsigned long)tp.read_kBps(0), (unsigned long)tp.write_kBps(0), (unsigned long)tp.combined_kBps(0),
+        (unsigned long)tp.read_kBps(1), (unsigned long)tp.write_kBps(1), (unsigned long)tp.combined_kBps(1),
+        (unsigned long)tp.read_kBps(all), (unsigned long)tp.write_kBps(all), (unsigned long)tp.combined_kBps(all));
+    s_tp_len = strlen(s_tp_line);
+    s_tp_pos = 0;
+}
+
+static void show_throughput_monitor()
+{
+    serial_println("");
+    serial_out("  Transfer throughput in kB/s (R = read, W = write, C = combined), updated every ");
+    serial_out_int(static_cast<int>(g_ide_activity.output_interval_ms()));
+    serial_println(" ms");
+    serial_println("  Press any key to return to the main menu");
+    s_tp_sample = g_ide_activity.sample_count();
+    format_throughput_line();
 }
 
 // Enumerate images via ImageIterator, print each one, return count.
@@ -286,6 +327,50 @@ bool ideConsoleMenuActive()
     return s_state != MenuState::Inactive;
 }
 
+void ideConsolePoll()
+{
+    if (s_state != MenuState::ThroughputMonitor)
+        return;
+
+    // A new output sample arrives once per output interval (throughput_output_ms)
+    const uint32_t sample = g_ide_activity.sample_count();
+    if (s_tp_sample != sample)
+    {
+        // Newer values replace any part of the old line not yet sent
+        s_tp_sample = sample;
+        format_throughput_line();
+    }
+
+    // Only write when the log is flushed so log lines are not split up
+    if (s_tp_pos < s_tp_len && log_buffer_is_empty() && platform_serial_ready())
+    {
+        uint32_t sent = platform_serial_write(reinterpret_cast<uint8_t *>(s_tp_line + s_tp_pos), s_tp_len - s_tp_pos);
+        s_tp_pos += sent;
+        if (sent > 0)
+            s_tp_visible = true;
+    }
+}
+
+bool ideConsoleClearLiveLine()
+{
+    if (!s_tp_visible)
+        return true;
+
+    // Return cursor to column 0 and clear the line, the escape sequence
+    // must go out whole before any log text
+    static const char clear[] = "\r\x1b[2K";
+    const uint32_t len = sizeof(clear) - 1;
+    s_tp_clear_pos += platform_serial_write(reinterpret_cast<uint8_t *>(const_cast<char *>(clear + s_tp_clear_pos)), len - s_tp_clear_pos);
+    if (s_tp_clear_pos < len)
+        return false;
+
+    s_tp_clear_pos = 0;
+    s_tp_visible   = false;
+    // Redraw the whole line once the log has been sent
+    s_tp_pos       = 0;
+    return true;
+}
+
 void ideConsoleMenuEnter()
 {
     s_num_len          = 0;
@@ -326,6 +411,18 @@ void ideConsoleMenuProcess(char c)
                         s_state = MenuState::MainMenuMediaConfirm;
                         serial_println("  Enter Media Menu? Press 'y' to confirm or any other key to cancel:");
                     }
+                    break;
+
+                case 't':
+#ifdef PLATFORM_MASS_STORAGE
+                    if (platform_in_msc_mode())
+                    {
+                        show_main_menu();
+                        break;
+                    }
+#endif
+                    s_state = MenuState::ThroughputMonitor;
+                    show_throughput_monitor();
                     break;
 
                 case 'd':
@@ -670,6 +767,20 @@ void ideConsoleMenuProcess(char c)
 
             // Any other key: re-show prompt
             serial_println("  Enter number + Enter, or 'b' to cancel:");
+            break;
+        }
+
+        // ----------------------------------------------------------------
+        case MenuState::ThroughputMonitor:
+        {
+            // Any key stops the monitor, the key itself is consumed
+            s_tp_len            = 0;
+            s_tp_pos            = 0;
+            s_tp_visible        = false;
+            serial_println("");
+            s_state             = MenuState::MainMenu;
+            s_menu_just_entered = true;
+            ideConsoleMenuProcess(0);
             break;
         }
 

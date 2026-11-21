@@ -276,12 +276,12 @@ bool IDEZipDrive::cmd_identify_packet_device(ide_registers_t *regs)
         idf[IDE_IDENTIFY_OFFSET_PIO_MODE_ATA1] = 0x0200;
         idf[IDE_IDENTIFY_OFFSET_MODE_INFO_VALID] = 0x0006;
         idf[IDE_IDENTIFY_OFFSET_MODEINFO_PIO] = 0x0001;
-        if (m_phy_caps.max_mwdma_mode >= 0)
+        if (m_devconfig.max_mwdma_mode >= 0)
         {
             // Multiword DMA modes 0 and 1 like the real drive, which reports mode 1 active
             // until host selects a mode
             int active_mode = (m_atapi_state.mwdma_mode >= 0) ? m_atapi_state.mwdma_mode : 1;
-            identify_mwdma_modes(idf, std::min(m_phy_caps.max_mwdma_mode, 1), active_mode);
+            identify_mwdma_modes(idf, std::min(m_devconfig.max_mwdma_mode, 1), active_mode);
         }
         else
         {

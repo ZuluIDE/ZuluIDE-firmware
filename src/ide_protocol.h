@@ -149,10 +149,10 @@ protected:
         int ide_identify_gencfg;
         int block_read_delay_us;
         int block_write_delay_us;
+        bool supports_iordy;
     } m_devconfig;
 
-    // PHY capabilities limited by active device configuration
-    ide_phy_capabilities_t m_phy_caps;
+    ide_phy_capabilities_t  m_phy_caps;
 
     // Fill IDENTIFY (PACKET) DEVICE word 63 with the Multiword DMA modes supported up to max_mode
     // and the active mode, and words 65..66 with the Multiword DMA cycle times.
@@ -171,4 +171,7 @@ const ide_phy_config_t *ide_protocol_get_config();
 
 // Call this periodically to process events
 void ide_protocol_poll();
+
+// Return the minumum cycle time for a give pio mode and if iordy is enabled
+uint16_t ide_min_pio_cycle_time(uint8_t pio_mode, bool iordy_enabled);
 

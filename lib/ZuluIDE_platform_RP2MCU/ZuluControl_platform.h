@@ -47,6 +47,33 @@ extern zuluide::i2c::I2CServer g_I2cServer;
 uint8_t platform_check_for_controller();
 
 /**
+   Throttle the UI while IDE data is moving. Returns true when the scrolling
+   display refresh should run now. See [UI] busy_display_refresh_ms in zuluide.ini.
+   Any input change restores the full refresh rate for 3 seconds.
+ */
+bool platform_ui_display_refresh_due();
+
+/**
+   Poll the buttons and rotary dial, throttled to [UI] busy_input_poll_ms while
+   IDE data is moving. Any input change restores full rate polling for 3 seconds.
+   Also delivers the events queued by platform_ui_sample_input().
+ */
+void platform_ui_poll_input();
+
+/**
+   Sample the buttons and rotary dial from inside IDE transfers, only during the
+   3 second window after an input change. Events are queued, not delivered, so
+   the UI state does not change in the middle of a command. Must only be called
+   from the core that owns the I2C bus.
+ */
+void platform_ui_sample_input();
+
+/**
+   True during the 3 second window after a button or rotary dial change.
+ */
+bool platform_ui_input_active();
+
+/**
    Sets the status controller connection used to process status events on the UI core.
  */
 void platform_set_status_controller(zuluide::ObserverTransfer<zuluide::status::SystemStatus> *statusController);

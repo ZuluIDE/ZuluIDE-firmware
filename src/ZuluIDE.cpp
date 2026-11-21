@@ -38,6 +38,7 @@
 #include "ide_removable.h"
 #include "ide_rigid.h"
 #include "ide_imagefile.h"
+#include "ide_activity.h"
 #include <ZuluControl_platform.h>
 #include <ZuluIDE_reboot_platform.h>
 #include "status/status_controller.h"
@@ -184,11 +185,13 @@ static bool mountSDCard()
     static sd_card_state_t s_card_state = sd_card_state_t::NotPresent;
     // Verify that all existing files have been closed
     g_logfile.close();
-    g_ide_cdrom.set_image(nullptr);
-    g_ide_zipdrive.set_image(nullptr);
-    g_ide_removable.set_image(nullptr);
-    g_ide_rigid.set_image(nullptr);
-
+    if (g_ide_cdrom.has_image()) g_ide_cdrom.set_image(nullptr);
+    if (g_ide_zipdrive.has_image()) g_ide_zipdrive.set_image(nullptr);
+    if (g_ide_removable.has_image()) g_ide_removable.set_image(nullptr);
+    if (g_ide_rigid.has_image()) g_ide_rigid.set_image(nullptr);
+#ifdef ENABLE_DUAL_DEVICE
+    if (g_ide_rigid2.has_image()) g_ide_rigid2.set_image(nullptr);
+#endif
     // Check for the common case, FAT filesystem as first partition
     if (SD.begin(SD_CONFIG))
     {
@@ -622,12 +625,16 @@ bool setupDualDrive(std::unique_ptr<zuluide::status::IDeviceStatus> &device)
 
       if (strncasecmp(filename, DUALDRIVE_IMAGE_PRIMARY, strlen(DUALDRIVE_IMAGE_PRIMARY)) == 0)
       {
+        if (!ImageIterator::fileIsValidImage(file, filename, true, true))
+          continue;
         found_hd0 = true;
         strncpy(HD0_filename, filename, sizeof(HD0_filename));
       }
 
       if (strncasecmp(filename, DUALDRIVE_IMAGE_SECONDARY, strlen(DUALDRIVE_IMAGE_SECONDARY)) == 0)
       {
+        if (!ImageIterator::fileIsValidImage(file, filename, true, true))
+          continue;
         found_hd1 = true;
         strncpy(HD1_filename, filename, sizeof(HD1_filename));
       }
@@ -1189,6 +1196,8 @@ static void zuluide_reload_config()
       platform_disable_led();
   }
 
+  g_ide_activity.set_output_interval_ms(ini_getl("IDE", "throughput_output_ms", IDEActivity::DEFAULT_OUTPUT_UPDATE_MS, CONFIGFILE));
+
   uint8_t eject_button = ini_getl("IDE", "eject_button", 1, CONFIGFILE);
   platform_init_eject_button(eject_button);
 }
@@ -1354,12 +1363,13 @@ void zuluide_main_loop(void)
                     g_sdcard_present = false;
                     g_StatusController.SetIsCardPresent(false);
                     logmsg("SD card removed, trying to reinit");
+                    g_ide_imagefile.close();
+                    g_ide_device->set_image(nullptr);
+
                     if (g_ide_device->is_removable())
                     {
                         g_ide_device->eject_media();
                     }
-                    g_ide_imagefile.close();
-                    g_ide_device->set_image(nullptr);
 
 #ifdef ENABLE_DUAL_DEVICE
                     if (g_ide_device2)

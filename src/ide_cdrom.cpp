@@ -46,6 +46,7 @@
 #include <minIni.h>
 #include <zuluide/images/image_iterator.h>
 #include <status/status_controller.h>
+#include "ide_activity.h"
 #ifdef ENABLE_AUDIO_OUTPUT
 #include "ZuluIDE_audio.h"
 #endif
@@ -1642,7 +1643,10 @@ ssize_t IDECDROMDevice::read_callback(const uint8_t *data, size_t blocksize, siz
     if (m_cd_read_format.sector_length_file == m_cd_read_format.sector_length_out)
     {
         // Simple case, send data directly
-        return atapi_send_data_async(data, blocksize, num_blocks);
+        ssize_t blocks_sent = atapi_send_data_async(data, blocksize, num_blocks);
+        if (blocks_sent > 0)
+            g_ide_activity.add_read(m_devconfig.dev_index, blocks_sent * blocksize);
+        return blocks_sent;
     }
 
     // Reformat sector data for transmission
@@ -1719,6 +1723,7 @@ ssize_t IDECDROMDevice::read_callback(const uint8_t *data, size_t blocksize, siz
             // Block written to hardware buffer successfully
             m_cd_read_format.sectors_done += 1;
             blocks_done += 1;
+            g_ide_activity.add_read(m_devconfig.dev_index, m_cd_read_format.sector_length_out);
         }
     }
 

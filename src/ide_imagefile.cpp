@@ -121,6 +121,25 @@ bool IDEImageFile::internal_open(const char *filename, bool quiet)
         if (!quiet) logmsg("Image is a ", m_file.getContainerNameCstr(), " container");
     }
 
+    // exFAT tracks a valid data length separately from the file size. Image
+    // files created without writing every byte (PC tools such as "fsutil file
+    // createnew" or "truncate", SdFat's preAllocate(), an interrupted copy)
+    // can have it far below the file size. SdFat reads past it as zeros and,
+    // before any write past it, zero-fills the gap one sector at a time -- for
+    // a write near the end of a multi-GB image that takes minutes and trips
+    // the watchdog. The raw contiguous access path ignores it, so data written
+    // there would read back as zeros on a PC. Mark the whole allocation valid
+    // once so all access paths agree.
+    if (m_file.isWritable() && m_file.validLength() < m_file.dataLength())
+    {
+        logmsg("Extending exFAT valid data length of ", filename, " from ", (int)(m_file.validLength() / (1024 * 1024)),
+               " MB to ", (int)(m_file.dataLength() / (1024 * 1024)), " MB");
+        if (!m_file.setValidLength(m_file.dataLength()))
+        {
+            logmsg("WARNING: Failed to extend valid data length, writes past it may stall");
+        }
+    }
+
     m_capacity = m_file.size();
     if (!quiet) dbgmsg("Image file ", filename, " size ", (int64_t)m_capacity);
 
