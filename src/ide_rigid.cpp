@@ -1295,6 +1295,11 @@ bool IDERigidDevice::ata_send_wait_finish()
         if ((uint32_t)(millis() - start) > 10000)
         {
             logmsg("IDERigidDevice::ata_send_wait_finish() data write timeout");
+            ide_phy_print_debug();
+
+            // Stop the transfer so that the PHY can interrupt host for the error, it cannot
+            // assert INTRQ in the middle of a Multiword DMA transfer
+            ide_phy_stop_transfers();
             return false;
         }
 
@@ -1343,7 +1348,7 @@ bool IDERigidDevice::ata_recv_data(uint8_t *data, size_t blocksize, size_t num_b
     }
 
     // Start data transfer for first block
-    ide_phy_start_ata_read(blocksize, udma_mode, mwdma_mode);
+    ide_phy_start_ata_read(blocksize, udma_mode, mwdma_mode, num_blocks);
 
     // Receive blocks
     for (size_t i = 0; i < num_blocks; i++)
@@ -1361,7 +1366,8 @@ bool IDERigidDevice::ata_recv_data(uint8_t *data, size_t blocksize, size_t num_b
 
             if (ide_phy_is_command_interrupted())
             {
-                dbgmsg("IDERigidDevice::ata_recv_data() interrupted");
+                dbgmsg("IDERigidDevice::ata_recv_data() interrupted on block ", (int)(i + 1), "/", (int)num_blocks,
+                       " of ", (int)blocksize, " bytes");
                 ide_phy_print_debug();
                 return false;
             }

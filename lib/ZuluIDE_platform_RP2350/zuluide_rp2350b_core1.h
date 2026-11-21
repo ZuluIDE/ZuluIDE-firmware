@@ -17,6 +17,9 @@
 #define CORE1_EVT_HWRST             0x0002
 #define CORE1_EVT_SWRST             0x0004
 #define CORE1_EVT_DATA_DONE         0x0008
+// Host did the DMA cycles of the current command before DMARQ, and they could not be used.
+// The transfer cannot complete, core0 stops it and the command fails.
+#define CORE1_EVT_DMA_FAILED        0x0010
 
 // Requests are written by core0 to g_idecomm.requests
 #define CORE1_REQ_SET_REGS              0x0001

@@ -67,6 +67,10 @@ static struct {
     uint32_t transfer_block_start_time;
     volatile bool watchdog_error;
 
+    // The data transfer of the current command has failed and has been stopped, so that the
+    // command fails with an error, see ide_phy_can_read_block() and ide_phy_is_command_interrupted()
+    bool transfer_failed;
+
     // First ATA PIO data out block after command should
     // not assert IRQ, but further ones do.
     bool first_dataout_after_cmd;
@@ -83,6 +87,11 @@ static struct {
 
     // Core1 is tracking sectors of the current PIO data-in transfer
     bool datain_tracking;
+
+    // Multiword DMA data out blocks are given to core1 one block ahead, see ide_phy_start_ata_read().
+    // Blocks of the transfer that have not been given yet.
+    bool dataout_ahead;
+    uint32_t dataout_blocks_left;
 } g_ide_phy;
 
 static ide_phy_capabilities_t g_ide_phy_capabilities = {
@@ -256,6 +265,7 @@ void ide_phy_config(const ide_phy_config_t* config)
 
     g_ide_phy.config = *config;
     g_ide_phy.watchdog_error = false;
+    g_ide_phy.transfer_failed = false;
 
     g_idecomm.enable_dev0          = config->enable_dev0;
     g_idecomm.enable_dev1          = config->enable_dev1;
@@ -299,6 +309,8 @@ void ide_phy_reset()
     __sync_synchronize();
 
     g_ide_phy.watchdog_error = false;
+    g_ide_phy.transfer_failed = false;
+    ide_phy_clear_event(CORE1_EVT_DMA_FAILED);
 
     phyregs.state_irqreq = 0;
     phyregs.state_datain = 0;
@@ -396,8 +408,9 @@ ide_event_t ide_phy_get_events()
     else if (flags & CORE1_EVT_CMD_RECEIVED)
     {
         // dbgmsg("IDE_EVENT_CMD, status ", g_idecomm.phyregs.regs.status);
-        ide_phy_clear_event(CORE1_EVT_CMD_RECEIVED);
+        ide_phy_clear_event(CORE1_EVT_CMD_RECEIVED | CORE1_EVT_DMA_FAILED);
         ide_phy_update_cmd_seq();
+        g_ide_phy.transfer_failed = false;
         g_idecomm.udma_mode = -1; // For ATAPI packets
         g_idecomm.mwdma_mode = -1;
         g_ide_phy.transfer_block_start_time = millis();
@@ -417,9 +430,24 @@ ide_event_t ide_phy_get_events()
 
 bool ide_phy_is_command_interrupted()
 {
+    if (!g_ide_phy.transfer_failed && (g_idecomm.events & CORE1_EVT_DMA_FAILED))
+    {
+        // Host did the DMA cycles of the command before DMARQ and core1 could not use them, so the
+        // transfer cannot complete. Stop it, core1 cannot assert INTRQ for the error during it.
+        ide_phy_clear_event(CORE1_EVT_DMA_FAILED);
+        logmsg("Host did the DMA transfer of the command before DMARQ, the command fails");
+        g_ide_phy.transfer_failed = true;
+        ide_phy_stop_transfers();
+    }
+
     if (g_ide_phy.watchdog_error)
     {
         dbgmsg("Command interrupted because of watchdog error");
+        return true;
+    }
+    else if (g_ide_phy.transfer_failed)
+    {
+        dbgmsg("Command interrupted because its data transfer failed");
         return true;
     }
     else if (g_idecomm.events & (CORE1_EVT_CMD_RECEIVED | CORE1_EVT_HWRST | CORE1_EVT_SWRST))
@@ -647,12 +675,17 @@ static void data_out_give_next_block(bool noirq)
 
     g_ide_phy.first_dataout_after_cmd = false;
     g_ide_phy.transfer_block_start_time = millis();
+    if (g_ide_phy.dataout_blocks_left > 0)
+    {
+        g_ide_phy.dataout_blocks_left--;
+    }
 }
 
-void ide_phy_start_read(uint32_t blocklen, int udma_mode, int mwdma_mode)
+static void start_read(uint32_t blocklen, int udma_mode, int mwdma_mode, uint32_t num_blocks)
 {
     if (blocklen & 1) blocklen++;
 
+    g_ide_phy.dataout_ahead = false;
     if (!ide_phy_set_blocksize(blocklen))
     {
         dbgmsg("ide_phy_start_read(): host has started a new command, not starting transfer");
@@ -664,10 +697,25 @@ void ide_phy_start_read(uint32_t blocklen, int udma_mode, int mwdma_mode)
     g_idecomm.udma_checksum_errors = 0;
     g_ide_phy.transfer_running = true;
 
+    // In Multiword DMA mode 0 core1 continues the burst into the next block without negating
+    // DMARQ when it has the block before the current one ends, see core1_mwdma_dataout_queue().
+    // In the other modes it starts the next block without returning to register access.
+    g_ide_phy.dataout_ahead = (udma_mode < 0 && mwdma_mode >= 0 && num_blocks > 1);
+    g_ide_phy.dataout_blocks_left = g_ide_phy.dataout_ahead ? num_blocks : 0;
+
     data_out_give_next_block(false);
+    if (g_ide_phy.dataout_ahead)
+    {
+        data_out_give_next_block(false);
+    }
 }
 
-void ide_phy_start_ata_read(uint32_t blocklen, int udma_mode, int mwdma_mode)
+void ide_phy_start_read(uint32_t blocklen, int udma_mode, int mwdma_mode)
+{
+    start_read(blocklen, udma_mode, mwdma_mode, 0);
+}
+
+void ide_phy_start_ata_read(uint32_t blocklen, int udma_mode, int mwdma_mode, uint32_t num_blocks)
 {
     if (udma_mode < 0 && mwdma_mode < 0)
     {
@@ -677,20 +725,24 @@ void ide_phy_start_ata_read(uint32_t blocklen, int udma_mode, int mwdma_mode)
         g_ide_phy.suppress_first_dataout_irq = true;
     }
 
-    ide_phy_start_read(blocklen, udma_mode, mwdma_mode);
+    start_read(blocklen, udma_mode, mwdma_mode, num_blocks);
 }
 
 bool ide_phy_can_read_block()
 {
     bool status = sio_hw->fifo_st & SIO_FIFO_ST_VLD_BITS;
 
-    if (!status && (uint32_t)(millis() - g_ide_phy.transfer_block_start_time) > 5000)
+    if (!status && !g_ide_phy.transfer_failed &&
+        (uint32_t)(millis() - g_ide_phy.transfer_block_start_time) > 5000)
     {
-        if (!g_ide_phy.watchdog_error)
-        {
-            logmsg("ide_phy_can_read_block() detected transfer timeout");
-            g_ide_phy.watchdog_error = true;
-        }
+        // The command fails, without a software reset. A reset would put the signature in the task
+        // file while host may already be writing the next command: the Yamaha A5000 retries a failed
+        // WRITE DMA as soon as it gets the error interrupt, and the retry then wrote CHS 0/0/1 of
+        // device 0. Core1 cannot assert INTRQ for the error during the transfer, so it is stopped.
+        logmsg("ide_phy_can_read_block() detected transfer timeout");
+        ide_phy_print_debug();
+        g_ide_phy.transfer_failed = true;
+        ide_phy_stop_transfers();
     }
 
     return status;
@@ -709,7 +761,15 @@ void ide_phy_read_block(uint8_t *buf, uint32_t blocklen, bool continue_transfer)
     assert(sio_hw->fifo_st & SIO_FIFO_ST_VLD_BITS);
     const uint32_t *rxbuf = (const uint32_t*)sio_hw->fifo_rd;
 
-    if (continue_transfer)
+    if (g_ide_phy.dataout_ahead)
+    {
+        // Core1 already has the next block, give the one after it
+        if (g_ide_phy.dataout_blocks_left > 0)
+        {
+            data_out_give_next_block(false);
+        }
+    }
+    else if (continue_transfer)
     {
         // Next block reception can be started immediately
         data_out_give_next_block(false);
@@ -741,6 +801,8 @@ void ide_phy_stop_transfers(int *crc_errors)
 {
     g_ide_phy.transfer_running = false;
     g_ide_phy.datain_tracking = false;
+    g_ide_phy.dataout_ahead = false;
+    g_ide_phy.dataout_blocks_left = 0;
 
     if (__atomic_load_n(&g_idecomm.cmd_seq, __ATOMIC_ACQUIRE) != g_ide_phy.cmd_seq)
     {
