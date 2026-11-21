@@ -76,6 +76,7 @@ void IDERigidDevice::initialize(int devidx)
     memset(&m_devinfo, 0, sizeof(m_devinfo));
     memset(&m_ata_state, 0, sizeof(m_ata_state));
     m_ata_state.mwdma_mode = -1; // UDMA mode 0 is enabled until hardware reset
+    m_ata_state.swdma_mode = -1;
     memset(&m_removable, 0, sizeof(m_removable));
     m_devinfo.bytes_per_sector = 512;
     m_devinfo.seek_delay_ms = ini_getl("IDE", "seek_delay", 1, CONFIGFILE);
@@ -335,10 +336,18 @@ bool IDERigidDevice::cmd_set_features(ide_registers_t *regs)
             m_ata_state.pio_mode = mode_minor;
             ide_phy_set_pio_mode(mode_minor);
         }
-        else if (mode_major == 4 && mode_minor <= m_devconfig.max_mwdma_mode)
+        else if (mode_major == 2 && mode_minor <= m_devconfig.max_swdma_mode)
         {
             // Only one DMA mode is enabled at a time
+            m_ata_state.swdma_mode = mode_minor;
+            m_ata_state.mwdma_mode = -1;
+            m_ata_state.udma_mode = -1;
+            dbgmsg("-- DEV", m_devconfig.dev_index, ": Set Single word DMA transfer mode ", (int)mode_minor);
+        }
+        else if (mode_major == 4 && mode_minor <= m_devconfig.max_mwdma_mode)
+        {
             m_ata_state.mwdma_mode = mode_minor;
+            m_ata_state.swdma_mode = -1;
             m_ata_state.udma_mode = -1;
             dbgmsg("-- DEV", m_devconfig.dev_index, ": Set Multiword DMA transfer mode ", (int)mode_minor);
         }
@@ -346,6 +355,7 @@ bool IDERigidDevice::cmd_set_features(ide_registers_t *regs)
         {
             m_ata_state.udma_mode = mode_minor;
             m_ata_state.mwdma_mode = -1;
+            m_ata_state.swdma_mode = -1;
             dbgmsg("-- DEV", m_devconfig.dev_index, ": Set UDMA transfer mode ", (int)mode_minor);
         }
         else
@@ -430,7 +440,7 @@ static void copy_id_string(uint16_t *dst, size_t maxwords, const char *src)
 
 bool IDERigidDevice::cmd_read(ide_registers_t *regs, bool dma_transfer, bool verify_only, bool is_multiple)
 {
-    if (dma_transfer && m_ata_state.udma_mode < 0 && m_ata_state.mwdma_mode < 0)
+    if (dma_transfer && m_ata_state.udma_mode < 0 && m_ata_state.mwdma_mode < 0 && m_ata_state.swdma_mode < 0)
     {
         dbgmsg("READ DMA when DMA mode is not set");
         return false;
@@ -575,7 +585,7 @@ bool IDERigidDevice::cmd_read(ide_registers_t *regs, bool dma_transfer, bool ver
 
 bool IDERigidDevice::cmd_write(ide_registers_t *regs, bool dma_transfer, bool is_multiple)
 {
-    if (dma_transfer && m_ata_state.udma_mode < 0 && m_ata_state.mwdma_mode < 0)
+    if (dma_transfer && m_ata_state.udma_mode < 0 && m_ata_state.mwdma_mode < 0 && m_ata_state.swdma_mode < 0)
     {
         dbgmsg("WRITE DMA when DMA mode is not set");
         return false;
@@ -834,7 +844,7 @@ bool IDERigidDevice::cmd_identify_device(ide_registers_t *regs)
     idf[IDE_IDENTIFY_OFFSET_CURRENT_CAPACITY_IN_SECTORS_HI] = (current_sector_cap >> 16) & 0xFFFF;
     idf[IDE_IDENTIFY_OFFSET_TOTAL_SECTORS]     = lba & 0xFFFF;
     idf[IDE_IDENTIFY_OFFSET_TOTAL_SECTORS + 1] = (lba >> 16) & 0xFFFF;
-    idf[IDE_IDENTIFY_OFFSET_MODEINFO_SINGLEWORD] = 0;// 0x0007; // disabling single word dma
+    identify_swdma_modes(idf, m_devconfig.max_swdma_mode, m_ata_state.swdma_mode); // Single word DMA, words 52 and 62
     identify_mwdma_modes(idf, m_devconfig.max_mwdma_mode, m_ata_state.mwdma_mode); // Multiword DMA, words 63, 65 and 66
 
     idf[IDE_IDENTIFY_OFFSET_MODEINFO_PIO] = (m_devconfig.max_pio_mode >= 3) ? 1 : 0; // PIO3 supported?
@@ -1071,10 +1081,10 @@ void IDERigidDevice::handle_event(ide_event_t evt)
     {
         if (evt == IDE_EVENT_HWRST)
         {
-            // Hardware reset disables UDMA and selects the default Multiword DMA mode 0
-            // (ATA-3 9.4.3, ATA/ATAPI-6 6.6.1 and 10.2.3)
+            // Hardware reset disables all DMA
             m_ata_state.udma_mode = -1;
-            m_ata_state.mwdma_mode = (m_devconfig.max_mwdma_mode >= 0) ? 0 : -1;
+            m_ata_state.mwdma_mode = -1;
+            m_ata_state.swdma_mode = -1;
         }
         m_devinfo.seek_executed = false;
         set_device_signature(nullptr, 0, true);
@@ -1237,6 +1247,7 @@ bool IDERigidDevice::ata_send_data_block(const uint8_t *data, uint16_t blocksize
         // Start data transfer
         int udma_mode = (m_ata_state.dma_requested ? m_ata_state.udma_mode : -1);
         int mwdma_mode = (m_ata_state.dma_requested ? m_ata_state.mwdma_mode : -1);
+        int swdma_mode = (m_ata_state.dma_requested ? m_ata_state.swdma_mode : -1);
         if (m_ata_state.datain_track_sectors > 0)
         {
             // Only the first transfer start of each image read tracks sectors.
@@ -1247,7 +1258,7 @@ bool IDERigidDevice::ata_send_data_block(const uint8_t *data, uint16_t blocksize
         }
         else
         {
-            ide_phy_start_write(blocksize, udma_mode, mwdma_mode);
+            ide_phy_start_write(blocksize, udma_mode, mwdma_mode, swdma_mode);
         }
         ide_phy_write_block(data, blocksize);
     }
@@ -1326,6 +1337,7 @@ bool IDERigidDevice::ata_recv_data(uint8_t *data, size_t blocksize, size_t num_b
 
     int udma_mode = (m_ata_state.dma_requested ? m_ata_state.udma_mode : -1);
     int mwdma_mode = (m_ata_state.dma_requested ? m_ata_state.mwdma_mode : -1);
+    int swdma_mode = (m_ata_state.dma_requested ? m_ata_state.swdma_mode : -1);
     size_t max_blocksize = m_devconfig.max_blocksize;
     if (blocksize > max_blocksize)
     {
@@ -1335,7 +1347,7 @@ bool IDERigidDevice::ata_recv_data(uint8_t *data, size_t blocksize, size_t num_b
         blocksize /= split;
         num_blocks *= split;
     }
-    else if (udma_mode >= 0 || mwdma_mode >= 0)
+    else if (udma_mode >= 0 || mwdma_mode >= 0 || swdma_mode >= 0)
     {
         // Combine blocks for better performance
         // This is not possible for ATA in PIO mode because the PHY needs to give IRQ
@@ -1348,7 +1360,7 @@ bool IDERigidDevice::ata_recv_data(uint8_t *data, size_t blocksize, size_t num_b
     }
 
     // Start data transfer for first block
-    ide_phy_start_ata_read(blocksize, udma_mode, mwdma_mode, num_blocks);
+    ide_phy_start_ata_read(blocksize, udma_mode, mwdma_mode, swdma_mode, num_blocks);
 
     // Receive blocks
     for (size_t i = 0; i < num_blocks; i++)
@@ -1408,7 +1420,8 @@ bool IDERigidDevice::ata_recv_data_block(uint8_t *data, uint16_t blocksize)
     // Start data transfer
     int udma_mode = (m_ata_state.dma_requested ? m_ata_state.udma_mode : -1);
     int mwdma_mode = (m_ata_state.dma_requested ? m_ata_state.mwdma_mode : -1);
-    ide_phy_start_read(blocksize, udma_mode, mwdma_mode);
+    int swdma_mode = (m_ata_state.dma_requested ? m_ata_state.swdma_mode : -1);
+    ide_phy_start_read(blocksize, udma_mode, mwdma_mode, swdma_mode);
 
     uint32_t start = millis();
     while (!ide_phy_can_read_block())

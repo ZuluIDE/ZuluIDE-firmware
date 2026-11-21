@@ -99,6 +99,7 @@ static ide_phy_capabilities_t g_ide_phy_capabilities = {
     .max_pio_mode = 3,
     .max_udma_mode = 2,
     .max_mwdma_mode = 2,
+    .max_swdma_mode = 2,
     .max_set_multiple = 8, // currently  IDECOMM_MAX_BLOCK_PAYLOAD / 512 (standard blocksize for rigid)
 };
 
@@ -357,7 +358,8 @@ void ide_phy_print_debug()
     ide_phy_post_request(CORE1_REQ_PRINT_DEBUG);
 
     dbgmsg("Transfer running: ", (int)g_ide_phy.transfer_running, ", watchdog error: ", (int)g_ide_phy.watchdog_error);
-    dbgmsg("UDMA: ", g_idecomm.udma_mode, " MWDMA: ", g_idecomm.mwdma_mode, " Checksum errors: ", g_idecomm.udma_checksum_errors);
+    dbgmsg("UDMA: ", g_idecomm.udma_mode, " MWDMA: ", g_idecomm.mwdma_mode, " SWDMA: ", g_idecomm.swdma_mode,
+           " Checksum errors: ", g_idecomm.udma_checksum_errors);
     dbgmsg("Core1 requests: ", g_idecomm.requests, " events: ", g_idecomm.events);
     ide_registers_t regs = g_idecomm.phyregs.regs;
     dbgmsg("IDE regs:",
@@ -413,6 +415,7 @@ ide_event_t ide_phy_get_events()
         g_ide_phy.transfer_failed = false;
         g_idecomm.udma_mode = -1; // For ATAPI packets
         g_idecomm.mwdma_mode = -1;
+        g_idecomm.swdma_mode = -1;
         g_ide_phy.transfer_block_start_time = millis();
         g_ide_phy.first_dataout_after_cmd = true;
         g_ide_phy.suppress_first_dataout_irq = false;
@@ -508,14 +511,16 @@ void ide_phy_set_pio_mode(int pio_mode)
     }
 }
 
-// Set the data transfer mode for core1, UDMA takes precedence over Multiword DMA
-static void ide_phy_set_dma_mode(int udma_mode, int mwdma_mode)
+// Set the data transfer mode for core1, UDMA takes precedence over Multiword DMA, and that over
+// Single word DMA
+static void ide_phy_set_dma_mode(int udma_mode, int mwdma_mode, int swdma_mode)
 {
     g_idecomm.udma_mode = udma_mode;
     g_idecomm.mwdma_mode = (udma_mode >= 0) ? -1 : mwdma_mode;
+    g_idecomm.swdma_mode = (udma_mode >= 0 || mwdma_mode >= 0) ? -1 : swdma_mode;
 }
 
-void ide_phy_start_write(uint32_t blocklen, int udma_mode, int mwdma_mode)
+void ide_phy_start_write(uint32_t blocklen, int udma_mode, int mwdma_mode, int swdma_mode)
 {
     if (blocklen & 1) blocklen++;
 
@@ -527,7 +532,7 @@ void ide_phy_start_write(uint32_t blocklen, int udma_mode, int mwdma_mode)
         return;
     }
 
-    ide_phy_set_dma_mode(udma_mode, mwdma_mode);
+    ide_phy_set_dma_mode(udma_mode, mwdma_mode, swdma_mode);
     g_idecomm.udma_checksum_errors = 0;
     g_idecomm.datain_sectors_remaining = 0;
     g_ide_phy.transfer_running = true;
@@ -571,7 +576,7 @@ static uint8_t *get_block_pointer()
 
     if (g_idecomm.udma_mode < 0)
     {
-        // In PIO and Multiword DMA modes the data is packed into 32 bits per each 16 bit word
+        // In PIO, Multiword and Single word DMA modes the data is packed into 32 bits per each 16 bit word
         block += IDECOMM_MAX_BLOCKSIZE - g_idecomm.datablocksize * 2;
     }
     else
@@ -602,7 +607,7 @@ void ide_phy_write_block(const uint8_t *buf, uint32_t blocklen)
 
     if (g_idecomm.udma_mode < 0)
     {
-        // PIO and Multiword DMA data requires special formatting
+        // PIO, Multiword and Single word DMA data requires special formatting
         const uint16_t *src = (const uint16_t*)buf;
         uint32_t *dst = (uint32_t*)block;
         uint32_t count = blocklen / 2;
@@ -681,7 +686,7 @@ static void data_out_give_next_block(bool noirq)
     }
 }
 
-static void start_read(uint32_t blocklen, int udma_mode, int mwdma_mode, uint32_t num_blocks)
+static void start_read(uint32_t blocklen, int udma_mode, int mwdma_mode, int swdma_mode, uint32_t num_blocks)
 {
     if (blocklen & 1) blocklen++;
 
@@ -693,14 +698,15 @@ static void start_read(uint32_t blocklen, int udma_mode, int mwdma_mode, uint32_
         return;
     }
 
-    ide_phy_set_dma_mode(udma_mode, mwdma_mode);
+    ide_phy_set_dma_mode(udma_mode, mwdma_mode, swdma_mode);
     g_idecomm.udma_checksum_errors = 0;
     g_ide_phy.transfer_running = true;
 
     // In Multiword DMA mode 0 core1 continues the burst into the next block without negating
     // DMARQ when it has the block before the current one ends, see core1_mwdma_dataout_queue().
-    // In the other modes it starts the next block without returning to register access.
-    g_ide_phy.dataout_ahead = (udma_mode < 0 && mwdma_mode >= 0 && num_blocks > 1);
+    // In the other Multiword DMA modes and in Single word DMA it starts the next block without
+    // returning to register access.
+    g_ide_phy.dataout_ahead = (udma_mode < 0 && (mwdma_mode >= 0 || swdma_mode >= 0) && num_blocks > 1);
     g_ide_phy.dataout_blocks_left = g_ide_phy.dataout_ahead ? num_blocks : 0;
 
     data_out_give_next_block(false);
@@ -710,14 +716,14 @@ static void start_read(uint32_t blocklen, int udma_mode, int mwdma_mode, uint32_
     }
 }
 
-void ide_phy_start_read(uint32_t blocklen, int udma_mode, int mwdma_mode)
+void ide_phy_start_read(uint32_t blocklen, int udma_mode, int mwdma_mode, int swdma_mode)
 {
-    start_read(blocklen, udma_mode, mwdma_mode, 0);
+    start_read(blocklen, udma_mode, mwdma_mode, swdma_mode, 0);
 }
 
-void ide_phy_start_ata_read(uint32_t blocklen, int udma_mode, int mwdma_mode, uint32_t num_blocks)
+void ide_phy_start_ata_read(uint32_t blocklen, int udma_mode, int mwdma_mode, int swdma_mode, uint32_t num_blocks)
 {
-    if (udma_mode < 0 && mwdma_mode < 0)
+    if (udma_mode < 0 && mwdma_mode < 0 && swdma_mode < 0)
     {
         // For ATA transfers, first PIO DATA OUT block should not assert IRQ.
         // Further blocks should assert IRQ.
@@ -725,7 +731,7 @@ void ide_phy_start_ata_read(uint32_t blocklen, int udma_mode, int mwdma_mode, ui
         g_ide_phy.suppress_first_dataout_irq = true;
     }
 
-    start_read(blocklen, udma_mode, mwdma_mode, num_blocks);
+    start_read(blocklen, udma_mode, mwdma_mode, swdma_mode, num_blocks);
 }
 
 bool ide_phy_can_read_block()
@@ -778,7 +784,7 @@ void ide_phy_read_block(uint8_t *buf, uint32_t blocklen, bool continue_transfer)
     if (g_idecomm.udma_mode < 0)
     {
         // TODO: unroll
-        // Narrowing conversion from 32 bits, for PIO and Multiword DMA data
+        // Narrowing conversion from 32 bits, for PIO, Multiword and Single word DMA data
         uint16_t *dst = (uint16_t*)buf;
         for (int i = 0; i < blocklen / 2; i++)
         {

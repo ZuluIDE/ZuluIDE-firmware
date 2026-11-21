@@ -77,6 +77,7 @@ static const ide_phy_capabilities_t g_ide_phy_capabilities = {
     .max_pio_mode = 3,
     .max_udma_mode = 0,
     .max_mwdma_mode = -1, // Not implemented in FPGA
+    .max_swdma_mode = -1, // Not implemented in FPGA
 };
 
 // Reset the IDE phy
@@ -215,10 +216,12 @@ void ide_phy_set_pio_mode(int pio_mode)
 }
 
 // Data writes to IDE bus
-// Multiword DMA is not supported (max_mwdma_mode is -1), mwdma_mode is always -1.
-void ide_phy_start_write(uint32_t blocklen, int udma_mode, int mwdma_mode)
+// Multiword and Single word DMA are not supported (max_mwdma_mode and max_swdma_mode are -1),
+// mwdma_mode and swdma_mode are always -1.
+void ide_phy_start_write(uint32_t blocklen, int udma_mode, int mwdma_mode, int swdma_mode)
 {
     (void)mwdma_mode;
+    (void)swdma_mode;
     // dbgmsg("ide_phy_start_write(", (int)blocklen, ", ", udma_mode, ")");
     g_ide_phy.crc_errors = 0;
     g_ide_phy.block_crc1 = g_ide_phy.block_crc0 = 0;
@@ -352,9 +355,10 @@ void ide_phy_start_read_buffer(uint32_t blocklen)
     g_ide_phy.transfer_running = true;
 }
 
-void ide_phy_start_ata_read(uint32_t blocklen, int udma_mode, int mwdma_mode, uint32_t num_blocks)
+void ide_phy_start_ata_read(uint32_t blocklen, int udma_mode, int mwdma_mode, int swdma_mode, uint32_t num_blocks)
 {
     (void)mwdma_mode; // Not supported, see ide_phy_start_write()
+    (void)swdma_mode;
     (void)num_blocks; // The FPGA receives one block at a time
     // dbgmsg("ide_phy_start_read(", (int)blocklen, ", ", udma_mode, ")");
     g_ide_phy.crc_errors = 0;
@@ -393,9 +397,10 @@ void ide_phy_start_ata_read(uint32_t blocklen, int udma_mode, int mwdma_mode, ui
     g_ide_phy.transfer_running = true;
 }
 
-void ide_phy_start_read(uint32_t blocklen, int udma_mode, int mwdma_mode)
+void ide_phy_start_read(uint32_t blocklen, int udma_mode, int mwdma_mode, int swdma_mode)
 {
     (void)mwdma_mode; // Not supported, see ide_phy_start_write()
+    (void)swdma_mode;
     // dbgmsg("ide_phy_start_read(", (int)blocklen, ", ", udma_mode, ")");
     g_ide_phy.crc_errors = 0;
     g_ide_phy.block_crc1 = g_ide_phy.block_crc0 = 0;

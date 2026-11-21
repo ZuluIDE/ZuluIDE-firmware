@@ -254,6 +254,11 @@ bool IDEZipDrive::cmd_identify_packet_device(ide_registers_t *regs)
 
     idf[IDE_IDENTIFY_OFFSET_GENERAL_CONFIGURATION] = 0x80A0;
 
+    // The words below follow the real drives, keep the Single word DMA words of the generic
+    // response out of them
+    idf[IDE_IDENTIFY_OFFSET_OLD_DMA_TIMING_MODE] = 0;
+    idf[IDE_IDENTIFY_OFFSET_MODEINFO_SINGLEWORD] = 0;
+
     if (m_image == nullptr ||  m_image->get_drive_type() == drive_type_t::DRIVE_TYPE_ZIP100)
     {
         idf[IDE_IDENTIFY_OFFSET_CAPABILITIES_1] = 0x0E00;

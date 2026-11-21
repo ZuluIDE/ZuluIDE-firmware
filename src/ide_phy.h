@@ -114,10 +114,11 @@ void ide_phy_set_pio_mode(int pio_mode);
 // Calling ide_phy_stop_transfers() stops any previously started transfer.
 //
 // If udma_mode is 0 or larger, the PHY may use UDMA transfers if they are supported.
-// Otherwise if mwdma_mode is 0 or larger, the PHY may use Multiword DMA transfers if they are
-// supported. In both cases the host transfers the data with DMA instead of the data register.
+// Otherwise if mwdma_mode is 0 or larger, the PHY may use Multiword DMA transfers, or if
+// swdma_mode is 0 or larger, Single word DMA transfers, if they are supported. In these cases
+// the host transfers the data with DMA instead of the data register.
 
-void ide_phy_start_write(uint32_t blocklen, int udma_mode = -1, int mwdma_mode = -1);
+void ide_phy_start_write(uint32_t blocklen, int udma_mode = -1, int mwdma_mode = -1, int swdma_mode = -1);
 bool ide_phy_can_write_block();
 void ide_phy_write_block(const uint8_t *buf, uint32_t blocklen);
 bool ide_phy_is_write_finished();
@@ -134,7 +135,7 @@ void ide_phy_start_ata_write(uint32_t blocklen, int udma_mode, uint32_t total_se
 // must not call ide_phy_set_regs() to complete the command.
 bool ide_phy_is_ata_write_complete();
 
-void ide_phy_start_read(uint32_t blocklen, int udma_mode = -1, int mwdma_mode = -1);
+void ide_phy_start_read(uint32_t blocklen, int udma_mode = -1, int mwdma_mode = -1, int swdma_mode = -1);
 bool ide_phy_can_read_block();
 void ide_phy_start_read_buffer(uint32_t blocklen);
 void ide_phy_read_block(uint8_t *buf, uint32_t blocklen, bool continue_transfer = false);
@@ -143,13 +144,14 @@ void ide_phy_read_block(uint8_t *buf, uint32_t blocklen, bool continue_transfer 
 // for the first data block. See figure 28 in T13/1410D revision 3a.
 // num_blocks is the number of blocks that the device implementation reads with
 // ide_phy_ata_read_block(), 0 if not known. A PHY may then receive a block ahead.
-void ide_phy_start_ata_read(uint32_t blocklen, int udma_mode = -1, int mwdma_mode = -1, uint32_t num_blocks = 0);
+void ide_phy_start_ata_read(uint32_t blocklen, int udma_mode = -1, int mwdma_mode = -1, int swdma_mode = -1,
+                            uint32_t num_blocks = 0);
 void ide_phy_ata_read_block(uint8_t *buf, uint32_t blocklen, bool continue_transfer = false);
 
 // Stop any running or finished transfers.
 // In UltraDMA mode crc_errors receives the number of detected CRC errors since start_write/start_read.
 // In Multiword DMA mode it receives the number of transfer errors, e.g. words host transferred
-// past the end of the data.
+// past the end of the data. In Single word DMA mode it receives zero.
 void ide_phy_stop_transfers(int *crc_errors = nullptr);
 
 // Assert IDE interrupt and set status register
@@ -169,6 +171,7 @@ struct ide_phy_capabilities_t
     int max_pio_mode;
     int max_udma_mode; // -1 if UDMA not supported
     int max_mwdma_mode; // -1 if Multiword DMA not supported
+    int max_swdma_mode = -1; // -1 if Single word DMA not supported
     uint8_t max_set_multiple = 8; // currently  IDECOMM_MAX_BLOCK_PAYLOAD / 512 (standard blocksize for rigid)
 };
 

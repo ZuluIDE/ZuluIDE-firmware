@@ -82,6 +82,7 @@ public:
     // Negotiated DMA modes, negative if not enabled. Only one of them is enabled at a time.
     virtual int get_udma_mode() = 0;
     virtual int get_mwdma_mode() = 0;
+    virtual int get_swdma_mode() = 0;
 
     // PIO mode selected with SET FEATURES, 0 for the default mode
     virtual int get_pio_mode() = 0;
@@ -135,6 +136,7 @@ protected:
         int dev_index;
         int max_udma_mode;
         int max_mwdma_mode;
+        int max_swdma_mode;
         int max_pio_mode;
         int max_blocksize;
         uint8_t max_set_multiple;
@@ -158,6 +160,11 @@ protected:
     // and the active mode, and words 65..66 with the Multiword DMA cycle times.
     // Nothing is filled if max_mode is negative.
     void identify_mwdma_modes(uint16_t *idf, int max_mode, int active_mode);
+
+    // Fill IDENTIFY (PACKET) DEVICE word 62 with the Single word DMA modes supported up to max_mode
+    // and the active mode, and word 52 with the DMA timing mode of ATA-1.
+    // Nothing is filled if max_mode is negative.
+    void identify_swdma_modes(uint16_t *idf, int max_mode, int active_mode);
 
     void formatDriveInfoField(char *field, int fieldsize, bool align_right);
     void set_ident_strings(const char* default_model, const char* default_serial, const char* default_revision);
