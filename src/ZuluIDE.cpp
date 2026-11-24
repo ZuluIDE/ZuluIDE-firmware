@@ -193,7 +193,7 @@ static bool mountSDCard()
     if (g_ide_rigid2.has_image()) g_ide_rigid2.set_image(nullptr);
 #endif
     // Check for the common case, FAT filesystem as first partition
-    if (SD.begin(SD_CONFIG))
+    if (platform_sd_card_init())
     {
       s_card_state = sd_card_state_t::Formatted;
       return true;

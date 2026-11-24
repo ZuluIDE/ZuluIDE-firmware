@@ -75,6 +75,9 @@ void platform_minimal_init();
 // Initialization for main application, not used for bootloader
 void platform_late_init();
 
+// Initialize the SD card and mount its file system, returns the result of SD.begin()
+bool platform_sd_card_init();
+
 // Determine if DASP has been asserted on boot
 bool platform_is_dasp_on_boot();
 void platform_set_dasp_on_boot(bool value);
