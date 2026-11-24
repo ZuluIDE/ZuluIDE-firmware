@@ -1073,6 +1073,11 @@ void zuluide_main_loop1(void)
     }
 }
 
+bool platform_sd_card_init()
+{
+    return SD.begin(SD_CONFIG);
+}
+
 mutex_t* platform_get_log_mutex() {
   return &logMutex;
 }
