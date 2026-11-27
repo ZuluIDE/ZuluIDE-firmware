@@ -95,6 +95,11 @@ bool IDEImageFile::open_file(FsVolume *volume, const char *filename, bool read_o
 // If m_is_folder is false, this is used only for opening the initial image.
 bool IDEImageFile::internal_open(const char *filename, bool quiet)
 {
+    // Only .vhd files are checked for a VHD footer. Finding the footer means
+    // seeking to the end of the file, which on FAT walks the whole cluster
+    // chain, so it is skipped for plain images.
+    size_t filename_len = strlen(filename);
+    m_file.setVhdEnabled(filename_len >= 4 && strncasecmp(filename + filename_len - 4, ".vhd", 4) == 0);
     m_file.open(&m_folder, filename, m_read_only ? O_RDONLY : O_RDWR);
 
     if (!m_file.isOpen())
